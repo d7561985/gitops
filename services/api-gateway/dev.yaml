@@ -1,0 +1,35 @@
+# API Gateway - Dev Environment Overrides
+# Inherits from default.yaml
+
+environment: dev
+branch: main
+
+# Replicas
+replicas: 1
+
+# Resources (minimal for dev)
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 200m
+    memory: 256Mi
+
+# Environment-specific variables
+env:
+  - name: OPEN_TELEMETRY_ENABLE
+    value: "false"
+  - name: LOG_LEVEL
+    value: "debug"
+  - name: AUTH_ADAPTER_HOST
+    value: "auth-adapter.auth-adapter-dev.svc.cluster.local"
+
+# Labels
+labels:
+  app.kubernetes.io/instance: api-gateway-dev
+  environment: dev
+
+# Annotations for ArgoCD
+annotations:
+  argocd.argoproj.io/sync-wave: "2"  # Deploy after auth-adapter

@@ -1,0 +1,50 @@
+# Vault Helm Chart Values for Minikube (Dev Mode)
+# Source: https://developer.hashicorp.com/vault/docs/platform/k8s/helm
+
+global:
+  enabled: true
+
+server:
+  # Dev mode for POC - NOT FOR PRODUCTION
+  dev:
+    enabled: true
+    devRootToken: "root"
+
+  standalone:
+    enabled: false
+
+  ha:
+    enabled: false
+
+  resources:
+    requests:
+      memory: 256Mi
+      cpu: 250m
+    limits:
+      memory: 512Mi
+      cpu: 500m
+
+  # Service configuration
+  service:
+    enabled: true
+    type: ClusterIP
+    port: 8200
+
+  # Readiness/Liveness probes
+  readinessProbe:
+    enabled: true
+    path: "/v1/sys/health?standbyok=true&sealedcode=204&uninitcode=204"
+
+  livenessProbe:
+    enabled: true
+    path: "/v1/sys/health?standbyok=true"
+    initialDelaySeconds: 60
+
+# Injector disabled - using VSO instead
+injector:
+  enabled: false
+
+# UI enabled for debugging
+ui:
+  enabled: true
+  serviceType: ClusterIP

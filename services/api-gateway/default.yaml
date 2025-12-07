@@ -1,0 +1,71 @@
+# API Gateway - Default Values (inherited by all environments)
+# Based on k8app/app chart: https://github.com/d7561985/k8app
+
+appName: api-gateway
+version: "1.0.0"
+
+# Service Account
+serviceAccountName: api-gateway
+
+# Image configuration
+image:
+  repository: api-gateway
+  tag: local
+  pullPolicy: Never  # Local image in Minikube
+
+# Container ports
+containerPort: 8080
+
+# Additional ports (admin interface)
+additionalPorts:
+  - name: admin
+    containerPort: 8000
+    protocol: TCP
+
+# Service configuration
+service:
+  enabled: true
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+    - name: admin
+      port: 8000
+      targetPort: 8000
+
+# Health checks
+livenessProbe:
+  enabled: true
+  httpGet:
+    path: /ready
+    port: 8000
+  initialDelaySeconds: 10
+  periodSeconds: 10
+
+readinessProbe:
+  enabled: true
+  httpGet:
+    path: /ready
+    port: 8000
+  initialDelaySeconds: 5
+  periodSeconds: 5
+
+# Environment variables (common)
+env:
+  - name: OPEN_TELEMETRY_ENABLE
+    value: "false"
+
+# ConfigMap for gateway config
+configmap:
+  enabled: true
+  data:
+    config.yaml: |
+      # Gateway configuration will be mounted here
+
+# Labels (required by policy)
+labels:
+  app.kubernetes.io/name: api-gateway
+  app.kubernetes.io/component: gateway
+  app.kubernetes.io/part-of: gitops-poc
+  app.kubernetes.io/managed-by: helm

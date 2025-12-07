@@ -1,0 +1,30 @@
+# Web gRPC - Staging Environment
+
+environment: staging
+branch: main
+replicas: 2
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 200m
+    memory: 256Mi
+
+env:
+  - name: LISTEN_ADDR
+    value: "0.0.0.0:9091"
+  - name: SERVER_TYPE
+    value: "grpc"
+  - name: NAME
+    value: "web-grpc-staging"
+  - name: MESSAGE
+    value: "Hello from gRPC backend (STAGING)"
+
+labels:
+  app.kubernetes.io/instance: web-grpc-staging
+  environment: staging
+
+annotations:
+  argocd.argoproj.io/sync-wave: "0"

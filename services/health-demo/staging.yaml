@@ -1,0 +1,20 @@
+# Health Demo - Staging Environment
+
+environment: staging
+branch: main
+replicas: 1
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 100m
+    memory: 128Mi
+
+labels:
+  app.kubernetes.io/instance: health-demo-staging
+  environment: staging
+
+annotations:
+  argocd.argoproj.io/sync-wave: "0"

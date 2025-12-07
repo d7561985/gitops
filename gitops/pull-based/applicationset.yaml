@@ -1,0 +1,105 @@
+# ArgoCD ApplicationSet for Multi-Environment Deployment
+# Source: https://argo-cd.readthedocs.io/en/stable/user-guide/application-set/
+#
+# This ApplicationSet creates Applications for all services across all environments
+
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: gitops-poc-services
+  namespace: argocd
+spec:
+  # Generators define the matrix of applications
+  generators:
+    - matrix:
+        generators:
+          # Services list
+          - list:
+              elements:
+                - service: api-gateway
+                  syncWave: "2"
+                - service: auth-adapter
+                  syncWave: "1"
+                - service: web-grpc
+                  syncWave: "0"
+                - service: web-http
+                  syncWave: "0"
+                - service: health-demo
+                  syncWave: "0"
+
+          # Environments list
+          - list:
+              elements:
+                - env: dev
+                  autoSync: true
+                - env: staging
+                  autoSync: true
+                - env: prod
+                  autoSync: false  # Manual sync for production
+
+  template:
+    metadata:
+      name: '{{service}}-{{env}}'
+      namespace: argocd
+      labels:
+        app.kubernetes.io/name: '{{service}}'
+        environment: '{{env}}'
+        app.kubernetes.io/part-of: gitops-poc
+      annotations:
+        argocd.argoproj.io/sync-wave: '{{syncWave}}'
+    spec:
+      project: default
+
+      source:
+        # Helm chart repository
+        repoURL: https://d7561985.github.io/k8app
+        chart: app
+        targetRevision: '*'  # Latest version
+
+        helm:
+          # Values files from Git repository
+          valueFiles:
+            - '$values/services/{{service}}/default.yaml'
+            - '$values/services/{{service}}/{{env}}.yaml'
+
+      # Additional source for values files
+      sources:
+        - repoURL: https://d7561985.github.io/k8app
+          chart: app
+          targetRevision: '*'
+          helm:
+            valueFiles:
+              - $values/services/{{service}}/default.yaml
+              - $values/services/{{service}}/{{env}}.yaml
+
+        - repoURL: REPO_URL_PLACEHOLDER  # Will be replaced by setup script
+          targetRevision: main
+          ref: values
+
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: '{{service}}-{{env}}'
+
+      syncPolicy:
+        # Auto-create namespace
+        syncOptions:
+          - CreateNamespace=true
+          - PruneLast=true
+          - ApplyOutOfSyncOnly=true
+
+        # Automated sync (conditional based on environment)
+        automated:
+          prune: true
+          selfHeal: true
+          # Only enabled for non-prod environments
+          # For prod, set autoSync: false in generator
+
+      # Ignore differences in mutable fields
+      ignoreDifferences:
+        - group: apps
+          kind: Deployment
+          jsonPointers:
+            - /spec/replicas  # Ignore if HPA manages replicas
+
+      # Health checks
+      revisionHistoryLimit: 3

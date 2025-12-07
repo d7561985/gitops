@@ -1,0 +1,30 @@
+# Web HTTP - Staging Environment
+
+environment: staging
+branch: main
+replicas: 2
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 200m
+    memory: 256Mi
+
+env:
+  - name: LISTEN_ADDR
+    value: "0.0.0.0:9092"
+  - name: SERVER_TYPE
+    value: "http"
+  - name: NAME
+    value: "web-http-staging"
+  - name: MESSAGE
+    value: "Hello from HTTP backend (STAGING)"
+
+labels:
+  app.kubernetes.io/instance: web-http-staging
+  environment: staging
+
+annotations:
+  argocd.argoproj.io/sync-wave: "0"

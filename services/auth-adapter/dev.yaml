@@ -1,0 +1,28 @@
+# Auth Adapter - Dev Environment Overrides
+
+environment: dev
+branch: main
+replicas: 1
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 100m
+    memory: 128Mi
+
+env:
+  - name: OTEL_ENABLE
+    value: "false"
+  - name: LOG_LEVEL
+    value: "debug"
+  - name: GRPC_GO_LOG_VERBOSITY_LEVEL
+    value: "99"
+
+labels:
+  app.kubernetes.io/instance: auth-adapter-dev
+  environment: dev
+
+annotations:
+  argocd.argoproj.io/sync-wave: "1"  # Deploy before api-gateway

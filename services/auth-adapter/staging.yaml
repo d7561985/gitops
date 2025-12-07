@@ -1,0 +1,26 @@
+# Auth Adapter - Staging Environment Overrides
+
+environment: staging
+branch: main
+replicas: 2
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 200m
+    memory: 256Mi
+
+env:
+  - name: OTEL_ENABLE
+    value: "true"
+  - name: LOG_LEVEL
+    value: "info"
+
+labels:
+  app.kubernetes.io/instance: auth-adapter-staging
+  environment: staging
+
+annotations:
+  argocd.argoproj.io/sync-wave: "1"

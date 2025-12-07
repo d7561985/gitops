@@ -1,0 +1,63 @@
+# ArgoCD Project for GitOps POC
+# Defines boundaries and permissions for applications
+
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: gitops-poc
+  namespace: argocd
+spec:
+  description: GitOps POC Project
+
+  # Source repositories
+  sourceRepos:
+    - https://d7561985.github.io/k8app
+    - https://gitlab.com/your-group/*  # Allow all repos in your group
+    - https://github.com/d7561985/*
+
+  # Destination clusters and namespaces
+  destinations:
+    # Dev namespaces
+    - namespace: '*-dev'
+      server: https://kubernetes.default.svc
+    # Staging namespaces
+    - namespace: '*-staging'
+      server: https://kubernetes.default.svc
+    # Prod namespaces
+    - namespace: '*-prod'
+      server: https://kubernetes.default.svc
+
+  # Allowed cluster resources
+  clusterResourceWhitelist:
+    - group: ''
+      kind: Namespace
+    - group: 'rbac.authorization.k8s.io'
+      kind: ClusterRole
+    - group: 'rbac.authorization.k8s.io'
+      kind: ClusterRoleBinding
+
+  # Allowed namespace resources
+  namespaceResourceWhitelist:
+    - group: ''
+      kind: '*'
+    - group: 'apps'
+      kind: '*'
+    - group: 'autoscaling'
+      kind: '*'
+    - group: 'policy'
+      kind: '*'
+    - group: 'secrets.hashicorp.com'
+      kind: '*'
+
+  # Sync windows (optional - restrict prod deploys to business hours)
+  # syncWindows:
+  #   - kind: allow
+  #     schedule: '0 9-17 * * 1-5'  # Mon-Fri 9am-5pm
+  #     duration: 8h
+  #     namespaces:
+  #       - '*-prod'
+  #     manualSync: true
+
+  # Orphaned resources monitoring
+  orphanedResources:
+    warn: true

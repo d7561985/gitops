@@ -1,0 +1,65 @@
+# Auth Adapter - Default Values (inherited by all environments)
+# Based on k8app/app chart: https://github.com/d7561985/k8app
+
+appName: auth-adapter
+version: "1.0.0"
+
+# Service Account
+serviceAccountName: auth-adapter
+
+# Image configuration
+image:
+  repository: auth-adapter
+  tag: local
+  pullPolicy: Never  # Local image in Minikube
+
+# Container port
+containerPort: 9000
+
+# Service configuration
+service:
+  enabled: true
+  type: ClusterIP
+  ports:
+    - name: grpc
+      port: 9000
+      targetPort: 9000
+
+# Health checks
+livenessProbe:
+  enabled: true
+  grpc:
+    port: 9000
+  initialDelaySeconds: 10
+  periodSeconds: 10
+
+readinessProbe:
+  enabled: true
+  grpc:
+    port: 9000
+  initialDelaySeconds: 5
+  periodSeconds: 5
+
+# Environment variables (common)
+env:
+  - name: OTEL_ENABLE
+    value: "false"
+  - name: NAMESPACE
+    value: "demo"
+
+# ConfigMap for auth config
+configmap:
+  enabled: true
+  data:
+    config.yaml: |
+      # Auth adapter configuration
+      valid_tokens:
+        - "valid-token-1"
+        - "valid-token-2"
+
+# Labels (required by policy)
+labels:
+  app.kubernetes.io/name: auth-adapter
+  app.kubernetes.io/component: auth
+  app.kubernetes.io/part-of: gitops-poc
+  app.kubernetes.io/managed-by: helm

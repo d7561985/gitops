@@ -1,0 +1,56 @@
+# Web gRPC Backend - Default Values
+# Uses nicholasjackson/fake-service for testing
+
+appName: web-grpc
+version: "v0.19.1"
+
+serviceAccountName: web-grpc
+
+# Image configuration (public image)
+image:
+  repository: nicholasjackson/fake-service
+  tag: v0.19.1
+  pullPolicy: IfNotPresent
+
+containerPort: 9091
+
+service:
+  enabled: true
+  type: ClusterIP
+  ports:
+    - name: grpc
+      port: 9091
+      targetPort: 9091
+
+livenessProbe:
+  enabled: true
+  httpGet:
+    path: /health
+    port: 9091
+  initialDelaySeconds: 5
+  periodSeconds: 10
+
+readinessProbe:
+  enabled: true
+  httpGet:
+    path: /ready
+    port: 9091
+  initialDelaySeconds: 3
+  periodSeconds: 5
+
+# fake-service configuration
+env:
+  - name: LISTEN_ADDR
+    value: "0.0.0.0:9091"
+  - name: SERVER_TYPE
+    value: "grpc"
+  - name: NAME
+    value: "web-grpc"
+  - name: MESSAGE
+    value: "Hello from gRPC backend"
+
+labels:
+  app.kubernetes.io/name: web-grpc
+  app.kubernetes.io/component: backend
+  app.kubernetes.io/part-of: gitops-poc
+  app.kubernetes.io/managed-by: helm

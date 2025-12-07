@@ -1,0 +1,32 @@
+# Web gRPC - Dev Environment
+
+environment: dev
+branch: main
+replicas: 1
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 100m
+    memory: 128Mi
+
+env:
+  - name: LISTEN_ADDR
+    value: "0.0.0.0:9091"
+  - name: SERVER_TYPE
+    value: "grpc"
+  - name: NAME
+    value: "web-grpc-dev"
+  - name: MESSAGE
+    value: "Hello from gRPC backend (DEV)"
+  - name: LOG_LEVEL
+    value: "debug"
+
+labels:
+  app.kubernetes.io/instance: web-grpc-dev
+  environment: dev
+
+annotations:
+  argocd.argoproj.io/sync-wave: "0"  # Deploy first (no dependencies)

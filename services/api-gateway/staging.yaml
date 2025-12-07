@@ -1,0 +1,42 @@
+# API Gateway - Staging Environment Overrides
+# Inherits from default.yaml
+
+environment: staging
+branch: main
+
+# Replicas
+replicas: 2
+
+# Resources (moderate for staging)
+resources:
+  requests:
+    cpu: 200m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+# Environment-specific variables
+env:
+  - name: OPEN_TELEMETRY_ENABLE
+    value: "true"
+  - name: LOG_LEVEL
+    value: "info"
+  - name: AUTH_ADAPTER_HOST
+    value: "auth-adapter.auth-adapter-staging.svc.cluster.local"
+
+# Labels
+labels:
+  app.kubernetes.io/instance: api-gateway-staging
+  environment: staging
+
+# Annotations for ArgoCD
+annotations:
+  argocd.argoproj.io/sync-wave: "2"
+
+# HPA for staging
+hpa:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 4
+  targetCPUUtilizationPercentage: 70

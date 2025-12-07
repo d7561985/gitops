@@ -1,0 +1,46 @@
+# Health Demo Service - Default Values
+# gRPC health check and streaming demo
+
+appName: health-demo
+version: "1.0.0"
+
+serviceAccountName: health-demo
+
+image:
+  repository: health-demo
+  tag: local
+  pullPolicy: Never  # Local image in Minikube
+
+containerPort: 8081
+
+service:
+  enabled: true
+  type: ClusterIP
+  ports:
+    - name: grpc
+      port: 8081
+      targetPort: 8081
+
+livenessProbe:
+  enabled: true
+  grpc:
+    port: 8081
+  initialDelaySeconds: 10
+  periodSeconds: 10
+
+readinessProbe:
+  enabled: true
+  grpc:
+    port: 8081
+  initialDelaySeconds: 5
+  periodSeconds: 5
+
+env:
+  - name: PORT
+    value: "8081"
+
+labels:
+  app.kubernetes.io/name: health-demo
+  app.kubernetes.io/component: backend
+  app.kubernetes.io/part-of: gitops-poc
+  app.kubernetes.io/managed-by: helm

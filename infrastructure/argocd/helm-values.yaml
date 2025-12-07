@@ -1,0 +1,123 @@
+# ArgoCD Helm Chart Values for Minikube
+# Source: https://github.com/argoproj/argo-helm/tree/main/charts/argo-cd
+
+global:
+  # Logging
+  logging:
+    level: info
+    format: text
+
+# Server configuration
+server:
+  replicas: 1
+
+  # Disable TLS for local development
+  extraArgs:
+    - --insecure
+
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+  service:
+    type: ClusterIP
+
+# Application controller
+controller:
+  replicas: 1
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+  # Metrics for monitoring
+  metrics:
+    enabled: true
+
+# Repo server
+repoServer:
+  replicas: 1
+
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+# ApplicationSet controller
+applicationSet:
+  enabled: true
+  replicas: 1
+
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 100m
+      memory: 128Mi
+
+# Redis (for caching)
+redis:
+  enabled: true
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 100m
+      memory: 128Mi
+
+# Dex (SSO) - disabled for POC
+dex:
+  enabled: false
+
+# Notifications - disabled for POC
+notifications:
+  enabled: false
+
+# Configs
+configs:
+  # ConfigMap с настройками
+  cm:
+    # Отключить TLS verification для self-signed certs
+    "resource.customizations.health.argoproj.io_Application": |
+      hs = {}
+      hs.status = "Healthy"
+      hs.message = ""
+      if obj.status ~= nil then
+        if obj.status.health ~= nil then
+          hs.status = obj.status.health.status
+          if obj.status.health.message ~= nil then
+            hs.message = obj.status.health.message
+          end
+        end
+      end
+      return hs
+
+    # Application sync timeout
+    timeout.reconciliation: 180s
+
+  # Repository credentials (add your GitLab credentials here)
+  repositories: {}
+    # gitlab-repo:
+    #   url: https://gitlab.com/your-group/your-repo.git
+    #   password: glpat-xxxxxxxxxxxx
+    #   username: oauth2
+
+  # Credential templates for GitLab
+  credentialTemplates: {}
+    # gitlab-creds:
+    #   url: https://gitlab.com
+    #   password: glpat-xxxxxxxxxxxx
+    #   username: oauth2

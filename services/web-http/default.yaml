@@ -1,0 +1,54 @@
+# Web HTTP Backend - Default Values
+# Uses nicholasjackson/fake-service for testing
+
+appName: web-http
+version: "v0.19.1"
+
+serviceAccountName: web-http
+
+image:
+  repository: nicholasjackson/fake-service
+  tag: v0.19.1
+  pullPolicy: IfNotPresent
+
+containerPort: 9092
+
+service:
+  enabled: true
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 9092
+      targetPort: 9092
+
+livenessProbe:
+  enabled: true
+  httpGet:
+    path: /health
+    port: 9092
+  initialDelaySeconds: 5
+  periodSeconds: 10
+
+readinessProbe:
+  enabled: true
+  httpGet:
+    path: /ready
+    port: 9092
+  initialDelaySeconds: 3
+  periodSeconds: 5
+
+env:
+  - name: LISTEN_ADDR
+    value: "0.0.0.0:9092"
+  - name: SERVER_TYPE
+    value: "http"
+  - name: NAME
+    value: "web-http"
+  - name: MESSAGE
+    value: "Hello from HTTP backend"
+
+labels:
+  app.kubernetes.io/name: web-http
+  app.kubernetes.io/component: backend
+  app.kubernetes.io/part-of: gitops-poc
+  app.kubernetes.io/managed-by: helm

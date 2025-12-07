@@ -1,0 +1,40 @@
+# Web gRPC - Production Environment
+
+environment: prod
+branch: main
+replicas: 3
+
+resources:
+  requests:
+    cpu: 200m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+env:
+  - name: LISTEN_ADDR
+    value: "0.0.0.0:9091"
+  - name: SERVER_TYPE
+    value: "grpc"
+  - name: NAME
+    value: "web-grpc-prod"
+  - name: MESSAGE
+    value: "Hello from gRPC backend (PROD)"
+
+labels:
+  app.kubernetes.io/instance: web-grpc-prod
+  environment: prod
+
+annotations:
+  argocd.argoproj.io/sync-wave: "0"
+
+hpa:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+
+pdb:
+  enabled: true
+  minAvailable: 2

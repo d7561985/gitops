@@ -1,0 +1,47 @@
+# API Gateway - Production Environment Overrides
+# Inherits from default.yaml
+
+environment: prod
+branch: main
+
+# Replicas
+replicas: 3
+
+# Resources (production-grade)
+resources:
+  requests:
+    cpu: 500m
+    memory: 512Mi
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+
+# Environment-specific variables
+env:
+  - name: OPEN_TELEMETRY_ENABLE
+    value: "true"
+  - name: LOG_LEVEL
+    value: "warn"
+  - name: AUTH_ADAPTER_HOST
+    value: "auth-adapter.auth-adapter-prod.svc.cluster.local"
+
+# Labels
+labels:
+  app.kubernetes.io/instance: api-gateway-prod
+  environment: prod
+
+# Annotations for ArgoCD
+annotations:
+  argocd.argoproj.io/sync-wave: "2"
+
+# HPA for production
+hpa:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 60
+
+# PDB for high availability
+pdb:
+  enabled: true
+  minAvailable: 2

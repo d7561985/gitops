@@ -1,0 +1,20 @@
+# Health Demo - Dev Environment
+
+environment: dev
+branch: main
+replicas: 1
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 32Mi
+  limits:
+    cpu: 100m
+    memory: 64Mi
+
+labels:
+  app.kubernetes.io/instance: health-demo-dev
+  environment: dev
+
+annotations:
+  argocd.argoproj.io/sync-wave: "0"
