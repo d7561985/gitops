@@ -14,7 +14,7 @@ ENV LOG_LEVEL info
 
 RUN apt-get update && apt-get install -y curl gettext-base && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-COPY entrypoint.sh /
+COPY --chmod=755 entrypoint.sh /
 COPY --from=build  /app/conf-generator/conf-generator /opt/conf-generator/conf-generator
 
 ENTRYPOINT ["/entrypoint.sh"]

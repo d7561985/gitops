@@ -19,7 +19,7 @@ variables:
   KUBE_CONTEXT: "gitops-poc-dzha/gitops-config:minikube-agent"
 
   # GitOps mode: "pull" or "push"
-  GITOPS_MODE: "pull"
+  GITOPS_MODE: "push"
 
 stages:
   - build

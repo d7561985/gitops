@@ -5,7 +5,8 @@
 appName: web-http
 version: "v0.19.1"
 
-serviceAccountName: web-http
+# Service Account (use default, k8app doesn't create SA)
+serviceAccountName: default
 
 # Image configuration (public image - no registry secret needed)
 image:

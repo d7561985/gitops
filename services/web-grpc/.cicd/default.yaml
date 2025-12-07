@@ -5,7 +5,8 @@
 appName: web-grpc
 version: "v0.19.1"
 
-serviceAccountName: web-grpc
+# Service Account (use default, k8app doesn't create SA)
+serviceAccountName: default
 
 # Image configuration (public image - no registry secret needed)
 image:
@@ -23,13 +24,12 @@ service:
       internalPort: 9091
       protocol: TCP
 
-# Health checks (k8app format)
+# Health checks (k8app format) - tcpSocket for gRPC service
 livenessProbe:
   enabled: true
-  mode: httpGet
-  httpGet:
+  mode: tcpSocket
+  tcpSocket:
     port: 9091
-    path: "/health"
   initialDelaySeconds: 5
   periodSeconds: 10
   timeoutSeconds: 5
@@ -37,10 +37,9 @@ livenessProbe:
 
 readinessProbe:
   enabled: true
-  mode: httpGet
-  httpGet:
+  mode: tcpSocket
+  tcpSocket:
     port: 9091
-    path: "/ready"
   initialDelaySeconds: 3
   periodSeconds: 5
   timeoutSeconds: 5

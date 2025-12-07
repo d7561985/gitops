@@ -5,8 +5,8 @@
 appName: api-gateway
 version: "1.0.0"
 
-# Service Account
-serviceAccountName: api-gateway
+# Service Account (use default, k8app doesn't create SA)
+serviceAccountName: default
 
 # Image configuration
 # For local Minikube: repository: api-gateway, tag: local, pullPolicy: Never
