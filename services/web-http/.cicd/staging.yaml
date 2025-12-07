@@ -1,4 +1,5 @@
 # Web HTTP - Staging Environment
+# Inherits from default.yaml
 
 environment: staging
 branch: main
@@ -12,15 +13,10 @@ resources:
     cpu: 200m
     memory: 256Mi
 
-env:
-  - name: LISTEN_ADDR
-    value: "0.0.0.0:9092"
-  - name: SERVER_TYPE
-    value: "http"
-  - name: NAME
-    value: "web-http-staging"
-  - name: MESSAGE
-    value: "Hello from HTTP backend (STAGING)"
+# Environment-specific overrides (k8app configmap format)
+configmap:
+  NAME: "web-http-staging"
+  MESSAGE: "Hello from HTTP backend (STAGING)"
 
 labels:
   app.kubernetes.io/instance: web-http-staging

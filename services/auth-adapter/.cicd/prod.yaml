@@ -1,7 +1,16 @@
 # Auth Adapter - Production Environment Overrides
+# Inherits from default.yaml
+# CI updates image.repository and image.tag on each build
 
 environment: prod
 branch: main
+
+# Image - CI updates these values
+image:
+  repository: registry.gitlab.com/gitops-poc-dzha/auth-adapter
+  tag: latest
+  pullPolicy: IfNotPresent
+
 replicas: 3
 
 resources:
@@ -12,11 +21,10 @@ resources:
     cpu: 500m
     memory: 512Mi
 
-env:
-  - name: OTEL_ENABLE
-    value: "true"
-  - name: LOG_LEVEL
-    value: "warn"
+# Environment-specific overrides (k8app configmap format)
+configmap:
+  OTEL_ENABLE: "true"
+  LOG_LEVEL: "warn"
 
 labels:
   app.kubernetes.io/instance: auth-adapter-prod

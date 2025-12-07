@@ -1,8 +1,15 @@
 # API Gateway - Dev Environment Overrides
 # Inherits from default.yaml
+# CI updates image.repository and image.tag on each build
 
 environment: dev
 branch: main
+
+# Image - CI updates these values
+image:
+  repository: registry.gitlab.com/gitops-poc-dzha/api-gateway
+  tag: latest
+  pullPolicy: IfNotPresent
 
 # Replicas
 replicas: 1
@@ -16,12 +23,9 @@ resources:
     cpu: 200m
     memory: 256Mi
 
-# Environment-specific variables (override default.yaml)
-env:
-  - name: OPEN_TELEMETRY_ENABLE
-    value: "false"
-  - name: LOG_LEVEL
-    value: "debug"
+# Environment-specific overrides (k8app configmap format)
+configmap:
+  LOG_LEVEL: "debug"
 
 # Labels
 labels:

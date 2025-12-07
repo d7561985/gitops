@@ -1,4 +1,5 @@
 # Web gRPC - Production Environment
+# Inherits from default.yaml
 
 environment: prod
 branch: main
@@ -12,15 +13,10 @@ resources:
     cpu: 500m
     memory: 512Mi
 
-env:
-  - name: LISTEN_ADDR
-    value: "0.0.0.0:9091"
-  - name: SERVER_TYPE
-    value: "grpc"
-  - name: NAME
-    value: "web-grpc-prod"
-  - name: MESSAGE
-    value: "Hello from gRPC backend (PROD)"
+# Environment-specific overrides (k8app configmap format)
+configmap:
+  NAME: "web-grpc-prod"
+  MESSAGE: "Hello from gRPC backend (PROD)"
 
 labels:
   app.kubernetes.io/instance: web-grpc-prod

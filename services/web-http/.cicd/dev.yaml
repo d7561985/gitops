@@ -1,4 +1,5 @@
 # Web HTTP - Dev Environment
+# Inherits from default.yaml
 
 environment: dev
 branch: main
@@ -12,17 +13,11 @@ resources:
     cpu: 100m
     memory: 128Mi
 
-env:
-  - name: LISTEN_ADDR
-    value: "0.0.0.0:9092"
-  - name: SERVER_TYPE
-    value: "http"
-  - name: NAME
-    value: "web-http-dev"
-  - name: MESSAGE
-    value: "Hello from HTTP backend (DEV)"
-  - name: LOG_LEVEL
-    value: "debug"
+# Environment-specific overrides (k8app configmap format)
+configmap:
+  NAME: "web-http-dev"
+  MESSAGE: "Hello from HTTP backend (DEV)"
+  LOG_LEVEL: "debug"
 
 labels:
   app.kubernetes.io/instance: web-http-dev

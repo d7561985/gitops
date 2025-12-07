@@ -43,16 +43,26 @@ GitLab (gitlab.com/${GITLAB_GROUP}/):
 
 ```
 service-repo/
-├── src/                   # Код сервиса
-├── Dockerfile             # Сборка образа
+├── src/                   # Код сервиса (Go)
+├── Dockerfile             # Multi-stage сборка образа
 ├── .cicd/
-│   ├── default.yaml       # Базовые Helm values
-│   ├── dev.yaml           # Dev overrides (image.tag обновляется CI)
+│   ├── default.yaml       # Базовые Helm values (k8app/app format)
+│   ├── dev.yaml           # Dev overrides + GitLab Registry image
 │   ├── staging.yaml       # Staging overrides
 │   └── prod.yaml          # Prod overrides
-├── vault-secret.yaml      # Vault secrets config
+├── vault-secret.yaml      # Vault secrets config (VaultStaticSecret)
 └── .gitlab-ci.yml         # CI/CD pipeline
 ```
+
+### Сервисы
+
+| Сервис | Описание | Исходный код | Docker образ |
+|--------|----------|--------------|--------------|
+| api-gateway | Envoy Proxy с Go config generator | [github.com/d7561985/api-gateway](https://github.com/d7561985/api-gateway) | GitLab Registry |
+| auth-adapter | gRPC ext_authz сервис | [github.com/d7561985/api-gateway/envoy/auth-adapter](https://github.com/d7561985/api-gateway) | GitLab Registry |
+| health-demo | Простой health check сервис | Локальный | GitLab Registry |
+| web-grpc | gRPC backend (fake-service) | [nicholasjackson/fake-service](https://github.com/nicholasjackson/fake-service) | Docker Hub |
+| web-http | HTTP backend (fake-service) | [nicholasjackson/fake-service](https://github.com/nicholasjackson/fake-service) | Docker Hub |
 
 ### Принципы конфигурации
 
@@ -66,19 +76,41 @@ service-repo/
 
 | Файл | Содержит | Пример |
 |------|----------|--------|
-| `default.yaml` | Общие настройки для всех окружений | `appName`, `containerPort`, `AUTH_ADAPTER_HOST` |
-| `{env}.yaml` | Только env-specific переопределения | `replicas`, `resources`, `LOG_LEVEL` |
+| `default.yaml` | Общие настройки для всех окружений | `appName`, `service.ports`, `configmap`, `configfiles` |
+| `{env}.yaml` | Env-specific переопределения + image | `image.repository/tag`, `replicas`, `resources`, `configmap` overrides |
+
+**Формат k8app/app chart:**
+```yaml
+# default.yaml
+configmap:              # Env vars через ConfigMap
+  LOG_LEVEL: "info"
+  AUTH_HOST: "auth-adapter"
+
+configfiles:            # Конфиг файлы через ConfigMap
+  mountPath: "/config"
+  data:
+    config.yaml: |
+      key: value
+
+# dev.yaml
+image:
+  repository: registry.gitlab.com/gitops-poc-dzha/my-service
+  tag: latest
+configmap:
+  LOG_LEVEL: "debug"    # Переопределение
+```
 
 **Что НЕ должно быть в env-specific файлах:**
 - Ссылки на другие сервисы (используй короткие DNS имена в `default.yaml`)
 - Namespace-зависимые значения
-- Дублирование значений из `default.yaml`
+- Дублирование значений из `default.yaml` (кроме configmap overrides)
 
 **Что должно быть в env-specific файлах:**
+- `image.repository/tag` — URL образа в GitLab Registry
 - `environment: dev/staging/prod`
 - `replicas` — количество реплик
 - `resources` — CPU/memory limits
-- Переопределения env vars (`LOG_LEVEL`, `OTEL_ENABLE`)
+- `configmap` переопределения (`LOG_LEVEL`, `OTEL_ENABLE`)
 - `labels`/`annotations` с env-specific значениями
 - `hpa`/`pdb` настройки (только для staging/prod)
 

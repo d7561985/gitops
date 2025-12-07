@@ -1,4 +1,5 @@
 # Web gRPC - Staging Environment
+# Inherits from default.yaml
 
 environment: staging
 branch: main
@@ -12,15 +13,10 @@ resources:
     cpu: 200m
     memory: 256Mi
 
-env:
-  - name: LISTEN_ADDR
-    value: "0.0.0.0:9091"
-  - name: SERVER_TYPE
-    value: "grpc"
-  - name: NAME
-    value: "web-grpc-staging"
-  - name: MESSAGE
-    value: "Hello from gRPC backend (STAGING)"
+# Environment-specific overrides (k8app configmap format)
+configmap:
+  NAME: "web-grpc-staging"
+  MESSAGE: "Hello from gRPC backend (STAGING)"
 
 labels:
   app.kubernetes.io/instance: web-grpc-staging

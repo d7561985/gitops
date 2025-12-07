@@ -1,4 +1,5 @@
 # Web HTTP - Production Environment
+# Inherits from default.yaml
 
 environment: prod
 branch: main
@@ -12,15 +13,10 @@ resources:
     cpu: 500m
     memory: 512Mi
 
-env:
-  - name: LISTEN_ADDR
-    value: "0.0.0.0:9092"
-  - name: SERVER_TYPE
-    value: "http"
-  - name: NAME
-    value: "web-http-prod"
-  - name: MESSAGE
-    value: "Hello from HTTP backend (PROD)"
+# Environment-specific overrides (k8app configmap format)
+configmap:
+  NAME: "web-http-prod"
+  MESSAGE: "Hello from HTTP backend (PROD)"
 
 labels:
   app.kubernetes.io/instance: web-http-prod

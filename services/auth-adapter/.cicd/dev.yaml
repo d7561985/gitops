@@ -1,7 +1,16 @@
 # Auth Adapter - Dev Environment Overrides
+# Inherits from default.yaml
+# CI updates image.repository and image.tag on each build
 
 environment: dev
 branch: main
+
+# Image - CI updates these values
+image:
+  repository: registry.gitlab.com/gitops-poc-dzha/auth-adapter
+  tag: latest
+  pullPolicy: IfNotPresent
+
 replicas: 1
 
 resources:
@@ -12,13 +21,9 @@ resources:
     cpu: 100m
     memory: 128Mi
 
-env:
-  - name: OTEL_ENABLE
-    value: "false"
-  - name: LOG_LEVEL
-    value: "debug"
-  - name: GRPC_GO_LOG_VERBOSITY_LEVEL
-    value: "99"
+# Environment-specific overrides (k8app configmap format)
+configmap:
+  LOG_LEVEL: "debug"
 
 labels:
   app.kubernetes.io/instance: auth-adapter-dev

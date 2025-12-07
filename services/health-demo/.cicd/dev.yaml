@@ -1,7 +1,16 @@
-# Health Demo - Dev Environment
+# Health Demo - Dev Environment Overrides
+# Inherits from default.yaml
+# CI updates image.repository and image.tag on each build
 
 environment: dev
 branch: main
+
+# Image - CI updates these values
+image:
+  repository: registry.gitlab.com/gitops-poc-dzha/health-demo
+  tag: latest
+  pullPolicy: IfNotPresent
+
 replicas: 1
 
 resources:
@@ -17,4 +26,4 @@ labels:
   environment: dev
 
 annotations:
-  argocd.argoproj.io/sync-wave: "0"
+  argocd.argoproj.io/sync-wave: "0"  # Deploy first

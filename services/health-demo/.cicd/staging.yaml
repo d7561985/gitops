@@ -1,7 +1,16 @@
 # Health Demo - Staging Environment
+# Inherits from default.yaml
+# CI updates image.repository and image.tag on each build
 
 environment: staging
 branch: main
+
+# Image - CI updates these values
+image:
+  repository: registry.gitlab.com/gitops-poc-dzha/health-demo
+  tag: latest
+  pullPolicy: IfNotPresent
+
 replicas: 1
 
 resources:
