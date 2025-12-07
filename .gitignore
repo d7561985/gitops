@@ -1,0 +1,14 @@
+# Environment configuration (contains project-specific settings)
+.env
+
+# Backup files
+*.bak
+
+# macOS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo

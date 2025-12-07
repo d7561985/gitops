@@ -1,237 +1,219 @@
-# GitOps POC: Push & Pull Based Approaches
+# GitOps POC: Multi-Repository Architecture
 
-Демонстрация двух подходов GitOps на базе GitLab Agent (Push) и ArgoCD (Pull) с интеграцией HashiCorp Vault для управления секретами.
+Демонстрация GitOps подходов (Push и Pull) с мультирепозиторной архитектурой на базе GitLab Agent и ArgoCD.
 
-## Содержание
+## Quick Start (Конфигурация)
 
-- [Архитектура](#архитектура)
-- [Требования](#требования)
-- [Quick Start](#quick-start)
-- [Политики и Стандарты](#политики-и-стандарты)
-- [Структура проекта](#структура-проекта)
-- [Детальная настройка](#детальная-настройка)
+```bash
+# 1. Скопировать и настроить конфигурацию
+cp .env.example .env
+vim .env  # Изменить GITLAB_GROUP на свой
+
+# 2. Инициализировать проект (обновит все файлы)
+./scripts/init-project.sh
+
+# 3. Запустить инфраструктуру
+./scripts/setup-infrastructure.sh
+```
+
+**Конфигурируемые параметры (.env):**
+- `GITLAB_GROUP` — группа в GitLab (например: `gitops-poc-dzha`)
+- `GITLAB_HOST` — хост GitLab (`gitlab.com` или self-managed)
+- `SERVICES` — список сервисов
+- `VAULT_PATH_PREFIX` — префикс путей в Vault
 
 ---
 
 ## Архитектура
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                              GitLab.com / Self-Managed                       │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐         │
-│  │ api-gateway │  │auth-adapter │  │  web-grpc   │  │  web-http   │  ...    │
-│  │    repo     │  │    repo     │  │    repo     │  │    repo     │         │
-│  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘         │
-└─────────┼────────────────┼────────────────┼────────────────┼────────────────┘
-          │                │                │                │
-          ▼                ▼                ▼                ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                           Minikube Cluster                                   │
-│                                                                              │
-│  ┌──────────────────────┐        ┌──────────────────────┐                   │
-│  │   PUSH-BASED (CI/CD) │        │   PULL-BASED (GitOps)│                   │
-│  │   ┌────────────────┐ │        │   ┌────────────────┐ │                   │
-│  │   │  GitLab Agent  │ │        │   │    ArgoCD      │ │                   │
-│  │   │  (agentk)      │ │        │   │                │ │                   │
-│  │   └───────┬────────┘ │        │   └───────┬────────┘ │                   │
-│  │           │          │        │           │          │                   │
-│  │   Pipeline triggers  │        │   Polls repository   │                   │
-│  │   helm upgrade       │        │   auto-sync          │                   │
-│  └───────────┼──────────┘        └───────────┼──────────┘                   │
-│              │                               │                               │
-│              ▼                               ▼                               │
-│  ┌───────────────────────────────────────────────────────────────┐          │
-│  │                    Application Namespaces                      │          │
-│  │   ┌─────────┐  ┌─────────┐  ┌─────────┐                       │          │
-│  │   │   dev   │  │ staging │  │  prod   │                       │          │
-│  │   └─────────┘  └─────────┘  └─────────┘                       │          │
-│  └───────────────────────────────────────────────────────────────┘          │
-│                              │                                               │
-│                              ▼                                               │
-│  ┌───────────────────────────────────────────────────────────────┐          │
-│  │                    HashiCorp Vault                             │          │
-│  │   ┌─────────────────────────────────────────────────────────┐ │          │
-│  │   │  Vault Secrets Operator (VSO)                           │ │          │
-│  │   │  secret/data/gitops-poc/{service}/{env}/config          │ │          │
-│  │   └─────────────────────────────────────────────────────────┘ │          │
-│  └───────────────────────────────────────────────────────────────┘          │
-└─────────────────────────────────────────────────────────────────────────────┘
+GitLab (gitlab.com/${GITLAB_GROUP}/):
+│
+├── api-gateway/           ← Репо сервиса с кодом + .cicd/
+├── auth-adapter/          ← Репо сервиса
+├── web-grpc/              ← Репо сервиса
+├── web-http/              ← Репо сервиса
+├── health-demo/           ← Репо сервиса
+│
+└── gitops-config/         ← Этот репозиторий (инфраструктура + ArgoCD)
 ```
 
-### Сервисы POC (на базе api-gateway проекта)
+### Структура репозитория сервиса
 
-| Сервис | Описание | Image | Порты |
-|--------|----------|-------|-------|
-| api-gateway | Envoy API Gateway | local build | 8080, 8000 |
-| auth-adapter | Сервис авторизации | local build | 9000 |
-| web-grpc | gRPC backend | nicholasjackson/fake-service:v0.19.1 | 9091 |
-| web-http | HTTP backend | nicholasjackson/fake-service:v0.19.1 | 9092 |
-| health-demo | Health check service | local build | 8081 |
+```
+service-repo/
+├── src/                   # Код сервиса
+├── Dockerfile             # Сборка образа
+├── .cicd/
+│   ├── default.yaml       # Базовые Helm values
+│   ├── dev.yaml           # Dev overrides (image.tag обновляется CI)
+│   ├── staging.yaml       # Staging overrides
+│   └── prod.yaml          # Prod overrides
+├── vault-secret.yaml      # Vault secrets config
+└── .gitlab-ci.yml         # CI/CD pipeline
+```
+
+### Flow деплоя (Pull-based)
+
+```
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│  Developer  │────▶│  GitLab CI  │────▶│   Git Repo  │────▶│   ArgoCD    │
+│   commit    │     │ build+push  │     │ .cicd/dev   │     │   deploy    │
+└─────────────┘     │ update yaml │     │   updated   │     └─────────────┘
+                    └─────────────┘     └─────────────┘
+```
+
+1. Developer пушит код
+2. CI собирает Docker образ и пушит в registry
+3. CI обновляет `.cicd/dev.yaml` с новым `image.tag`
+4. CI коммитит и пушит изменение `[skip ci]`
+5. ArgoCD видит изменение → деплоит автоматически
 
 ---
 
 ## Требования
 
-| Компонент | Версия | Проверка | Установка |
-|-----------|--------|----------|-----------|
-| Minikube | 1.34+ | `minikube version` | [docs](https://minikube.sigs.k8s.io/docs/start/) |
-| kubectl | 1.28+ | `kubectl version --client` | [docs](https://kubernetes.io/docs/tasks/tools/) |
-| Helm | 3.12+ | `helm version` | `brew install helm` |
-| Docker | 24+ | `docker --version` | [docs](https://docs.docker.com/get-docker/) |
-| Vault CLI | 1.15+ | `vault version` | `brew tap hashicorp/tap && brew install hashicorp/tap/vault` |
-| ArgoCD CLI | 2.9+ | `argocd version --client` | `brew install argocd` |
+| Компонент | Версия | Установка |
+|-----------|--------|-----------|
+| Minikube | 1.34+ | [docs](https://minikube.sigs.k8s.io/docs/start/) |
+| kubectl | 1.28+ | [docs](https://kubernetes.io/docs/tasks/tools/) |
+| Helm | 3.12+ | `brew install helm` |
+| Docker | 24+ | [docs](https://docs.docker.com/get-docker/) |
+| Vault CLI | 1.15+ | `brew tap hashicorp/tap && brew install hashicorp/tap/vault` |
+| ArgoCD CLI | 2.9+ | `brew install argocd` |
 
 ---
 
 ## Quick Start
 
-```bash
-# 1. Клонировать репозиторий
-git clone <repository-url>
-cd gitops
+### 1. Инфраструктура
 
-# 2. Запустить Minikube и установить инфраструктуру
+```bash
+# Запустить Minikube
+minikube start --cpus 4 --memory 8192 --disk-size 40g
+
+# Установить инфраструктуру (Vault, ArgoCD)
 ./scripts/setup-infrastructure.sh
 
-# 3. Настроить Vault секреты
+# Настроить Vault секреты
 ./scripts/setup-vault-secrets.sh
+```
 
-# 4. Выбрать подход GitOps:
+### 2. GitLab Container Registry
 
-# Push-based (GitLab Agent):
+Kubernetes требует `imagePullSecrets` для доступа к приватному GitLab Container Registry.
+
+#### Создание Deploy Token
+
+1. Перейти в Settings группы GitLab:
+   ```
+   https://gitlab.com/${GITLAB_GROUP}/-/settings/repository
+   ```
+2. Развернуть секцию **Deploy tokens**
+3. Создать токен:
+   - **Name:** `kubernetes-pull`
+   - **Scopes:** `read_registry`
+4. Сохранить username и token
+
+#### Настройка секретов
+
+```bash
+# Добавить credentials
+export GITLAB_DEPLOY_TOKEN_USER='gitlab+deploy-token-xxxxx'
+export GITLAB_DEPLOY_TOKEN='gldt-xxxxxxxxxxxx'
+
+# Создать секреты во всех namespace
+./scripts/setup-registry-secret.sh
+```
+
+Секрет `regsecret` будет создан в каждом namespace сервиса (`api-gateway-dev`, `api-gateway-staging`, ...).
+
+> **Note:** k8app чарт использует hardcoded имя секрета `regsecret`. См. [docs/k8app-recommendations.md](docs/k8app-recommendations.md) для предложения по улучшению.
+
+#### Использование в values
+
+Включить `deploySecretHarbor` в `.cicd/default.yaml` сервисов:
+```yaml
+image:
+  repository: registry.gitlab.com/${GITLAB_GROUP}/api-gateway
+  tag: latest
+  pullPolicy: IfNotPresent
+
+# k8app uses hardcoded secret name "regsecret"
+deploySecretHarbor: true
+```
+
+### 3. Создать GitLab группу и репозитории
+
+```bash
+# Структура в GitLab:
+# gitlab.com/${GITLAB_GROUP}/
+# ├── gitops-config/     ← этот репозиторий (ApplicationSet живёт здесь)
+# ├── api-gateway/       ← репо сервиса (.cicd/, .gitlab-ci.yml)
+# ├── auth-adapter/
+# ├── web-grpc/
+# ├── web-http/
+# └── health-demo/
+```
+
+**Шаги:**
+
+1. Создать группу `${GITLAB_GROUP}` в GitLab
+2. Создать репозиторий `gitops-config` и запушить этот проект
+3. Создать репозитории для сервисов и скопировать туда файлы:
+   ```bash
+   # Пример для api-gateway
+   git clone git@gitlab.com:${GITLAB_GROUP}/api-gateway.git
+   cp -r services/api-gateway/* api-gateway/
+   cd api-gateway && git add . && git commit -m "Initial" && git push
+   ```
+
+### 4. Pull-based (ArgoCD)
+
+ApplicationSet находится в репозитории `gitops-config` и создаёт Application для каждого сервиса.
+
+```bash
+# 1. Добавить репозитории в ArgoCD (если приватные)
+argocd repo add https://gitlab.com/${GITLAB_GROUP}/api-gateway.git \
+  --username git --password <gitlab-token>
+# Повторить для каждого сервиса...
+
+# Или добавить credentials для всей группы:
+argocd repocreds add https://gitlab.com/${GITLAB_GROUP} \
+  --username git --password <gitlab-token>
+
+# 2. Применить ArgoCD Project и ApplicationSet
+kubectl apply -f gitops-config/argocd/project.yaml
+kubectl apply -f gitops-config/argocd/applicationset.yaml
+
+# 3. Проверить созданные приложения
+kubectl get applications -n argocd
+
+# 4. Открыть ArgoCD UI
+kubectl port-forward svc/argocd-server -n argocd 8080:443
+# https://localhost:8080
+```
+
+**Как это работает:**
+- ApplicationSet генерирует 15 Applications (5 сервисов × 3 окружения)
+- Каждый Application следит за своим репо сервиса (`api-gateway`, `auth-adapter`, ...)
+- При изменении `.cicd/*.yaml` в репо сервиса → ArgoCD деплоит
+
+### 5. Push-based (GitLab Agent)
+
+```bash
+# 1. Получить токен агента из GitLab:
+#    Project (gitops-config) → Infrastructure → Kubernetes clusters → Connect a cluster
+#    Имя агента: minikube-agent
+
+# 2. Установить агента
+export GITLAB_AGENT_TOKEN='glagent-xxx...'
 ./scripts/setup-push-based.sh
 
-# Pull-based (ArgoCD):
-./scripts/setup-pull-based.sh
-```
-
----
-
-## Политики и Стандарты
-
-### 1. Структура репозитория сервиса (k8app based)
-
-Каждый сервис должен иметь следующую структуру values файлов:
-
-```
-service-repo/
-├── helm/
-│   ├── default.yaml      # Общие настройки для всех окружений
-│   ├── dev.yaml          # Override для dev (наследует default)
-│   ├── staging.yaml      # Override для staging (наследует default)
-│   └── prod.yaml         # Override для prod (наследует default)
-└── .gitlab-ci.yml        # CI/CD pipeline (для push-based)
-```
-
-**Принцип наследования values:**
-```bash
-# Итоговые values = default.yaml + {env}.yaml
-helm upgrade app k8app/app \
-  -f helm/default.yaml \
-  -f helm/dev.yaml      # env-specific overrides
-```
-
-### 2. Именование ресурсов
-
-| Ресурс | Паттерн | Пример |
-|--------|---------|--------|
-| Namespace | `{service}-{env}` | `api-gateway-dev` |
-| Deployment | `{service}` | `api-gateway` |
-| Service | `{service}` | `api-gateway` |
-| Secret | `{service}-secrets` | `api-gateway-secrets` |
-
-### 3. Vault Secrets — Структура путей
-
-```
-secret/data/gitops-poc/{service}/{env}/config
-                 │         │       │      │
-                 │         │       │      └── Всегда "config" для консистентности
-                 │         │       └── dev | staging | prod
-                 │         └── api-gateway | auth-adapter | web-grpc | ...
-                 └── Название проекта (единое для всех сервисов)
-```
-
-**Примеры путей:**
-```
-secret/data/gitops-poc/api-gateway/dev/config
-secret/data/gitops-poc/api-gateway/staging/config
-secret/data/gitops-poc/api-gateway/prod/config
-secret/data/gitops-poc/auth-adapter/dev/config
-secret/data/gitops-poc/auth-adapter/prod/config
-```
-
-**Vault Policy для сервиса (шаблон):**
-```hcl
-# Policy: gitops-poc-{service}-{env}
-path "secret/data/gitops-poc/{service}/{env}/*" {
-  capabilities = ["read"]
-}
-```
-
-### 4. Kubernetes Auth Roles для Vault
-
-Каждый сервис в каждом окружении имеет свою роль:
-
-```bash
-# Паттерн: {service}-{env}
-vault write auth/kubernetes/role/api-gateway-dev \
-  bound_service_account_names=api-gateway \
-  bound_service_account_namespaces=api-gateway-dev \
-  policies=gitops-poc-api-gateway-dev \
-  ttl=1h
-```
-
-### 5. Labels и Annotations (обязательные)
-
-```yaml
-metadata:
-  labels:
-    app.kubernetes.io/name: "{service}"
-    app.kubernetes.io/instance: "{service}-{env}"
-    app.kubernetes.io/version: "{version}"
-    app.kubernetes.io/component: "backend|frontend|gateway"
-    app.kubernetes.io/part-of: "gitops-poc"
-    app.kubernetes.io/managed-by: "helm"
-    environment: "{env}"
-  annotations:
-    # Для ArgoCD sync waves
-    argocd.argoproj.io/sync-wave: "0"
-```
-
-### 6. GitOps подходы — когда использовать
-
-| Критерий | Push-based (GitLab Agent) | Pull-based (ArgoCD) |
-|----------|---------------------------|---------------------|
-| Скорость деплоя | Мгновенно при push | По интервалу (3 мин default) |
-| Контроль | Pipeline должен успешно завершиться | Автоматическая синхронизация |
-| Rollback | `git revert` + pipeline | UI/CLI ArgoCD или `git revert` |
-| Visibility | GitLab CI/CD UI | ArgoCD Dashboard |
-| Multi-cluster | Сложнее настроить | Нативная поддержка |
-| Secrets | Во время pipeline | Vault Secrets Operator |
-
-**Рекомендация:**
-- **Dev/Staging**: Push-based — быстрая итерация
-- **Production**: Pull-based — аудит, approval gates, drift detection
-
-### 7. Secrets Management — Правила
-
-1. **Никогда** не коммитить секреты в Git
-2. **Всегда** использовать Vault для хранения секретов
-3. **Один путь** = одно окружение одного сервиса
-4. **Rotation**: Настроить `refreshAfter: 1h` в VaultStaticSecret
-5. **Least Privilege**: Каждый сервис видит только свои секреты
-
-### 8. Environment Promotion Flow
-
-```
-┌─────┐     Manual      ┌─────────┐     Manual      ┌──────┐
-│ Dev │ ──────────────► │ Staging │ ──────────────► │ Prod │
-└─────┘   PR + Review   └─────────┘   PR + Approval └──────┘
-
-# Git branches:
-main ──► dev     (auto-deploy)
-main ──► staging (manual trigger / PR)
-main ──► prod    (manual approval required)
+# 3. Добавить конфиг агента в репо gitops-config:
+mkdir -p .gitlab/agents/minikube-agent
+cp infrastructure/gitlab-agent/config.yaml .gitlab/agents/minikube-agent/
+git add . && git commit -m "Add agent config" && git push
 ```
 
 ---
@@ -239,207 +221,191 @@ main ──► prod    (manual approval required)
 ## Структура проекта
 
 ```
-gitops/
-├── README.md                          # Этот файл
-├── docs/
-│   └── k8app-recommendations.md       # Задача для команды k8app
+gitops-config/                     # Этот репозиторий
+├── README.md
+├── .env.example                   # Шаблон конфигурации
+├── .env                           # Конфигурация проекта (не в git)
+├── .gitignore
 ├── infrastructure/
-│   ├── vault/                         # Vault + VSO установка
+│   ├── vault/                     # Vault + VSO
 │   │   ├── helm-values.yaml
 │   │   ├── vso-values.yaml
 │   │   └── setup.sh
-│   ├── argocd/                        # ArgoCD установка
+│   ├── argocd/                    # ArgoCD
 │   │   ├── helm-values.yaml
 │   │   └── setup.sh
-│   └── gitlab-agent/                  # GitLab Agent установка
+│   └── gitlab-agent/              # GitLab Agent
 │       ├── helm-values.yaml
 │       ├── config.yaml
 │       └── setup.sh
-├── services/                          # Сервисы на базе k8app
+├── scripts/
+│   ├── init-project.sh            # Инициализация проекта
+│   ├── setup-infrastructure.sh
+│   ├── setup-vault-secrets.sh
+│   ├── setup-registry-secret.sh   # imagePullSecrets (regsecret)
+│   ├── setup-push-based.sh
+│   ├── setup-pull-based.sh
+│   └── build-local-images.sh
+├── gitops-config/
+│   └── argocd/
+│       ├── applicationset.yaml    # ArgoCD ApplicationSet
+│       ├── project.yaml           # ArgoCD Project
+│       └── README.md
+├── services/                      # Примеры репозиториев сервисов
 │   ├── api-gateway/
-│   │   ├── default.yaml
-│   │   ├── dev.yaml
-│   │   ├── staging.yaml
-│   │   ├── prod.yaml
-│   │   └── vault-secret.yaml          # VaultStaticSecret CRD
+│   │   ├── .cicd/
+│   │   │   ├── default.yaml
+│   │   │   ├── dev.yaml
+│   │   │   ├── staging.yaml
+│   │   │   └── prod.yaml
+│   │   ├── vault-secret.yaml
+│   │   └── .gitlab-ci.yml
 │   ├── auth-adapter/
 │   ├── web-grpc/
 │   ├── web-http/
 │   └── health-demo/
-├── gitops/
-│   ├── push-based/
-│   │   ├── .gitlab-ci.yml             # Template CI/CD pipeline
-│   │   └── README.md                  # Push-based documentation
-│   └── pull-based/
-│       ├── applicationset.yaml        # ArgoCD ApplicationSet
-│       ├── project.yaml               # ArgoCD Project
-│       └── README.md                  # Pull-based documentation
-├── scripts/
-│   ├── setup-infrastructure.sh
-│   ├── setup-vault-secrets.sh
-│   ├── setup-push-based.sh
-│   ├── setup-pull-based.sh
-│   └── build-local-images.sh
+├── templates/                     # Шаблон для новых сервисов
+│   └── service-repo/
+├── docs/
+│   └── k8app-recommendations.md   # Рекомендации для k8app
 └── tests/
     └── smoke-test.sh
 ```
 
 ---
 
-## Детальная настройка
+## GitOps подходы
 
-### Minikube с поддержкой локального Docker
+### Pull-based (ArgoCD) — рекомендуется для Production
 
-```bash
-# Запуск Minikube
-minikube start --cpus 4 --memory 8192 --disk-size 40g
+| Характеристика | Описание |
+|----------------|----------|
+| Триггер деплоя | ArgoCD polling (3 мин) или webhook |
+| Источник истины | Git репозиторий сервиса |
+| Версия образа | В `.cicd/{env}.yaml` |
+| Rollback | UI/CLI ArgoCD или `git revert` |
+| Audit trail | Git history |
 
-# Использовать Docker daemon Minikube для локальных образов
-eval $(minikube docker-env)
-
-# Проверка
-docker images  # Должны видеть k8s.gcr.io images
+**CI Pipeline обновляет `.cicd/{env}.yaml`:**
+```yaml
+update:dev:
+  script:
+    - yq -i '.image.tag = "'${CI_COMMIT_SHORT_SHA}'"' .cicd/dev.yaml
+    - git commit -m "ci(dev): update image [skip ci]"
+    - git push
 ```
 
-### Сборка локальных образов
+### Push-based (GitLab Agent) — для быстрой итерации
 
-```bash
-# Клонировать api-gateway репозиторий
-git clone https://github.com/d7561985/api-gateway.git /tmp/api-gateway
+| Характеристика | Описание |
+|----------------|----------|
+| Триггер деплоя | Pipeline completion |
+| Источник истины | Git + текущее состояние кластера |
+| Версия образа | `--set image.tag=${CI_COMMIT_SHORT_SHA}` |
+| Rollback | Re-run pipeline или `git revert` |
 
-# Переключиться на Docker daemon Minikube
-eval $(minikube docker-env)
-
-# Собрать образы
-cd /tmp/api-gateway/envoy
-docker build -t api-gateway:local -f api-gateway/Dockerfile .
-docker build -t auth-adapter:local -f auth-adapter/Dockerfile .
-docker build -t health-demo:local -f ../tools/health-demo/Dockerfile ../tools/health-demo
-```
-
-### Установка Vault
-
-```bash
-# Добавить репозиторий HashiCorp
-helm repo add hashicorp https://helm.releases.hashicorp.com
-helm repo update
-
-# Установить Vault в dev режиме
-helm install vault hashicorp/vault \
-  --namespace vault \
-  --create-namespace \
-  -f infrastructure/vault/helm-values.yaml
-
-# Установить Vault Secrets Operator
-helm install vault-secrets-operator hashicorp/vault-secrets-operator \
-  --namespace vault-secrets-operator-system \
-  --create-namespace \
-  -f infrastructure/vault/vso-values.yaml
-```
-
-### Установка ArgoCD
-
-```bash
-# Установить ArgoCD
-helm repo add argo https://argoproj.github.io/argo-helm
-helm install argocd argo/argo-cd \
-  --namespace argocd \
-  --create-namespace \
-  -f infrastructure/argocd/helm-values.yaml
-
-# Получить пароль admin
-kubectl -n argocd get secret argocd-initial-admin-secret \
-  -o jsonpath="{.data.password}" | base64 -d
-
-# Доступ к UI
-kubectl port-forward svc/argocd-server -n argocd 8080:443
-# Открыть https://localhost:8080
-```
-
-### Установка GitLab Agent
-
-```bash
-# Получить токен агента из GitLab UI:
-# Project → Infrastructure → Kubernetes clusters → Connect a cluster
-
-helm repo add gitlab https://charts.gitlab.io
-helm install gitlab-agent gitlab/gitlab-agent \
-  --namespace gitlab-agent \
-  --create-namespace \
-  --set config.token=<YOUR_AGENT_TOKEN> \
-  --set config.kasAddress=wss://kas.gitlab.com \
-  -f infrastructure/gitlab-agent/helm-values.yaml
+**CI Pipeline деплоит напрямую:**
+```yaml
+deploy:dev:
+  script:
+    - helm upgrade --install ... --set image.tag=${CI_COMMIT_SHORT_SHA}
 ```
 
 ---
 
-## Vault Configuration Details
+## Vault Secrets
 
-### Инициализация секретов
+### Структура путей
+
+```
+secret/data/${VAULT_PATH_PREFIX}/{service}/{env}/config
+                    │                │       │
+                    │                │       └── dev | staging | prod
+                    │                └── api-gateway | auth-adapter | ...
+                    └── Из .env (по умолчанию = GITLAB_GROUP)
+```
+
+### Создание секретов
 
 ```bash
 # Port-forward к Vault
 kubectl port-forward svc/vault -n vault 8200:8200 &
 
-# Экспорт адреса и токена (dev mode)
 export VAULT_ADDR='http://127.0.0.1:8200'
 export VAULT_TOKEN='root'
 
-# Включить KV v2 secrets engine
-vault secrets enable -path=secret kv-v2
-
-# Создать секреты для api-gateway
-vault kv put secret/gitops-poc/api-gateway/dev/config \
-  AUTH_ADAPTER_HOST=auth-adapter \
-  LOG_LEVEL=debug \
-  API_KEY=dev-api-key-12345
-
-vault kv put secret/gitops-poc/api-gateway/staging/config \
-  AUTH_ADAPTER_HOST=auth-adapter \
-  LOG_LEVEL=info \
-  API_KEY=staging-api-key-67890
-
-vault kv put secret/gitops-poc/api-gateway/prod/config \
-  AUTH_ADAPTER_HOST=auth-adapter \
-  LOG_LEVEL=warn \
-  API_KEY=prod-api-key-secure
-
-# Аналогично для других сервисов...
+# Создать секреты (путь из .env)
+vault kv put secret/${VAULT_PATH_PREFIX}/api-gateway/dev/config \
+  API_KEY="dev-secret" \
+  DB_PASSWORD="dev-password"
 ```
 
-### Настройка Kubernetes Auth
+---
 
-```bash
-# Включить Kubernetes auth
-vault auth enable kubernetes
+## Добавление нового сервиса
 
-# Настроить auth method (внутри кластера)
-vault write auth/kubernetes/config \
-  kubernetes_host="https://kubernetes.default.svc"
+1. **Скопировать шаблон:**
+   ```bash
+   cp -r templates/service-repo/ /path/to/my-new-service
+   ```
 
-# Создать policy для api-gateway-dev
-vault policy write gitops-poc-api-gateway-dev - <<EOF
-path "secret/data/gitops-poc/api-gateway/dev/*" {
-  capabilities = ["read"]
-}
-EOF
+2. **Заменить placeholder:**
+   ```bash
+   sed -i 's/{{SERVICE_NAME}}/my-new-service/g' /path/to/my-new-service/**/*
+   ```
 
-# Создать role для api-gateway-dev
-vault write auth/kubernetes/role/api-gateway-dev \
-  bound_service_account_names=api-gateway \
-  bound_service_account_namespaces=api-gateway-dev \
-  policies=gitops-poc-api-gateway-dev \
-  ttl=1h
-```
+3. **Создать репозиторий в GitLab:**
+   - `${GITLAB_GROUP}/my-new-service`
+
+4. **Добавить сервис в `.env`:**
+   ```bash
+   SERVICES="api-gateway auth-adapter web-grpc web-http health-demo my-new-service"
+   ```
+
+5. **Перезапустить init-project.sh:**
+   ```bash
+   ./scripts/init-project.sh
+   ```
+   Это обновит ApplicationSet и другие файлы.
+
+6. **Создать Vault секреты:**
+   ```bash
+   vault kv put secret/${VAULT_PATH_PREFIX}/my-new-service/dev/config KEY=value
+   ```
 
 ---
 
 ## Troubleshooting
 
-### Vault Secrets не синхронизируются
+### ArgoCD не синхронизируется
 
 ```bash
-# Проверить статус VaultStaticSecret
+# Статус приложений
+argocd app list
+argocd app get api-gateway-dev
+
+# Принудительная синхронизация
+argocd app sync api-gateway-dev --force
+
+# Логи
+kubectl logs -n argocd -l app.kubernetes.io/name=argocd-application-controller
+```
+
+### CI не обновляет .cicd/*.yaml
+
+```bash
+# Проверить права GitLab CI token
+# Settings → CI/CD → Variables
+# CI_JOB_TOKEN должен иметь права на push
+
+# Проверить protected branches
+# Settings → Repository → Protected branches
+```
+
+### Vault секреты не синхронизируются
+
+```bash
+# Статус VaultStaticSecret
 kubectl get vaultstaticsecret -A
 kubectl describe vaultstaticsecret api-gateway-secrets -n api-gateway-dev
 
@@ -447,38 +413,40 @@ kubectl describe vaultstaticsecret api-gateway-secrets -n api-gateway-dev
 kubectl logs -n vault-secrets-operator-system -l app.kubernetes.io/name=vault-secrets-operator
 ```
 
-### ArgoCD Application не синхронизируется
+### ImagePullBackOff / ErrImagePull
+
+Проблема с доступом к GitLab Container Registry:
 
 ```bash
-# Статус приложения
-argocd app get api-gateway-dev
+# Проверить наличие секрета в namespace (k8app использует "regsecret")
+kubectl get secret regsecret -n api-gateway-dev
 
-# Принудительная синхронизация
-argocd app sync api-gateway-dev --force
+# Проверить конфигурацию секрета
+kubectl get secret regsecret -n api-gateway-dev -o jsonpath='{.data.\.dockerconfigjson}' | base64 -d | jq
 
-# Логи ArgoCD
-kubectl logs -n argocd -l app.kubernetes.io/name=argocd-application-controller
+# Если секрета нет - создать
+./scripts/setup-registry-secret.sh
+
+# Проверить что imagePullSecrets указан в deployment
+kubectl get deployment api-gateway -n api-gateway-dev -o yaml | grep -A5 imagePullSecrets
+
+# Проверить события pod
+kubectl describe pod -n api-gateway-dev -l app=api-gateway
 ```
 
-### GitLab Agent не подключается
-
-```bash
-# Статус агента
-kubectl get pods -n gitlab-agent
-
-# Логи агента
-kubectl logs -n gitlab-agent -l app=gitlab-agent
-
-# Проверить токен
-kubectl get secret -n gitlab-agent gitlab-agent-token -o yaml
-```
+**Частые причины:**
+- Deploy Token истёк или отозван → создать новый
+- Неверный scope токена → должен быть `read_registry`
+- `deploySecretHarbor: false` в values → установить `true` в `.cicd/default.yaml`
 
 ---
 
 ## Ссылки
 
 - [GitLab Agent CI/CD Workflow](https://docs.gitlab.com/user/clusters/agent/ci_cd_workflow/)
-- [ArgoCD Sync Waves](https://argo-cd.readthedocs.io/en/stable/user-guide/sync-waves/)
+- [GitLab Container Registry](https://docs.gitlab.com/user/packages/container_registry/)
+- [GitLab Deploy Tokens](https://docs.gitlab.com/user/project/deploy_tokens/)
+- [ArgoCD ApplicationSet](https://argo-cd.readthedocs.io/en/stable/user-guide/application-set/)
+- [ArgoCD Multi-Source Applications](https://argo-cd.readthedocs.io/en/stable/user-guide/multiple_sources/)
 - [Vault Secrets Operator](https://developer.hashicorp.com/vault/docs/deploy/kubernetes/vso)
 - [k8app Helm Chart](https://github.com/d7561985/k8app)
-- [API Gateway Project](https://github.com/d7561985/api-gateway)

@@ -59,19 +59,19 @@ echo_info "Creating Vault policies..."
 
 for SERVICE in "${SERVICES[@]}"; do
     for ENV in "${ENVIRONMENTS[@]}"; do
-        POLICY_NAME="gitops-poc-${SERVICE}-${ENV}"
+        POLICY_NAME="gitops-poc-dzha-${SERVICE}-${ENV}"
 
         echo_info "Creating policy: ${POLICY_NAME}"
 
         vault policy write ${POLICY_NAME} - <<EOF
 # Policy for ${SERVICE} in ${ENV} environment
-# Path: secret/data/gitops-poc/${SERVICE}/${ENV}/*
+# Path: secret/data/gitops-poc-dzha/${SERVICE}/${ENV}/*
 
-path "secret/data/gitops-poc/${SERVICE}/${ENV}/*" {
+path "secret/data/gitops-poc-dzha/${SERVICE}/${ENV}/*" {
   capabilities = ["read"]
 }
 
-path "secret/metadata/gitops-poc/${SERVICE}/${ENV}/*" {
+path "secret/metadata/gitops-poc-dzha/${SERVICE}/${ENV}/*" {
   capabilities = ["read", "list"]
 }
 EOF
@@ -88,7 +88,7 @@ for SERVICE in "${SERVICES[@]}"; do
     for ENV in "${ENVIRONMENTS[@]}"; do
         ROLE_NAME="${SERVICE}-${ENV}"
         NAMESPACE="${SERVICE}-${ENV}"
-        POLICY_NAME="gitops-poc-${SERVICE}-${ENV}"
+        POLICY_NAME="gitops-poc-dzha-${SERVICE}-${ENV}"
 
         echo_info "Creating role: ${ROLE_NAME}"
 
@@ -124,7 +124,7 @@ for ENV in "${ENVIRONMENTS[@]}"; do
     esac
 
     echo_info "Creating secret: api-gateway/${ENV}"
-    vault kv put secret/gitops-poc/api-gateway/${ENV}/config \
+    vault kv put secret/gitops-poc-dzha/api-gateway/${ENV}/config \
         LOG_LEVEL="${LOG_LEVEL}" \
         API_KEY="${API_KEY}" \
         AUTH_ADAPTER_HOST="auth-adapter.auth-adapter-${ENV}.svc.cluster.local"
@@ -148,7 +148,7 @@ for ENV in "${ENVIRONMENTS[@]}"; do
     esac
 
     echo_info "Creating secret: auth-adapter/${ENV}"
-    vault kv put secret/gitops-poc/auth-adapter/${ENV}/config \
+    vault kv put secret/gitops-poc-dzha/auth-adapter/${ENV}/config \
         VALID_TOKENS="${VALID_TOKENS}" \
         JWT_SECRET="${JWT_SECRET}"
 done
@@ -157,7 +157,7 @@ done
 for SERVICE in "web-grpc" "web-http" "health-demo"; do
     for ENV in "${ENVIRONMENTS[@]}"; do
         echo_info "Creating secret: ${SERVICE}/${ENV}"
-        vault kv put secret/gitops-poc/${SERVICE}/${ENV}/config \
+        vault kv put secret/gitops-poc-dzha/${SERVICE}/${ENV}/config \
             SERVICE_NAME="${SERVICE}" \
             ENVIRONMENT="${ENV}"
     done
@@ -170,12 +170,12 @@ done
 echo_info "Verifying secrets..."
 echo ""
 echo "Created secrets:"
-vault kv list secret/gitops-poc/
+vault kv list secret/gitops-poc-dzha/
 
 echo ""
 for SERVICE in "${SERVICES[@]}"; do
     echo "  ${SERVICE}:"
-    vault kv list secret/gitops-poc/${SERVICE}/ 2>/dev/null || echo "    (no secrets)"
+    vault kv list secret/gitops-poc-dzha/${SERVICE}/ 2>/dev/null || echo "    (no secrets)"
 done
 
 # Cleanup handled by trap
@@ -186,8 +186,8 @@ echo_info "Vault secrets configuration complete!"
 echo "========================================"
 echo ""
 echo "Secret path structure:"
-echo "  secret/data/gitops-poc/{service}/{env}/config"
+echo "  secret/data/gitops-poc-dzha/{service}/{env}/config"
 echo ""
 echo "Example:"
-echo "  secret/data/gitops-poc/api-gateway/dev/config"
+echo "  secret/data/gitops-poc-dzha/api-gateway/dev/config"
 echo ""

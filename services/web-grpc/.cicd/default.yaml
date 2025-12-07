@@ -7,10 +7,16 @@ version: "v0.19.1"
 serviceAccountName: web-grpc
 
 # Image configuration (public image)
+# For custom image: repository: registry.gitlab.com/${GITLAB_GROUP}/web-grpc
 image:
   repository: nicholasjackson/fake-service
   tag: v0.19.1
   pullPolicy: IfNotPresent
+
+# Enable imagePullSecrets for GitLab Container Registry
+# k8app chart uses hardcoded secret name "regsecret"
+# Run: ./scripts/setup-registry-secret.sh to create the secret
+deploySecretHarbor: false  # Set to true when using private registry
 
 containerPort: 9091
 
@@ -52,5 +58,5 @@ env:
 labels:
   app.kubernetes.io/name: web-grpc
   app.kubernetes.io/component: backend
-  app.kubernetes.io/part-of: gitops-poc
+  app.kubernetes.io/part-of: gitops-poc-dzha
   app.kubernetes.io/managed-by: helm

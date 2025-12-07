@@ -1,0 +1,185 @@
+# GitLab CI/CD Pipeline for health-demo
+# Supports both Push-based and Pull-based GitOps
+#
+# Pull-based (ArgoCD): CI builds image, updates .cicd/{env}.yaml, pushes
+# Push-based (GitLab Agent): CI builds image, deploys directly via helm
+
+variables:
+  SERVICE_NAME: "health-demo"
+
+  # Docker registry (GitLab Container Registry)
+  REGISTRY: ${CI_REGISTRY}
+  IMAGE_NAME: ${CI_REGISTRY_IMAGE}
+
+  # Helm chart
+  HELM_CHART: "k8app/app"
+  HELM_REPO: "https://d7561985.github.io/k8app"
+
+  # GitLab Agent context (for push-based)
+  KUBE_CONTEXT: "gitops-poc-dzha/gitops-config:minikube-agent"
+
+  # GitOps mode: "pull" or "push"
+  GITOPS_MODE: "pull"
+
+stages:
+  - build
+  - update-manifests
+  - deploy  # Only for push-based
+
+# ============================================
+# Build Stage
+# ============================================
+
+build:
+  stage: build
+  image: docker:24
+  services:
+    - docker:24-dind
+  variables:
+    DOCKER_TLS_CERTDIR: "/certs"
+  before_script:
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+  script:
+    - docker build -t ${IMAGE_NAME}:${CI_COMMIT_SHORT_SHA} .
+    - docker push ${IMAGE_NAME}:${CI_COMMIT_SHORT_SHA}
+    # Tag as latest for main branch
+    - |
+      if [ "$CI_COMMIT_BRANCH" == "$CI_DEFAULT_BRANCH" ]; then
+        docker tag ${IMAGE_NAME}:${CI_COMMIT_SHORT_SHA} ${IMAGE_NAME}:latest
+        docker push ${IMAGE_NAME}:latest
+      fi
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+
+# ============================================
+# Pull-based GitOps: Update manifests
+# ============================================
+
+.update-manifest:
+  stage: update-manifests
+  image: alpine:3.19
+  before_script:
+    - apk add --no-cache git yq
+    - git config --global user.email "ci@gitlab.com"
+    - git config --global user.name "GitLab CI"
+  rules:
+    - if: $GITOPS_MODE == "pull" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+update:dev:
+  extends: .update-manifest
+  script:
+    - |
+      echo "Updating dev environment to ${CI_COMMIT_SHORT_SHA}"
+      yq -i '.image.tag = "'${CI_COMMIT_SHORT_SHA}'"' .cicd/dev.yaml
+      yq -i '.image.repository = "'${IMAGE_NAME}'"' .cicd/dev.yaml
+
+      git add .cicd/dev.yaml
+      git commit -m "ci(dev): update image to ${CI_COMMIT_SHORT_SHA} [skip ci]"
+      git push https://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git HEAD:${CI_COMMIT_BRANCH}
+
+      echo "ArgoCD will detect this change and deploy automatically"
+
+update:staging:
+  extends: .update-manifest
+  script:
+    - |
+      echo "Updating staging environment to ${CI_COMMIT_SHORT_SHA}"
+      yq -i '.image.tag = "'${CI_COMMIT_SHORT_SHA}'"' .cicd/staging.yaml
+      yq -i '.image.repository = "'${IMAGE_NAME}'"' .cicd/staging.yaml
+
+      git add .cicd/staging.yaml
+      git commit -m "ci(staging): update image to ${CI_COMMIT_SHORT_SHA} [skip ci]"
+      git push https://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git HEAD:${CI_COMMIT_BRANCH}
+  when: manual
+  needs:
+    - update:dev
+
+update:prod:
+  extends: .update-manifest
+  script:
+    - |
+      echo "Updating prod environment to ${CI_COMMIT_SHORT_SHA}"
+      yq -i '.image.tag = "'${CI_COMMIT_SHORT_SHA}'"' .cicd/prod.yaml
+      yq -i '.image.repository = "'${IMAGE_NAME}'"' .cicd/prod.yaml
+
+      git add .cicd/prod.yaml
+      git commit -m "ci(prod): update image to ${CI_COMMIT_SHORT_SHA} [skip ci]"
+      git push https://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git HEAD:${CI_COMMIT_BRANCH}
+  when: manual
+  needs:
+    - update:staging
+
+# ============================================
+# Push-based GitOps: Direct deploy via GitLab Agent
+# ============================================
+
+.deploy:
+  stage: deploy
+  image: dtzar/helm-kubectl:3.13
+  before_script:
+    - helm repo add k8app ${HELM_REPO}
+    - helm repo update
+    - kubectl config use-context ${KUBE_CONTEXT}
+  rules:
+    - if: $GITOPS_MODE == "push" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+deploy:dev:
+  extends: .deploy
+  environment:
+    name: dev
+    kubernetes:
+      namespace: ${SERVICE_NAME}-dev
+  script:
+    - kubectl create namespace ${SERVICE_NAME}-dev --dry-run=client -o yaml | kubectl apply -f -
+    - |
+      helm upgrade --install ${SERVICE_NAME} ${HELM_CHART} \
+        --namespace ${SERVICE_NAME}-dev \
+        --wait --timeout 5m \
+        -f .cicd/default.yaml \
+        -f .cicd/dev.yaml \
+        --set image.repository=${IMAGE_NAME} \
+        --set image.tag=${CI_COMMIT_SHORT_SHA}
+    - kubectl rollout status deployment/${SERVICE_NAME} -n ${SERVICE_NAME}-dev --timeout=3m
+
+deploy:staging:
+  extends: .deploy
+  environment:
+    name: staging
+    kubernetes:
+      namespace: ${SERVICE_NAME}-staging
+  script:
+    - kubectl create namespace ${SERVICE_NAME}-staging --dry-run=client -o yaml | kubectl apply -f -
+    - |
+      helm upgrade --install ${SERVICE_NAME} ${HELM_CHART} \
+        --namespace ${SERVICE_NAME}-staging \
+        --wait --timeout 5m \
+        -f .cicd/default.yaml \
+        -f .cicd/staging.yaml \
+        --set image.repository=${IMAGE_NAME} \
+        --set image.tag=${CI_COMMIT_SHORT_SHA}
+    - kubectl rollout status deployment/${SERVICE_NAME} -n ${SERVICE_NAME}-staging --timeout=3m
+  when: manual
+  needs:
+    - deploy:dev
+
+deploy:prod:
+  extends: .deploy
+  environment:
+    name: production
+    kubernetes:
+      namespace: ${SERVICE_NAME}-prod
+  script:
+    - kubectl create namespace ${SERVICE_NAME}-prod --dry-run=client -o yaml | kubectl apply -f -
+    - |
+      helm upgrade --install ${SERVICE_NAME} ${HELM_CHART} \
+        --namespace ${SERVICE_NAME}-prod \
+        --wait --timeout 10m \
+        -f .cicd/default.yaml \
+        -f .cicd/prod.yaml \
+        --set image.repository=${IMAGE_NAME} \
+        --set image.tag=${CI_COMMIT_SHORT_SHA}
+    - kubectl rollout status deployment/${SERVICE_NAME} -n ${SERVICE_NAME}-prod --timeout=5m
+  when: manual
+  needs:
+    - deploy:staging

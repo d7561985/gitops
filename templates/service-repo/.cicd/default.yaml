@@ -1,0 +1,72 @@
+# Default values for {{SERVICE_NAME}}
+# This file contains base configuration shared across all environments
+#
+# Usage with k8app chart:
+#   helm upgrade --install {{SERVICE_NAME}} k8app/app \
+#     -f .cicd/default.yaml \
+#     -f .cicd/dev.yaml
+
+# Application metadata
+fullnameOverride: "{{SERVICE_NAME}}"
+
+# Container image
+image:
+  repository: "registry.gitlab.com/gitops-poc-dzha/{{SERVICE_NAME}}"
+  tag: "latest"
+  pullPolicy: IfNotPresent
+
+# Enable imagePullSecrets for GitLab Container Registry
+# k8app chart uses hardcoded secret name "regsecret"
+# Run: ./scripts/setup-registry-secret.sh to create the secret
+deploySecretHarbor: true  # Uses "regsecret" secret
+
+# Container configuration
+container:
+  port: 8080
+
+# Service configuration
+service:
+  enabled: true
+  type: ClusterIP
+  port: 80
+  targetPort: 8080
+
+# Health checks
+livenessProbe:
+  enabled: true
+  httpGet:
+    path: /health
+    port: 8080
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  enabled: true
+  httpGet:
+    path: /ready
+    port: 8080
+  initialDelaySeconds: 5
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+# Common labels
+labels:
+  app.kubernetes.io/name: "{{SERVICE_NAME}}"
+  app.kubernetes.io/part-of: "gitops-poc-dzha"
+  app.kubernetes.io/managed-by: "helm"
+
+# Pod annotations
+podAnnotations: {}
+
+# Security context
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+
+# Service account
+serviceAccount:
+  create: true
+  name: "{{SERVICE_NAME}}"

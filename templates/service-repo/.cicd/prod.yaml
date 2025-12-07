@@ -1,0 +1,48 @@
+# Production environment values for {{SERVICE_NAME}}
+# Inherits from default.yaml
+#
+# Image tag is manually updated via CI pipeline with approval
+
+# Environment identifier
+environment: prod
+
+# Image (updated by CI with manual approval)
+image:
+  tag: "latest"  # CI will update this
+
+# Replicas (production scale)
+replicaCount: 3
+
+# Resources (production scale)
+resources:
+  requests:
+    cpu: 200m
+    memory: 256Mi
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+
+# HPA for production
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+# Environment variables
+env:
+  - name: ENVIRONMENT
+    value: "prod"
+  - name: LOG_LEVEL
+    value: "warn"
+
+# Labels
+labels:
+  app.kubernetes.io/instance: "{{SERVICE_NAME}}-prod"
+  environment: "prod"
+
+# Pod disruption budget for production
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 2

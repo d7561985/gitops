@@ -8,10 +8,17 @@ version: "1.0.0"
 serviceAccountName: auth-adapter
 
 # Image configuration
+# For local Minikube: repository: auth-adapter, tag: local, pullPolicy: Never
+# For GitLab Registry: repository: registry.gitlab.com/${GITLAB_GROUP}/auth-adapter
 image:
   repository: auth-adapter
   tag: local
-  pullPolicy: Never  # Local image in Minikube
+  pullPolicy: Never  # Change to IfNotPresent for GitLab Registry
+
+# Enable imagePullSecrets for GitLab Container Registry
+# k8app chart uses hardcoded secret name "regsecret"
+# Run: ./scripts/setup-registry-secret.sh to create the secret
+deploySecretHarbor: false  # Set to true when using GitLab Registry
 
 # Container port
 containerPort: 9000
@@ -61,5 +68,5 @@ configmap:
 labels:
   app.kubernetes.io/name: auth-adapter
   app.kubernetes.io/component: auth
-  app.kubernetes.io/part-of: gitops-poc
+  app.kubernetes.io/part-of: gitops-poc-dzha
   app.kubernetes.io/managed-by: helm

@@ -69,8 +69,8 @@ argocd repo add https://gitlab.com/your-group/gitops-poc.git \
 ### 4. Apply ApplicationSet
 
 ```bash
-kubectl apply -f gitops/pull-based/project.yaml
-kubectl apply -f gitops/pull-based/applicationset.yaml
+kubectl apply -f gitops-config/argocd/project.yaml
+kubectl apply -f gitops-config/argocd/applicationset.yaml
 ```
 
 ## Sync Waves
