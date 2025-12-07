@@ -54,6 +54,34 @@ service-repo/
 └── .gitlab-ci.yml         # CI/CD pipeline
 ```
 
+### Принципы конфигурации
+
+**Environment-agnostic конфиги:**
+- Все сервисы одной системы деплоятся в один namespace (`poc-dev`, `poc-staging`, `poc-prod`)
+- Конфиги не содержат hardcoded namespace — один конфиг работает в любом окружении
+- Inter-service communication через короткие DNS имена (`auth-adapter` вместо `auth-adapter.poc-dev.svc.cluster.local`)
+- Kubernetes автоматически резолвит короткие имена в текущем namespace
+
+**Разделение конфигов:**
+
+| Файл | Содержит | Пример |
+|------|----------|--------|
+| `default.yaml` | Общие настройки для всех окружений | `appName`, `containerPort`, `AUTH_ADAPTER_HOST` |
+| `{env}.yaml` | Только env-specific переопределения | `replicas`, `resources`, `LOG_LEVEL` |
+
+**Что НЕ должно быть в env-specific файлах:**
+- Ссылки на другие сервисы (используй короткие DNS имена в `default.yaml`)
+- Namespace-зависимые значения
+- Дублирование значений из `default.yaml`
+
+**Что должно быть в env-specific файлах:**
+- `environment: dev/staging/prod`
+- `replicas` — количество реплик
+- `resources` — CPU/memory limits
+- Переопределения env vars (`LOG_LEVEL`, `OTEL_ENABLE`)
+- `labels`/`annotations` с env-specific значениями
+- `hpa`/`pdb` настройки (только для staging/prod)
+
 ### Flow деплоя (Pull-based)
 
 ```

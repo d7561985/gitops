@@ -16,14 +16,12 @@ resources:
     cpu: 200m
     memory: 256Mi
 
-# Environment-specific variables
+# Environment-specific variables (override default.yaml)
 env:
   - name: OPEN_TELEMETRY_ENABLE
     value: "false"
   - name: LOG_LEVEL
     value: "debug"
-  - name: AUTH_ADAPTER_HOST
-    value: "auth-adapter.poc-dev.svc.cluster.local"
 
 # Labels
 labels:

@@ -131,36 +131,36 @@ deploy:dev:
   environment:
     name: dev
     kubernetes:
-      namespace: ${SERVICE_NAME}-dev
+      namespace: poc-dev
   script:
-    - kubectl create namespace ${SERVICE_NAME}-dev --dry-run=client -o yaml | kubectl apply -f -
+    - kubectl create namespace poc-dev --dry-run=client -o yaml | kubectl apply -f -
     - |
       helm upgrade --install ${SERVICE_NAME} ${HELM_CHART} \
-        --namespace ${SERVICE_NAME}-dev \
+        --namespace poc-dev \
         --wait --timeout 5m \
         -f .cicd/default.yaml \
         -f .cicd/dev.yaml \
         --set image.repository=${IMAGE_NAME} \
         --set image.tag=${CI_COMMIT_SHORT_SHA}
-    - kubectl rollout status deployment/${SERVICE_NAME} -n ${SERVICE_NAME}-dev --timeout=3m
+    - kubectl rollout status deployment/${SERVICE_NAME} -n poc-dev --timeout=3m
 
 deploy:staging:
   extends: .deploy
   environment:
     name: staging
     kubernetes:
-      namespace: ${SERVICE_NAME}-staging
+      namespace: poc-staging
   script:
-    - kubectl create namespace ${SERVICE_NAME}-staging --dry-run=client -o yaml | kubectl apply -f -
+    - kubectl create namespace poc-staging --dry-run=client -o yaml | kubectl apply -f -
     - |
       helm upgrade --install ${SERVICE_NAME} ${HELM_CHART} \
-        --namespace ${SERVICE_NAME}-staging \
+        --namespace poc-staging \
         --wait --timeout 5m \
         -f .cicd/default.yaml \
         -f .cicd/staging.yaml \
         --set image.repository=${IMAGE_NAME} \
         --set image.tag=${CI_COMMIT_SHORT_SHA}
-    - kubectl rollout status deployment/${SERVICE_NAME} -n ${SERVICE_NAME}-staging --timeout=3m
+    - kubectl rollout status deployment/${SERVICE_NAME} -n poc-staging --timeout=3m
   when: manual
   needs:
     - deploy:dev
@@ -170,18 +170,18 @@ deploy:prod:
   environment:
     name: production
     kubernetes:
-      namespace: ${SERVICE_NAME}-prod
+      namespace: poc-prod
   script:
-    - kubectl create namespace ${SERVICE_NAME}-prod --dry-run=client -o yaml | kubectl apply -f -
+    - kubectl create namespace poc-prod --dry-run=client -o yaml | kubectl apply -f -
     - |
       helm upgrade --install ${SERVICE_NAME} ${HELM_CHART} \
-        --namespace ${SERVICE_NAME}-prod \
+        --namespace poc-prod \
         --wait --timeout 10m \
         -f .cicd/default.yaml \
         -f .cicd/prod.yaml \
         --set image.repository=${IMAGE_NAME} \
         --set image.tag=${CI_COMMIT_SHORT_SHA}
-    - kubectl rollout status deployment/${SERVICE_NAME} -n ${SERVICE_NAME}-prod --timeout=5m
+    - kubectl rollout status deployment/${SERVICE_NAME} -n poc-prod --timeout=5m
   when: manual
   needs:
     - deploy:staging

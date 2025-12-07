@@ -62,6 +62,8 @@ readinessProbe:
 env:
   - name: OPEN_TELEMETRY_ENABLE
     value: "false"
+  - name: AUTH_ADAPTER_HOST
+    value: "auth-adapter"  # Same namespace, short DNS name works
 
 # ConfigMap for gateway config
 configmap:

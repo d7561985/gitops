@@ -150,7 +150,7 @@ for ENV in "${ENVIRONMENTS_ARR[@]}"; do
     vault kv put secret/${VAULT_PATH_PREFIX}/api-gateway/${ENV}/config \
         LOG_LEVEL="${LOG_LEVEL}" \
         API_KEY="${API_KEY}" \
-        AUTH_ADAPTER_HOST="auth-adapter.${NAMESPACE_PREFIX}-${ENV}.svc.cluster.local"
+        AUTH_ADAPTER_HOST="auth-adapter"
 done
 
 # Auth Adapter secrets
