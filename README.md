@@ -160,7 +160,47 @@ minikube start --cpus 4 --memory 8192 --disk-size 40g
 ./scripts/setup-vault-secrets.sh
 ```
 
-### 2. GitLab Container Registry
+### 2. GitLab Personal Access Token (CI Push)
+
+> **Важно!** Для Pull-based GitOps CI должен пушить изменения `.cicd/*.yaml` обратно в репозиторий. `CI_JOB_TOKEN` не имеет прав на push, поэтому необходим Personal Access Token.
+>
+> **Note:** Group Access Tokens требуют Premium/Ultimate подписку на GitLab.com. Personal Access Token работает на бесплатном тарифе.
+
+#### Создание Personal Access Token
+
+1. Перейти в User Settings:
+   ```
+   https://gitlab.com/-/user_settings/personal_access_tokens
+   ```
+
+2. Нажать **Add new token** и заполнить:
+   - **Token name:** `ci-push-gitops`
+   - **Expiration date:** выбрать дату (макс. 1 год)
+   - **Scopes:** ✅ `read_repository`, ✅ `write_repository`
+
+3. Нажать **Create personal access token**
+
+4. **Сохранить токен** — он показывается только один раз!
+
+> ⚠️ **Безопасность:** Personal Access Token имеет доступ ко всем твоим репозиториям. Используй отдельный аккаунт для CI или ограничь scope только нужными правами.
+
+#### Добавление токена в CI/CD Variables (на уровне группы)
+
+1. Перейти в CI/CD Variables группы:
+   ```
+   https://gitlab.com/groups/${GITLAB_GROUP}/-/settings/ci_cd
+   ```
+
+2. Развернуть секцию **Variables** → **Add variable**:
+   - **Key:** `CI_PUSH_TOKEN`
+   - **Value:** `<скопированный токен>`
+   - **Protected:** `No` (чтобы работало на всех ветках)
+   - **Masked:** `Yes` (скрыть в логах)
+   - **Expand variable reference:** `No`
+
+> **Note:** Переменная на уровне группы автоматически доступна всем проектам в группе.
+
+### 3. GitLab Container Registry
 
 Kubernetes требует `imagePullSecrets` для доступа к приватному GitLab Container Registry.
 
@@ -206,7 +246,7 @@ poc-prod/         ← api-gateway, auth-adapter, web-grpc, web-http, health-demo
 
 Настраивается через `NAMESPACE_PREFIX` в `.env`.
 
-### 3. Создать GitLab группу и репозитории
+### 4. Создать GitLab группу и репозитории
 
 ```bash
 # Структура в GitLab:
@@ -231,7 +271,7 @@ poc-prod/         ← api-gateway, auth-adapter, web-grpc, web-http, health-demo
    cd api-gateway && git add . && git commit -m "Initial" && git push
    ```
 
-### 4. Pull-based (ArgoCD)
+### 5. Pull-based (ArgoCD)
 
 ApplicationSet находится в репозитории `gitops-config` и создаёт Application для каждого сервиса.
 
@@ -262,7 +302,7 @@ kubectl port-forward svc/argocd-server -n argocd 8080:443
 - Каждый Application следит за своим репо сервиса (`api-gateway`, `auth-adapter`, ...)
 - При изменении `.cicd/*.yaml` в репо сервиса → ArgoCD деплоит
 
-### 5. Push-based (GitLab Agent)
+### 6. Push-based (GitLab Agent)
 
 ```bash
 # 1. Получить токен агента из GitLab:

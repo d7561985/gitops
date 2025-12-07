@@ -58,6 +58,9 @@ build:
 # Pull-based GitOps: Update manifests
 # ============================================
 
+# Pull-based: Update .cicd/*.yaml and push back to repo
+# Requires CI_PUSH_TOKEN (Group Access Token with write_repository scope)
+# See README.md for setup instructions
 .update-manifest:
   stage: update-manifests
   image: alpine:3.19
@@ -65,6 +68,10 @@ build:
     - apk add --no-cache git yq
     - git config --global user.email "ci@gitlab.com"
     - git config --global user.name "GitLab CI"
+    # Clone with push token (CI_JOB_TOKEN doesn't have push rights)
+    - git remote set-url origin "https://oauth2:${CI_PUSH_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
+    - git fetch origin ${CI_COMMIT_BRANCH}
+    - git checkout ${CI_COMMIT_BRANCH}
   rules:
     - if: $GITOPS_MODE == "pull" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
 
@@ -78,7 +85,7 @@ update:dev:
 
       git add .cicd/dev.yaml
       git commit -m "ci(dev): update image to ${CI_COMMIT_SHORT_SHA} [skip ci]"
-      git push https://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git HEAD:${CI_COMMIT_BRANCH}
+      git push origin ${CI_COMMIT_BRANCH}
 
       echo "ArgoCD will detect this change and deploy automatically"
 
@@ -92,7 +99,7 @@ update:staging:
 
       git add .cicd/staging.yaml
       git commit -m "ci(staging): update image to ${CI_COMMIT_SHORT_SHA} [skip ci]"
-      git push https://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git HEAD:${CI_COMMIT_BRANCH}
+      git push origin ${CI_COMMIT_BRANCH}
   when: manual
   needs:
     - update:dev
@@ -107,7 +114,7 @@ update:prod:
 
       git add .cicd/prod.yaml
       git commit -m "ci(prod): update image to ${CI_COMMIT_SHORT_SHA} [skip ci]"
-      git push https://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git HEAD:${CI_COMMIT_BRANCH}
+      git push origin ${CI_COMMIT_BRANCH}
   when: manual
   needs:
     - update:staging
