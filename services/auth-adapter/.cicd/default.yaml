@@ -68,5 +68,5 @@ configmap:
 labels:
   app.kubernetes.io/name: auth-adapter
   app.kubernetes.io/component: auth
-  app.kubernetes.io/part-of: gitops-poc-dzha
+  app.kubernetes.io/part-of: gitops-poc-dzha-dzha
   app.kubernetes.io/managed-by: helm

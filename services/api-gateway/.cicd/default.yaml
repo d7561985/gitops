@@ -76,5 +76,5 @@ configmap:
 labels:
   app.kubernetes.io/name: api-gateway
   app.kubernetes.io/component: gateway
-  app.kubernetes.io/part-of: gitops-poc-dzha
+  app.kubernetes.io/part-of: gitops-poc-dzha-dzha
   app.kubernetes.io/managed-by: helm

@@ -18,7 +18,7 @@ variables:
   HELM_REPO: "https://d7561985.github.io/k8app"
 
   # GitLab Agent context (for push-based)
-  KUBE_CONTEXT: "gitops-poc-dzha/gitops-config:minikube-agent"
+  KUBE_CONTEXT: "gitops-poc-dzha-dzha/gitops-config:minikube-agent"
 
   # GitOps mode: "pull" or "push"
   GITOPS_MODE: "pull"

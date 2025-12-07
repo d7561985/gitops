@@ -11,7 +11,7 @@ fullnameOverride: "{{SERVICE_NAME}}"
 
 # Container image
 image:
-  repository: "registry.gitlab.com/gitops-poc-dzha/{{SERVICE_NAME}}"
+  repository: "registry.gitlab.com/gitops-poc-dzha-dzha/{{SERVICE_NAME}}"
   tag: "latest"
   pullPolicy: IfNotPresent
 
@@ -55,7 +55,7 @@ readinessProbe:
 # Common labels
 labels:
   app.kubernetes.io/name: "{{SERVICE_NAME}}"
-  app.kubernetes.io/part-of: "gitops-poc-dzha"
+  app.kubernetes.io/part-of: "gitops-poc-dzha-dzha"
   app.kubernetes.io/managed-by: "helm"
 
 # Pod annotations

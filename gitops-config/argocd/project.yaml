@@ -14,11 +14,11 @@ spec:
     - 'https://gitlab.com/gitops-poc-dzha/*'
 
   destinations:
-    - namespace: '*-dev'
+    - namespace: 'poc-dev'
       server: https://kubernetes.default.svc
-    - namespace: '*-staging'
+    - namespace: 'poc-staging'
       server: https://kubernetes.default.svc
-    - namespace: '*-prod'
+    - namespace: 'poc-prod'
       server: https://kubernetes.default.svc
 
   clusterResourceWhitelist:

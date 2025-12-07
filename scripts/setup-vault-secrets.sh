@@ -10,7 +10,7 @@ if [ -f "$ROOT_DIR/.env" ]; then
 fi
 
 # Set defaults from .env or use fallbacks
-VAULT_PATH_PREFIX="${VAULT_PATH_PREFIX:-gitops-poc}"
+VAULT_PATH_PREFIX="${VAULT_PATH_PREFIX:-gitops-poc-dzha}"
 SERVICES="${SERVICES:-api-gateway auth-adapter web-grpc web-http health-demo}"
 ENVIRONMENTS="${ENVIRONMENTS:-dev staging prod}"
 NAMESPACE_PREFIX="${NAMESPACE_PREFIX:-poc}"

@@ -50,5 +50,5 @@ env:
 labels:
   app.kubernetes.io/name: health-demo
   app.kubernetes.io/component: backend
-  app.kubernetes.io/part-of: gitops-poc-dzha
+  app.kubernetes.io/part-of: gitops-poc-dzha-dzha
   app.kubernetes.io/managed-by: helm
