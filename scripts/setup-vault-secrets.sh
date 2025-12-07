@@ -13,6 +13,7 @@ fi
 VAULT_PATH_PREFIX="${VAULT_PATH_PREFIX:-gitops-poc}"
 SERVICES="${SERVICES:-api-gateway auth-adapter web-grpc web-http health-demo}"
 ENVIRONMENTS="${ENVIRONMENTS:-dev staging prod}"
+NAMESPACE_PREFIX="${NAMESPACE_PREFIX:-poc}"
 
 # Cleanup function
 PF_PID=""
@@ -39,8 +40,9 @@ echo "========================================"
 echo ""
 echo "Configuration:"
 echo "  VAULT_PATH_PREFIX: $VAULT_PATH_PREFIX"
-echo "  SERVICES: $SERVICES"
-echo "  ENVIRONMENTS: $ENVIRONMENTS"
+echo "  SERVICES:          $SERVICES"
+echo "  ENVIRONMENTS:      $ENVIRONMENTS"
+echo "  NAMESPACE_PREFIX:  $NAMESPACE_PREFIX"
 echo ""
 
 # Check vault CLI
@@ -103,13 +105,18 @@ echo_info "Creating Kubernetes auth roles..."
 for SERVICE in "${SERVICES_ARR[@]}"; do
     for ENV in "${ENVIRONMENTS_ARR[@]}"; do
         ROLE_NAME="${SERVICE}-${ENV}"
-        NAMESPACE="${SERVICE}-${ENV}"
+        # New namespace scheme: {prefix}-{env} instead of {service}-{env}
+        if [ -n "$NAMESPACE_PREFIX" ]; then
+            NAMESPACE="${NAMESPACE_PREFIX}-${ENV}"
+        else
+            NAMESPACE="${ENV}"
+        fi
         POLICY_NAME="${VAULT_PATH_PREFIX}-${SERVICE}-${ENV}"
 
-        echo_info "Creating role: ${ROLE_NAME}"
+        echo_info "Creating role: ${ROLE_NAME} (namespace: ${NAMESPACE})"
 
         vault write auth/kubernetes/role/${ROLE_NAME} \
-            bound_service_account_names=${SERVICE} \
+            bound_service_account_names=${SERVICE},default \
             bound_service_account_namespaces=${NAMESPACE} \
             policies=${POLICY_NAME} \
             ttl=1h
@@ -143,7 +150,7 @@ for ENV in "${ENVIRONMENTS_ARR[@]}"; do
     vault kv put secret/${VAULT_PATH_PREFIX}/api-gateway/${ENV}/config \
         LOG_LEVEL="${LOG_LEVEL}" \
         API_KEY="${API_KEY}" \
-        AUTH_ADAPTER_HOST="auth-adapter.auth-adapter-${ENV}.svc.cluster.local"
+        AUTH_ADAPTER_HOST="auth-adapter.${NAMESPACE_PREFIX}-${ENV}.svc.cluster.local"
 done
 
 # Auth Adapter secrets

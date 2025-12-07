@@ -23,7 +23,7 @@ env:
   - name: LOG_LEVEL
     value: "info"
   - name: AUTH_ADAPTER_HOST
-    value: "auth-adapter.auth-adapter-staging.svc.cluster.local"
+    value: "auth-adapter.poc-staging.svc.cluster.local"
 
 # Labels
 labels:

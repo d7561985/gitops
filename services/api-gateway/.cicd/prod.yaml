@@ -23,7 +23,7 @@ env:
   - name: LOG_LEVEL
     value: "warn"
   - name: AUTH_ADAPTER_HOST
-    value: "auth-adapter.auth-adapter-prod.svc.cluster.local"
+    value: "auth-adapter.poc-prod.svc.cluster.local"
 
 # Labels
 labels:

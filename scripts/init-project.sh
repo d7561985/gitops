@@ -37,15 +37,21 @@ DOCKER_REGISTRY="${DOCKER_REGISTRY:-registry.gitlab.com/${GITLAB_GROUP}}"
 KUBE_CONTEXT="${KUBE_CONTEXT:-${GITLAB_GROUP}/gitops-config:minikube-agent}"
 VAULT_PATH_PREFIX="${VAULT_PATH_PREFIX:-gitops-poc}"
 SERVICES="${SERVICES:-api-gateway auth-adapter web-grpc web-http health-demo}"
+ENVIRONMENTS="${ENVIRONMENTS:-dev staging prod}"
+NAMESPACE_PREFIX="${NAMESPACE_PREFIX:-poc}"
 
 echo ""
 echo "Configuration:"
-echo "  GITLAB_GROUP:    $GITLAB_GROUP"
-echo "  GITLAB_HOST:     $GITLAB_HOST"
-echo "  DOCKER_REGISTRY: $DOCKER_REGISTRY"
-echo "  KUBE_CONTEXT:    $KUBE_CONTEXT"
-echo "  VAULT_PATH:      $VAULT_PATH_PREFIX"
-echo "  SERVICES:        $SERVICES"
+echo "  GITLAB_GROUP:     $GITLAB_GROUP"
+echo "  GITLAB_HOST:      $GITLAB_HOST"
+echo "  DOCKER_REGISTRY:  $DOCKER_REGISTRY"
+echo "  KUBE_CONTEXT:     $KUBE_CONTEXT"
+echo "  VAULT_PATH:       $VAULT_PATH_PREFIX"
+echo "  SERVICES:         $SERVICES"
+echo "  ENVIRONMENTS:     $ENVIRONMENTS"
+echo "  NAMESPACE_PREFIX: $NAMESPACE_PREFIX"
+echo ""
+echo "Namespaces will be: ${NAMESPACE_PREFIX}-dev, ${NAMESPACE_PREFIX}-staging, ${NAMESPACE_PREFIX}-prod"
 echo ""
 
 # Confirm
@@ -125,7 +131,7 @@ ${SERVICES_YAML}
 
       destination:
         server: https://kubernetes.default.svc
-        namespace: '{{service}}-{{env}}'
+        namespace: '${NAMESPACE_PREFIX}-{{env}}'
 
       syncPolicy:
         syncOptions:
@@ -169,11 +175,11 @@ spec:
     - 'https://${GITLAB_HOST}/${GITLAB_GROUP}/*'
 
   destinations:
-    - namespace: '*-dev'
+    - namespace: '${NAMESPACE_PREFIX}-dev'
       server: https://kubernetes.default.svc
-    - namespace: '*-staging'
+    - namespace: '${NAMESPACE_PREFIX}-staging'
       server: https://kubernetes.default.svc
-    - namespace: '*-prod'
+    - namespace: '${NAMESPACE_PREFIX}-prod'
       server: https://kubernetes.default.svc
 
   clusterResourceWhitelist:

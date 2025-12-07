@@ -20,6 +20,7 @@ vim .env  # Изменить GITLAB_GROUP на свой
 - `GITLAB_GROUP` — группа в GitLab (например: `gitops-poc-dzha`)
 - `GITLAB_HOST` — хост GitLab (`gitlab.com` или self-managed)
 - `SERVICES` — список сервисов
+- `NAMESPACE_PREFIX` — префикс namespace (все сервисы в `{prefix}-{env}`)
 - `VAULT_PATH_PREFIX` — префикс путей в Vault
 
 ---
@@ -118,30 +119,32 @@ Kubernetes требует `imagePullSecrets` для доступа к прива
 #### Настройка секретов
 
 ```bash
-# Добавить credentials
-export GITLAB_DEPLOY_TOKEN_USER='gitlab+deploy-token-xxxxx'
-export GITLAB_DEPLOY_TOKEN='gldt-xxxxxxxxxxxx'
+# Вариант 1: Добавить в .env (рекомендуется)
+echo 'GITLAB_DEPLOY_TOKEN_USER="gitlab+deploy-token-xxxxx"' >> .env
+echo 'GITLAB_DEPLOY_TOKEN="gldt-xxxxxxxxxxxx"' >> .env
+./scripts/setup-registry-secret.sh
 
-# Создать секреты во всех namespace
+# Вариант 2: Интерактивный режим (скрипт запросит credentials)
 ./scripts/setup-registry-secret.sh
 ```
 
-Секрет `regsecret` будет создан в каждом namespace сервиса (`api-gateway-dev`, `api-gateway-staging`, ...).
+Скрипт создаёт:
+1. Namespace для каждого окружения: `poc-dev`, `poc-staging`, `poc-prod`
+2. Секрет `regsecret` в каждом namespace
+3. Патчит `default` ServiceAccount — все pods автоматически получают доступ к registry
 
-> **Note:** k8app чарт использует hardcoded имя секрета `regsecret`. См. [docs/k8app-recommendations.md](docs/k8app-recommendations.md) для предложения по улучшению.
+> **Note:** Благодаря патчу ServiceAccount, `deploySecretHarbor: true` в values **не обязателен** — pods автоматически наследуют imagePullSecrets.
 
-#### Использование в values
+#### Namespace схема
 
-Включить `deploySecretHarbor` в `.cicd/default.yaml` сервисов:
-```yaml
-image:
-  repository: registry.gitlab.com/${GITLAB_GROUP}/api-gateway
-  tag: latest
-  pullPolicy: IfNotPresent
-
-# k8app uses hardcoded secret name "regsecret"
-deploySecretHarbor: true
+Все сервисы деплоятся в один namespace на окружение:
 ```
+poc-dev/          ← api-gateway, auth-adapter, web-grpc, web-http, health-demo
+poc-staging/      ← api-gateway, auth-adapter, web-grpc, web-http, health-demo
+poc-prod/         ← api-gateway, auth-adapter, web-grpc, web-http, health-demo
+```
+
+Настраивается через `NAMESPACE_PREFIX` в `.env`.
 
 ### 3. Создать GitLab группу и репозитории
 
@@ -418,26 +421,26 @@ kubectl logs -n vault-secrets-operator-system -l app.kubernetes.io/name=vault-se
 Проблема с доступом к GitLab Container Registry:
 
 ```bash
-# Проверить наличие секрета в namespace (k8app использует "regsecret")
-kubectl get secret regsecret -n api-gateway-dev
+# Проверить наличие секрета в namespace
+kubectl get secret regsecret -n poc-dev
+
+# Проверить что default SA патчирован
+kubectl get sa default -n poc-dev -o yaml | grep -A5 imagePullSecrets
 
 # Проверить конфигурацию секрета
-kubectl get secret regsecret -n api-gateway-dev -o jsonpath='{.data.\.dockerconfigjson}' | base64 -d | jq
+kubectl get secret regsecret -n poc-dev -o jsonpath='{.data.\.dockerconfigjson}' | base64 -d | jq
 
-# Если секрета нет - создать
+# Если секрета нет или SA не патчирован - перезапустить
 ./scripts/setup-registry-secret.sh
 
-# Проверить что imagePullSecrets указан в deployment
-kubectl get deployment api-gateway -n api-gateway-dev -o yaml | grep -A5 imagePullSecrets
-
 # Проверить события pod
-kubectl describe pod -n api-gateway-dev -l app=api-gateway
+kubectl describe pod -n poc-dev -l app=api-gateway
 ```
 
 **Частые причины:**
 - Deploy Token истёк или отозван → создать новый
 - Неверный scope токена → должен быть `read_registry`
-- `deploySecretHarbor: false` в values → установить `true` в `.cicd/default.yaml`
+- ServiceAccount не патчирован → перезапустить `setup-registry-secret.sh`
 
 ---
 
