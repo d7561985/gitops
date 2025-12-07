@@ -309,9 +309,10 @@ Push-based подход использует GitLab Agent для прямого 
 #### Шаг 1: Создать репозиторий gitops-config в GitLab
 
 ```bash
-# Создать репо в GitLab группе gitops-poc-dzha
-# Затем запушить содержимое папки gitops-config/
+# Создать пустой репо в GitLab: https://gitlab.com/groups/${GITLAB_GROUP}/-/new
+# Name: gitops-config
 
+# Запушить содержимое
 cd gitops-config/
 git init
 git remote add origin git@gitlab.com:${GITLAB_GROUP}/gitops-config.git
@@ -320,46 +321,84 @@ git commit -m "Initial commit: ArgoCD + GitLab Agent config"
 git push -u origin main
 ```
 
-> **Важно!** Конфиг агента `.gitlab/agents/minikube-agent/config.yaml` уже включён в папку `gitops-config/`.
-
-#### Шаг 2: Зарегистрировать агента в GitLab
+#### Шаг 2: Зарегистрировать агента в GitLab и получить токен
 
 1. Перейти в проект `gitops-config` в GitLab:
    ```
    https://gitlab.com/${GITLAB_GROUP}/gitops-config
    ```
 
-2. **Operate** → **Kubernetes clusters** → **Connect a cluster**
+2. **Operate** → **Kubernetes clusters** → **Connect a cluster (agent)**
 
-3. Выбрать агента из списка: `minikube-agent`
-   > GitLab автоматически найдёт агента из `.gitlab/agents/minikube-agent/config.yaml`
+3. Ввести имя агента: `minikube-agent`
 
-4. Нажать **Register** и **скопировать токен** (показывается один раз!)
+4. Нажать **Create and register**
 
-#### Шаг 3: Установить агента в кластер
+5. **ВАЖНО: Скопировать токен!** Он показывается только один раз.
+   ```
+   Формат: glagent-xxxxxx-xxxxxxxxxxxxxxxxx
+   ```
+
+6. GitLab также покажет готовую команду Helm — можно использовать её или наш скрипт.
+
+#### Шаг 3: Установить агента в Kubernetes кластер
 
 ```bash
-# Установить токен
-export GITLAB_AGENT_TOKEN='glagent-xxxxxxxx'
+# Убедиться что кластер запущен
+kubectl cluster-info
 
-# Запустить установку
+# Добавить токен в .env файл (полученный на шаге 2)
+echo 'GITLAB_AGENT_TOKEN="glagent-xxxxxx-xxxxxxxxxxxxxxxxx"' >> .env
+
+# Запустить установку через наш скрипт
 ./scripts/setup-push-based.sh
-
-# Проверить статус
-kubectl get pods -n gitlab-agent
-kubectl logs -n gitlab-agent -l app=gitlab-agent
 ```
 
-#### Шаг 4: Переключить CI/CD на Push-based режим
+Или вручную через Helm:
+```bash
+export GITLAB_AGENT_TOKEN='glagent-xxxxxx-xxxxxxxxxxxxxxxxx'
+helm repo add gitlab https://charts.gitlab.io
+helm repo update
+helm upgrade --install gitlab-agent gitlab/gitlab-agent \
+  --namespace gitlab-agent \
+  --create-namespace \
+  --set config.token=${GITLAB_AGENT_TOKEN} \
+  --set config.kasAddress=wss://kas.gitlab.com
+```
 
-Изменить `GITOPS_MODE` в `.gitlab-ci.yml` сервиса:
+#### Шаг 4: Проверить подключение агента
 
+```bash
+# Проверить что pod запущен
+kubectl get pods -n gitlab-agent
+# Ожидаемый статус: Running
+
+# Проверить логи — должно быть "Feature: agent_configuration started"
+kubectl logs -n gitlab-agent -l app.kubernetes.io/name=gitlab-agent
+
+# В GitLab UI: Operate → Kubernetes clusters
+# Агент должен показывать "Connected"
+```
+
+#### Шаг 5: Настроить CI/CD доступ (ci_access)
+
+Конфиг `.gitlab/agents/minikube-agent/config.yaml` уже есть в репо — он разрешает всем проектам группы использовать агента:
+
+```yaml
+ci_access:
+  groups:
+    - id: gitops-poc-dzha
+```
+
+#### Шаг 6: Переключить CI/CD на Push-based режим
+
+**Вариант A:** Изменить в `.gitlab-ci.yml` каждого сервиса:
 ```yaml
 variables:
   GITOPS_MODE: "push"  # Было: "pull"
 ```
 
-Или добавить переменную на уровне группы:
+**Вариант B:** Добавить переменную на уровне группы:
 ```
 GitLab Group → Settings → CI/CD → Variables
 Key: GITOPS_MODE
@@ -375,27 +414,31 @@ Value: push
 └─────────────┘     └─────────────┘     └─────────────┘     └─────────────┘
 ```
 
-1. Developer пушит код
-2. CI собирает Docker образ
-3. CI выполняет `helm upgrade` через контекст агента
-4. GitLab Agent применяет манифесты в кластер
+CI использует контекст агента: `${GITLAB_GROUP}/gitops-config:minikube-agent`
 
 #### Troubleshooting Agent
 
 ```bash
-# Статус агента
+# Статус pod
 kubectl get pods -n gitlab-agent
 
-# Логи агента
-kubectl logs -n gitlab-agent -l app=gitlab-agent -f
+# Логи (ищи ошибки подключения)
+kubectl logs -n gitlab-agent -l app.kubernetes.io/name=gitlab-agent -f
 
-# Проверить подключение к GitLab
-kubectl describe pod -n gitlab-agent -l app=gitlab-agent | grep -A5 "State:"
+# События namespace
+kubectl get events -n gitlab-agent --sort-by='.lastTimestamp'
 
 # Переустановить агента
 helm uninstall gitlab-agent -n gitlab-agent
+export GITLAB_AGENT_TOKEN='новый-токен'
 ./scripts/setup-push-based.sh
 ```
+
+| Проблема | Решение |
+|----------|---------|
+| Pod в CrashLoopBackOff | Неверный токен — перерегистрируй агента |
+| "connection refused" | Проверь kasAddress (должен быть `wss://kas.gitlab.com`) |
+| CI не видит контекст | Проверь ci_access в config.yaml и что агент Connected |
 
 ---
 
