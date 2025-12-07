@@ -1,0 +1,23 @@
+# GitLab Agent Configuration for Minikube
+# This file must be in the gitops-config repository on GitLab
+# Source: https://docs.gitlab.com/ee/user/clusters/agent/ci_cd_workflow/
+
+# CI/CD access configuration
+ci_access:
+  # Allow all projects in the group to use this agent
+  groups:
+    - id: gitops-poc-dzha
+
+  # Or explicitly list projects:
+  # projects:
+  #   - id: gitops-poc-dzha/gitops-config
+  #   - id: gitops-poc-dzha/api-gateway
+  #   - id: gitops-poc-dzha/auth-adapter
+  #   - id: gitops-poc-dzha/web-grpc
+  #   - id: gitops-poc-dzha/web-http
+  #   - id: gitops-poc-dzha/health-demo
+
+# Observability (optional - enable for debugging)
+# observability:
+#   logging:
+#     level: debug  # debug, info, warn, error

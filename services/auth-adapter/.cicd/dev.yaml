@@ -4,15 +4,12 @@
 
 environment: dev
 branch: main
-
 # Image - CI updates these values
 image:
   repository: registry.gitlab.com/gitops-poc-dzha/auth-adapter
-  tag: latest
+  tag: 675f46ef
   pullPolicy: IfNotPresent
-
 replicas: 1
-
 resources:
   requests:
     cpu: 50m
@@ -20,14 +17,11 @@ resources:
   limits:
     cpu: 100m
     memory: 128Mi
-
 # Environment-specific overrides (k8app configmap format)
 configmap:
   LOG_LEVEL: "debug"
-
 labels:
   app.kubernetes.io/instance: auth-adapter-dev
   environment: dev
-
 annotations:
-  argocd.argoproj.io/sync-wave: "1"  # Deploy before api-gateway
+  argocd.argoproj.io/sync-wave: "1" # Deploy before api-gateway

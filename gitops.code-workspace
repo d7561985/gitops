@@ -5,7 +5,8 @@
     { "path": "services/auth-adapter", "name": "auth-adapter" },
     { "path": "services/health-demo", "name": "health-demo" },
     { "path": "services/web-grpc", "name": "web-grpc" },
-    { "path": "services/web-http", "name": "web-http" }
+    { "path": "services/web-http", "name": "web-http" },
+    { "path": "gitops-config", "name": "gitops-config" }
   ],
   "settings": {
     "git.autoRepositoryDetection": true,

@@ -304,19 +304,97 @@ kubectl port-forward svc/argocd-server -n argocd 8080:443
 
 ### 6. Push-based (GitLab Agent)
 
-```bash
-# 1. Получить токен агента из GitLab:
-#    Project (gitops-config) → Infrastructure → Kubernetes clusters → Connect a cluster
-#    Имя агента: minikube-agent
+Push-based подход использует GitLab Agent для прямого деплоя из CI/CD pipeline в кластер.
 
-# 2. Установить агента
-export GITLAB_AGENT_TOKEN='glagent-xxx...'
+#### Шаг 1: Создать репозиторий gitops-config в GitLab
+
+```bash
+# Создать репо в GitLab группе gitops-poc-dzha
+# Затем запушить содержимое папки gitops-config/
+
+cd gitops-config/
+git init
+git remote add origin git@gitlab.com:${GITLAB_GROUP}/gitops-config.git
+git add .
+git commit -m "Initial commit: ArgoCD + GitLab Agent config"
+git push -u origin main
+```
+
+> **Важно!** Конфиг агента `.gitlab/agents/minikube-agent/config.yaml` уже включён в папку `gitops-config/`.
+
+#### Шаг 2: Зарегистрировать агента в GitLab
+
+1. Перейти в проект `gitops-config` в GitLab:
+   ```
+   https://gitlab.com/${GITLAB_GROUP}/gitops-config
+   ```
+
+2. **Operate** → **Kubernetes clusters** → **Connect a cluster**
+
+3. Выбрать агента из списка: `minikube-agent`
+   > GitLab автоматически найдёт агента из `.gitlab/agents/minikube-agent/config.yaml`
+
+4. Нажать **Register** и **скопировать токен** (показывается один раз!)
+
+#### Шаг 3: Установить агента в кластер
+
+```bash
+# Установить токен
+export GITLAB_AGENT_TOKEN='glagent-xxxxxxxx'
+
+# Запустить установку
 ./scripts/setup-push-based.sh
 
-# 3. Добавить конфиг агента в репо gitops-config:
-mkdir -p .gitlab/agents/minikube-agent
-cp infrastructure/gitlab-agent/config.yaml .gitlab/agents/minikube-agent/
-git add . && git commit -m "Add agent config" && git push
+# Проверить статус
+kubectl get pods -n gitlab-agent
+kubectl logs -n gitlab-agent -l app=gitlab-agent
+```
+
+#### Шаг 4: Переключить CI/CD на Push-based режим
+
+Изменить `GITOPS_MODE` в `.gitlab-ci.yml` сервиса:
+
+```yaml
+variables:
+  GITOPS_MODE: "push"  # Было: "pull"
+```
+
+Или добавить переменную на уровне группы:
+```
+GitLab Group → Settings → CI/CD → Variables
+Key: GITOPS_MODE
+Value: push
+```
+
+#### Как это работает (Push-based)
+
+```
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│  Developer  │────▶│  GitLab CI  │────▶│GitLab Agent │────▶│  Kubernetes │
+│   commit    │     │ build+helm  │     │  (в кластере)│     │   deploy    │
+└─────────────┘     └─────────────┘     └─────────────┘     └─────────────┘
+```
+
+1. Developer пушит код
+2. CI собирает Docker образ
+3. CI выполняет `helm upgrade` через контекст агента
+4. GitLab Agent применяет манифесты в кластер
+
+#### Troubleshooting Agent
+
+```bash
+# Статус агента
+kubectl get pods -n gitlab-agent
+
+# Логи агента
+kubectl logs -n gitlab-agent -l app=gitlab-agent -f
+
+# Проверить подключение к GitLab
+kubectl describe pod -n gitlab-agent -l app=gitlab-agent | grep -A5 "State:"
+
+# Переустановить агента
+helm uninstall gitlab-agent -n gitlab-agent
+./scripts/setup-push-based.sh
 ```
 
 ---
@@ -324,11 +402,19 @@ git add . && git commit -m "Add agent config" && git push
 ## Структура проекта
 
 ```
-gitops-config/                     # Этот репозиторий
+gitops-poc/                        # Этот репозиторий (GitHub)
 ├── README.md
 ├── .env.example                   # Шаблон конфигурации
 ├── .env                           # Конфигурация проекта (не в git)
 ├── .gitignore
+├── gitops-config/                 # → Отдельный репо в GitLab
+│   ├── .gitlab/
+│   │   └── agents/
+│   │       └── minikube-agent/
+│   │           └── config.yaml    # Конфиг GitLab Agent (Push-based)
+│   └── argocd/
+│       ├── applicationset.yaml    # ArgoCD ApplicationSet
+│       └── project.yaml           # ArgoCD Project
 ├── infrastructure/
 │   ├── vault/                     # Vault + VSO
 │   │   ├── helm-values.yaml

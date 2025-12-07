@@ -4,16 +4,13 @@
 
 environment: dev
 branch: main
-
 # Image - CI updates these values
 image:
   repository: registry.gitlab.com/gitops-poc-dzha/api-gateway
-  tag: latest
+  tag: b4a4b893
   pullPolicy: IfNotPresent
-
 # Replicas
 replicas: 1
-
 # Resources (minimal for dev)
 resources:
   requests:
@@ -22,16 +19,13 @@ resources:
   limits:
     cpu: 200m
     memory: 256Mi
-
 # Environment-specific overrides (k8app configmap format)
 configmap:
   LOG_LEVEL: "debug"
-
 # Labels
 labels:
   app.kubernetes.io/instance: api-gateway-dev
   environment: dev
-
 # Annotations for ArgoCD
 annotations:
-  argocd.argoproj.io/sync-wave: "2"  # Deploy after auth-adapter
+  argocd.argoproj.io/sync-wave: "2" # Deploy after auth-adapter
