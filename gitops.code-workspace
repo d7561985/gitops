@@ -1,0 +1,14 @@
+{
+  "folders": [
+    { "path": ".", "name": "root" },
+    { "path": "services/api-gateway", "name": "api-gateway" },
+    { "path": "services/auth-adapter", "name": "auth-adapter" },
+    { "path": "services/health-demo", "name": "health-demo" },
+    { "path": "services/web-grpc", "name": "web-grpc" },
+    { "path": "services/web-http", "name": "web-http" }
+  ],
+  "settings": {
+    "git.autoRepositoryDetection": true,
+    "git.repositoryScanMaxDepth": 3
+  }
+}
