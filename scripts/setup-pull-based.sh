@@ -4,6 +4,16 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
+# Load .env if exists
+if [ -f "$ROOT_DIR/.env" ]; then
+    source "$ROOT_DIR/.env"
+fi
+
+# Set defaults
+GITLAB_GROUP="${GITLAB_GROUP:-gitops-poc}"
+GITLAB_HOST="${GITLAB_HOST:-gitlab.com}"
+SERVICES="${SERVICES:-api-gateway auth-adapter web-grpc web-http health-demo}"
+
 # Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -48,17 +58,15 @@ echo ""
 echo "IMPORTANT: Before apps can sync, you need to:"
 echo ""
 echo "1. Create GitLab repositories for each service:"
-echo "   - gitlab.com/gitops-poc/api-gateway"
-echo "   - gitlab.com/gitops-poc/auth-adapter"
-echo "   - gitlab.com/gitops-poc/web-grpc"
-echo "   - gitlab.com/gitops-poc/web-http"
-echo "   - gitlab.com/gitops-poc/health-demo"
+for SERVICE in $SERVICES; do
+    echo "   - ${GITLAB_HOST}/${GITLAB_GROUP}/${SERVICE}"
+done
 echo ""
 echo "2. Copy service files from this repo:"
 echo "   cp -r services/api-gateway/* /path/to/api-gateway/"
 echo ""
 echo "3. Add GitLab repos to ArgoCD (if private):"
-echo "   argocd repo add https://gitlab.com/gitops-poc/api-gateway.git \\"
+echo "   argocd repocreds add https://${GITLAB_HOST}/${GITLAB_GROUP} \\"
 echo "     --username git --password <token>"
 echo ""
 echo "Access ArgoCD UI:"

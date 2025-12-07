@@ -4,6 +4,15 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
+# Load .env if exists
+if [ -f "$ROOT_DIR/.env" ]; then
+    source "$ROOT_DIR/.env"
+fi
+
+# Set defaults
+GITLAB_GROUP="${GITLAB_GROUP:-gitops-poc}"
+GITLAB_HOST="${GITLAB_HOST:-gitlab.com}"
+
 # Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -48,7 +57,7 @@ echo "========================================"
 echo ""
 echo "Required files in your GitLab repo:"
 echo ""
-echo "  .gitlab/agents/gitops-poc/config.yaml:"
+echo "  .gitlab/agents/minikube-agent/config.yaml:"
 echo "  ────────────────────────────────────────"
 cat "$ROOT_DIR/infrastructure/gitlab-agent/config.yaml"
 echo ""
@@ -56,8 +65,11 @@ echo "  ────────────────────────
 echo ""
 echo "  .gitlab-ci.yml example:"
 echo "  ────────────────────────────────────────"
-echo "  See: $ROOT_DIR/gitops/push-based/.gitlab-ci.yml"
+echo "  See: services/api-gateway/.gitlab-ci.yml (set GITOPS_MODE: push)"
 echo ""
 echo "Test the connection:"
 echo "  kubectl get pods -n gitlab-agent"
+echo ""
+echo "Use in CI:"
+echo "  kubectl config use-context ${GITLAB_GROUP}/gitops-config:minikube-agent"
 echo ""

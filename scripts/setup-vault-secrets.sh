@@ -4,6 +4,16 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
+# Load .env if exists
+if [ -f "$ROOT_DIR/.env" ]; then
+    source "$ROOT_DIR/.env"
+fi
+
+# Set defaults from .env or use fallbacks
+VAULT_PATH_PREFIX="${VAULT_PATH_PREFIX:-gitops-poc}"
+SERVICES="${SERVICES:-api-gateway auth-adapter web-grpc web-http health-demo}"
+ENVIRONMENTS="${ENVIRONMENTS:-dev staging prod}"
+
 # Cleanup function
 PF_PID=""
 cleanup() {
@@ -26,6 +36,12 @@ echo_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 echo "========================================"
 echo "  Vault Secrets Configuration"
 echo "========================================"
+echo ""
+echo "Configuration:"
+echo "  VAULT_PATH_PREFIX: $VAULT_PATH_PREFIX"
+echo "  SERVICES: $SERVICES"
+echo "  ENVIRONMENTS: $ENVIRONMENTS"
+echo ""
 
 # Check vault CLI
 if ! command -v vault &> /dev/null; then
@@ -47,9 +63,9 @@ export VAULT_TOKEN='root'
 echo_info "Verifying Vault connection..."
 vault status
 
-# Services and environments
-SERVICES=("api-gateway" "auth-adapter" "web-grpc" "web-http" "health-demo")
-ENVIRONMENTS=("dev" "staging" "prod")
+# Convert space-separated strings to arrays
+read -ra SERVICES_ARR <<< "$SERVICES"
+read -ra ENVIRONMENTS_ARR <<< "$ENVIRONMENTS"
 
 # ============================================
 # Create Policies
@@ -57,21 +73,21 @@ ENVIRONMENTS=("dev" "staging" "prod")
 
 echo_info "Creating Vault policies..."
 
-for SERVICE in "${SERVICES[@]}"; do
-    for ENV in "${ENVIRONMENTS[@]}"; do
-        POLICY_NAME="gitops-poc-dzha-${SERVICE}-${ENV}"
+for SERVICE in "${SERVICES_ARR[@]}"; do
+    for ENV in "${ENVIRONMENTS_ARR[@]}"; do
+        POLICY_NAME="${VAULT_PATH_PREFIX}-${SERVICE}-${ENV}"
 
         echo_info "Creating policy: ${POLICY_NAME}"
 
         vault policy write ${POLICY_NAME} - <<EOF
 # Policy for ${SERVICE} in ${ENV} environment
-# Path: secret/data/gitops-poc-dzha/${SERVICE}/${ENV}/*
+# Path: secret/data/${VAULT_PATH_PREFIX}/${SERVICE}/${ENV}/*
 
-path "secret/data/gitops-poc-dzha/${SERVICE}/${ENV}/*" {
+path "secret/data/${VAULT_PATH_PREFIX}/${SERVICE}/${ENV}/*" {
   capabilities = ["read"]
 }
 
-path "secret/metadata/gitops-poc-dzha/${SERVICE}/${ENV}/*" {
+path "secret/metadata/${VAULT_PATH_PREFIX}/${SERVICE}/${ENV}/*" {
   capabilities = ["read", "list"]
 }
 EOF
@@ -84,11 +100,11 @@ done
 
 echo_info "Creating Kubernetes auth roles..."
 
-for SERVICE in "${SERVICES[@]}"; do
-    for ENV in "${ENVIRONMENTS[@]}"; do
+for SERVICE in "${SERVICES_ARR[@]}"; do
+    for ENV in "${ENVIRONMENTS_ARR[@]}"; do
         ROLE_NAME="${SERVICE}-${ENV}"
         NAMESPACE="${SERVICE}-${ENV}"
-        POLICY_NAME="gitops-poc-dzha-${SERVICE}-${ENV}"
+        POLICY_NAME="${VAULT_PATH_PREFIX}-${SERVICE}-${ENV}"
 
         echo_info "Creating role: ${ROLE_NAME}"
 
@@ -107,7 +123,7 @@ done
 echo_info "Creating sample secrets..."
 
 # API Gateway secrets
-for ENV in "${ENVIRONMENTS[@]}"; do
+for ENV in "${ENVIRONMENTS_ARR[@]}"; do
     case $ENV in
         dev)
             LOG_LEVEL="debug"
@@ -124,14 +140,14 @@ for ENV in "${ENVIRONMENTS[@]}"; do
     esac
 
     echo_info "Creating secret: api-gateway/${ENV}"
-    vault kv put secret/gitops-poc-dzha/api-gateway/${ENV}/config \
+    vault kv put secret/${VAULT_PATH_PREFIX}/api-gateway/${ENV}/config \
         LOG_LEVEL="${LOG_LEVEL}" \
         API_KEY="${API_KEY}" \
         AUTH_ADAPTER_HOST="auth-adapter.auth-adapter-${ENV}.svc.cluster.local"
 done
 
 # Auth Adapter secrets
-for ENV in "${ENVIRONMENTS[@]}"; do
+for ENV in "${ENVIRONMENTS_ARR[@]}"; do
     case $ENV in
         dev)
             VALID_TOKENS="dev-token-1,dev-token-2"
@@ -148,16 +164,16 @@ for ENV in "${ENVIRONMENTS[@]}"; do
     esac
 
     echo_info "Creating secret: auth-adapter/${ENV}"
-    vault kv put secret/gitops-poc-dzha/auth-adapter/${ENV}/config \
+    vault kv put secret/${VAULT_PATH_PREFIX}/auth-adapter/${ENV}/config \
         VALID_TOKENS="${VALID_TOKENS}" \
         JWT_SECRET="${JWT_SECRET}"
 done
 
 # Web services (minimal secrets for demo)
 for SERVICE in "web-grpc" "web-http" "health-demo"; do
-    for ENV in "${ENVIRONMENTS[@]}"; do
+    for ENV in "${ENVIRONMENTS_ARR[@]}"; do
         echo_info "Creating secret: ${SERVICE}/${ENV}"
-        vault kv put secret/gitops-poc-dzha/${SERVICE}/${ENV}/config \
+        vault kv put secret/${VAULT_PATH_PREFIX}/${SERVICE}/${ENV}/config \
             SERVICE_NAME="${SERVICE}" \
             ENVIRONMENT="${ENV}"
     done
@@ -170,12 +186,12 @@ done
 echo_info "Verifying secrets..."
 echo ""
 echo "Created secrets:"
-vault kv list secret/gitops-poc-dzha/
+vault kv list secret/${VAULT_PATH_PREFIX}/
 
 echo ""
-for SERVICE in "${SERVICES[@]}"; do
+for SERVICE in "${SERVICES_ARR[@]}"; do
     echo "  ${SERVICE}:"
-    vault kv list secret/gitops-poc-dzha/${SERVICE}/ 2>/dev/null || echo "    (no secrets)"
+    vault kv list secret/${VAULT_PATH_PREFIX}/${SERVICE}/ 2>/dev/null || echo "    (no secrets)"
 done
 
 # Cleanup handled by trap
@@ -186,8 +202,8 @@ echo_info "Vault secrets configuration complete!"
 echo "========================================"
 echo ""
 echo "Secret path structure:"
-echo "  secret/data/gitops-poc-dzha/{service}/{env}/config"
+echo "  secret/data/${VAULT_PATH_PREFIX}/{service}/{env}/config"
 echo ""
 echo "Example:"
-echo "  secret/data/gitops-poc-dzha/api-gateway/dev/config"
+echo "  secret/data/${VAULT_PATH_PREFIX}/api-gateway/dev/config"
 echo ""
