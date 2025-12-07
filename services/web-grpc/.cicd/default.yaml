@@ -1,62 +1,54 @@
 # Web gRPC Backend - Default Values
 # Uses nicholasjackson/fake-service for testing
+# Based on k8app/app chart: https://github.com/d7561985/k8app
 
 appName: web-grpc
 version: "v0.19.1"
 
 serviceAccountName: web-grpc
 
-# Image configuration (public image)
-# For custom image: repository: registry.gitlab.com/${GITLAB_GROUP}/web-grpc
+# Image configuration (public image - no registry secret needed)
 image:
   repository: nicholasjackson/fake-service
   tag: v0.19.1
   pullPolicy: IfNotPresent
 
-# Enable imagePullSecrets for GitLab Container Registry
-# k8app chart uses hardcoded secret name "regsecret"
-# Run: ./scripts/setup-registry-secret.sh to create the secret
-deploySecretHarbor: false  # Set to true when using private registry
-
-containerPort: 9091
-
+# Service configuration (k8app format)
 service:
   enabled: true
   type: ClusterIP
   ports:
-    - name: grpc
-      port: 9091
-      targetPort: 9091
+    grpc:
+      externalPort: 9091
+      internalPort: 9091
+      protocol: TCP
 
+# Health checks (k8app format)
 livenessProbe:
   enabled: true
+  mode: httpGet
   httpGet:
-    path: /health
     port: 9091
+    path: "/health"
   initialDelaySeconds: 5
   periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
 
 readinessProbe:
   enabled: true
+  mode: httpGet
   httpGet:
-    path: /ready
     port: 9091
+    path: "/ready"
   initialDelaySeconds: 3
   periodSeconds: 5
+  timeoutSeconds: 5
+  failureThreshold: 3
 
-# fake-service configuration
-env:
-  - name: LISTEN_ADDR
-    value: "0.0.0.0:9091"
-  - name: SERVER_TYPE
-    value: "grpc"
-  - name: NAME
-    value: "web-grpc"
-  - name: MESSAGE
-    value: "Hello from gRPC backend"
-
-labels:
-  app.kubernetes.io/name: web-grpc
-  app.kubernetes.io/component: backend
-  app.kubernetes.io/part-of: gitops-poc-dzha-dzha
-  app.kubernetes.io/managed-by: helm
+# fake-service configuration via configmap
+configmap:
+  LISTEN_ADDR: "0.0.0.0:9091"
+  SERVER_TYPE: "grpc"
+  NAME: "web-grpc"
+  MESSAGE: "Hello from gRPC backend"

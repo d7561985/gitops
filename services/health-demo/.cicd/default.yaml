@@ -1,5 +1,7 @@
 # Health Demo Service - Default Values
-# gRPC health check and streaming demo
+# gRPC health check and streaming demo service
+# Implements grpc.health.v1.Health with Check and Watch methods
+# Based on k8app/app chart: https://github.com/d7561985/k8app
 
 appName: health-demo
 version: "1.0.0"
@@ -14,41 +16,37 @@ image:
   tag: local
   pullPolicy: Never  # Change to IfNotPresent for GitLab Registry
 
-# Enable imagePullSecrets for GitLab Container Registry
-# k8app chart uses hardcoded secret name "regsecret"
-# Run: ./scripts/setup-registry-secret.sh to create the secret
-deploySecretHarbor: false  # Set to true when using GitLab Registry
-
-containerPort: 8081
-
+# Service configuration (k8app format)
 service:
   enabled: true
   type: ClusterIP
   ports:
-    - name: grpc
-      port: 8081
-      targetPort: 8081
+    grpc:
+      externalPort: 8081
+      internalPort: 8081
+      protocol: TCP
 
+# Health checks - gRPC tcpSocket fallback (k8app format)
 livenessProbe:
   enabled: true
-  grpc:
+  mode: tcpSocket
+  tcpSocket:
     port: 8081
-  initialDelaySeconds: 10
+  initialDelaySeconds: 5
   periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
 
 readinessProbe:
   enabled: true
-  grpc:
+  mode: tcpSocket
+  tcpSocket:
     port: 8081
-  initialDelaySeconds: 5
+  initialDelaySeconds: 3
   periodSeconds: 5
+  timeoutSeconds: 5
+  failureThreshold: 3
 
-env:
-  - name: PORT
-    value: "8081"
-
-labels:
-  app.kubernetes.io/name: health-demo
-  app.kubernetes.io/component: backend
-  app.kubernetes.io/part-of: gitops-poc-dzha-dzha
-  app.kubernetes.io/managed-by: helm
+# Command line args passed to the binary
+args:
+  - "-port=8081"

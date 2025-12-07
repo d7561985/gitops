@@ -1,5 +1,6 @@
 # API Gateway - Default Values (inherited by all environments)
 # Based on k8app/app chart: https://github.com/d7561985/k8app
+# Envoy Proxy with Go config generator
 
 appName: api-gateway
 version: "1.0.0"
@@ -15,66 +16,89 @@ image:
   tag: local
   pullPolicy: Never  # Change to IfNotPresent for GitLab Registry
 
-# Enable imagePullSecrets for GitLab Container Registry
-# k8app chart uses hardcoded secret name "regsecret"
-# Run: ./scripts/setup-registry-secret.sh to create the secret
-deploySecretHarbor: false  # Set to true when using GitLab Registry
-
-# Container ports
-containerPort: 8080
-
-# Additional ports (admin interface)
-additionalPorts:
-  - name: admin
-    containerPort: 8000
-    protocol: TCP
-
-# Service configuration
+# Service configuration (k8app format)
 service:
   enabled: true
   type: ClusterIP
   ports:
-    - name: http
-      port: 8080
-      targetPort: 8080
-    - name: admin
-      port: 8000
-      targetPort: 8000
+    http:
+      externalPort: 8080
+      internalPort: 8080
+      protocol: TCP
+    admin:
+      externalPort: 8000
+      internalPort: 8000
+      protocol: TCP
 
-# Health checks
+# Health checks - Envoy admin endpoint (k8app format)
 livenessProbe:
   enabled: true
+  mode: httpGet
   httpGet:
-    path: /ready
     port: 8000
-  initialDelaySeconds: 10
+    path: "/ready"
+  initialDelaySeconds: 15
   periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
 
 readinessProbe:
   enabled: true
+  mode: httpGet
   httpGet:
-    path: /ready
     port: 8000
-  initialDelaySeconds: 5
+    path: "/ready"
+  initialDelaySeconds: 10
   periodSeconds: 5
+  timeoutSeconds: 5
+  failureThreshold: 3
 
-# Environment variables (common)
-env:
-  - name: OPEN_TELEMETRY_ENABLE
-    value: "false"
-  - name: AUTH_ADAPTER_HOST
-    value: "auth-adapter"  # Same namespace, short DNS name works
-
-# ConfigMap for gateway config
+# Environment variables via configmap (injected via envFrom)
 configmap:
-  enabled: true
+  LOG_LEVEL: "info"
+  AUTH_ADAPTER_HOST: "auth-adapter"
+  OPEN_TELEMETRY_HOST: "127.0.0.1"
+  OPEN_TELEMETRY_PORT: "4317"
+
+# ConfigFiles for gateway config (mounted to specified path)
+configfiles:
+  mountPath: "/opt/auth-adapter"
   data:
     config.yaml: |
-      # Gateway configuration will be mounted here
+      api_route: /api/
 
-# Labels (required by policy)
-labels:
-  app.kubernetes.io/name: api-gateway
-  app.kubernetes.io/component: gateway
-  app.kubernetes.io/part-of: gitops-poc-dzha-dzha
-  app.kubernetes.io/managed-by: helm
+      clusters:
+        - name: web
+          addr: "web-grpc:9091"
+          type: "grpc"
+        - name: web-http
+          addr: "web-http:9092"
+          type: "http"
+          health_check:
+            path: "/health"
+            interval_seconds: 10
+        - name: health-demo
+          addr: "health-demo:8081"
+          type: "grpc"
+
+      apis:
+        - name: FakeService
+          cluster: web
+          auth: {policy: no-need}
+          methods:
+            - name: Handle
+              auth: {policy: no-need}
+        - name: HttpService
+          cluster: web-http
+          auth: {policy: no-need}
+          methods:
+            - name: health
+              auth: {policy: no-need}
+            - name: echo
+              auth: {policy: no-need}
+        - name: grpc.health.v1.Health
+          cluster: health-demo
+          auth: {policy: no-need}
+          methods:
+            - name: Check
+              auth: {policy: no-need}

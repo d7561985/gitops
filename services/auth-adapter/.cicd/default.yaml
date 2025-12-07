@@ -1,5 +1,6 @@
 # Auth Adapter - Default Values (inherited by all environments)
 # Based on k8app/app chart: https://github.com/d7561985/k8app
+# gRPC ext_authz service for Envoy
 
 appName: auth-adapter
 version: "1.0.0"
@@ -15,58 +16,65 @@ image:
   tag: local
   pullPolicy: Never  # Change to IfNotPresent for GitLab Registry
 
-# Enable imagePullSecrets for GitLab Container Registry
-# k8app chart uses hardcoded secret name "regsecret"
-# Run: ./scripts/setup-registry-secret.sh to create the secret
-deploySecretHarbor: false  # Set to true when using GitLab Registry
-
-# Container port
-containerPort: 9000
-
-# Service configuration
+# Service configuration (k8app format)
 service:
   enabled: true
   type: ClusterIP
   ports:
-    - name: grpc
-      port: 9000
-      targetPort: 9000
+    grpc:
+      externalPort: 9000
+      internalPort: 9000
+      protocol: TCP
 
-# Health checks
+# Health checks - gRPC health check (k8app format)
+# Note: k8app may not support grpc probes natively, using tcpSocket as fallback
 livenessProbe:
   enabled: true
-  grpc:
+  mode: tcpSocket
+  tcpSocket:
     port: 9000
   initialDelaySeconds: 10
   periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
 
 readinessProbe:
   enabled: true
-  grpc:
+  mode: tcpSocket
+  tcpSocket:
     port: 9000
   initialDelaySeconds: 5
   periodSeconds: 5
+  timeoutSeconds: 5
+  failureThreshold: 3
 
-# Environment variables (common)
-env:
-  - name: OTEL_ENABLE
-    value: "false"
-  - name: NAMESPACE
-    value: "demo"
-
-# ConfigMap for auth config
+# Environment variables via configmap
 configmap:
-  enabled: true
+  OTEL_SERVICE_NAME: "auth-adapter"
+  OTEL_EXPORTER_OTLP_ENDPOINT: ""
+  AUTH_SERVICE_ADDR: ""
+  RECAPTCHA_URL: ""
+
+# ConfigFiles for auth config (mounted to /opt/auth-adapter)
+configfiles:
+  mountPath: "/opt/auth-adapter"
   data:
     config.yaml: |
-      # Auth adapter configuration
-      valid_tokens:
-        - "valid-token-1"
-        - "valid-token-2"
-
-# Labels (required by policy)
-labels:
-  app.kubernetes.io/name: auth-adapter
-  app.kubernetes.io/component: auth
-  app.kubernetes.io/part-of: gitops-poc-dzha-dzha
-  app.kubernetes.io/managed-by: helm
+      apis:
+        - name: FakeService
+          auth: {policy: no-need}
+          methods:
+            - name: Handle
+              auth: {policy: no-need}
+        - name: HttpService
+          auth: {policy: no-need}
+          methods:
+            - name: health
+              auth: {policy: no-need}
+            - name: echo
+              auth: {policy: no-need}
+        - name: grpc.health.v1.Health
+          auth: {policy: no-need}
+          methods:
+            - name: Check
+              auth: {policy: no-need}
