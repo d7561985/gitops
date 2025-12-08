@@ -7,7 +7,7 @@ branch: main
 # Image - CI updates these values
 image:
   repository: registry.gitlab.com/gitops-poc-dzha/auth-adapter
-  tag: 3b2caa81
+  tag: c0d852df
   pullPolicy: IfNotPresent
 replicas: 1
 resources:
