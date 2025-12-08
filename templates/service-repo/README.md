@@ -12,7 +12,6 @@ Service repository template for GitOps POC.
 │   ├── staging.yaml    # Staging environment overrides
 │   └── prod.yaml       # Production environment overrides
 ├── .gitlab-ci.yml      # CI/CD pipeline
-├── vault-secret.yaml   # Vault secrets configuration
 ├── Dockerfile          # Your service Dockerfile
 └── src/                # Your service source code
 ```
@@ -53,20 +52,36 @@ Flow:
 2. CI builds and pushes Docker image
 3. CI deploys directly to cluster via GitLab Agent
 
-## Vault Secrets
+## Vault Secrets (k8app v3.4.0+)
 
-Apply `vault-secret.yaml` after:
-1. Vault is configured with KV v2 secrets engine
-2. Kubernetes auth is enabled
-3. Policy and role are created for this service
-4. Service namespace exists
+Secrets are now managed declaratively in `.cicd/default.yaml`:
+
+```yaml
+# Define which env vars get which Vault paths
+secrets:
+  API_KEY: "/gitops-poc-dzha/{{SERVICE_NAME}}/dev/config"
+  DB_PASSWORD: "/gitops-poc-dzha/{{SERVICE_NAME}}/dev/database"
+
+# Provider configuration
+secretsProvider:
+  provider: "vault"
+  vault:
+    authRef: "vault-auth"  # VaultAuth in namespace
+    mount: "secret"
+    type: "kv-v2"
+    refreshAfter: "1h"
+```
+
+Prerequisites:
+1. Vault with KV v2 secrets engine at `secret/`
+2. Kubernetes auth enabled in Vault
+3. VaultAuth resource `vault-auth` in target namespace
+4. Secrets created in Vault:
 
 ```bash
-# Create secrets in Vault
-vault kv put secret/gitops-poc/{{SERVICE_NAME}}/dev/config \
+vault kv put secret/gitops-poc-dzha/{{SERVICE_NAME}}/dev/config \
   API_KEY="dev-secret" \
   DB_PASSWORD="dev-password"
-
-# Apply VaultStaticSecret
-kubectl apply -f vault-secret.yaml
 ```
+
+k8app chart automatically creates VaultStaticSecret and injects env vars into pods.

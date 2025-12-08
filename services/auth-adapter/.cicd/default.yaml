@@ -1,5 +1,5 @@
 # Auth Adapter - Default Values (inherited by all environments)
-# Based on k8app/app chart: https://github.com/d7561985/k8app
+# Based on k8app/app chart v3.4.0: https://github.com/d7561985/k8app
 # gRPC ext_authz service for Envoy
 
 appName: auth-adapter
@@ -15,6 +15,10 @@ image:
   repository: auth-adapter
   tag: local
   pullPolicy: Never  # Change to IfNotPresent for GitLab Registry
+
+# Image Pull Secrets - universal format (k8app v3.4.0+)
+imagePullSecrets:
+  - name: regsecret
 
 # Service configuration (k8app format)
 service:
@@ -78,3 +82,17 @@ configfiles:
           methods:
             - name: Check
               auth: {policy: no-need}
+
+# =============================================================================
+# Secrets Configuration (k8app v3.4.0+)
+# =============================================================================
+secrets:
+  JWT_SECRET: "/gitops-poc-dzha/auth-adapter/dev/config"
+
+secretsProvider:
+  provider: "vault"
+  vault:
+    authRef: "vault-auth"
+    mount: "secret"
+    type: "kv-v2"
+    refreshAfter: "1h"

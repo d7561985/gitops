@@ -1,0 +1,29 @@
+# Infrastructure Application - manages namespace-level resources
+# Applied before services via sync-wave: "-1"
+# Creates VaultAuth and other prerequisites for k8app deployments
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: infrastructure-dev
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+spec:
+  project: gitops-poc-dzha
+
+  source:
+    repoURL: https://gitlab.com/gitops-poc-dzha/gitops-config.git
+    targetRevision: main
+    path: infrastructure/poc-dev
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: poc-dev
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

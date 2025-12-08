@@ -14,6 +14,13 @@ vim .env  # Изменить GITLAB_GROUP на свой
 
 # 3. Запустить инфраструктуру
 ./scripts/setup-infrastructure.sh
+
+# 4. Полезные команды (Makefile)
+make help              # Показать все команды
+make proxy-all         # Запустить все прокси (Vault, ArgoCD, API Gateway)
+make proxy-argocd      # Только ArgoCD UI
+make proxy-vault       # Только Vault UI
+make stop-proxy        # Остановить все прокси
 ```
 
 **Конфигурируемые параметры (.env):**
@@ -46,13 +53,14 @@ service-repo/
 ├── src/                   # Код сервиса (Go)
 ├── Dockerfile             # Multi-stage сборка образа
 ├── .cicd/
-│   ├── default.yaml       # Базовые Helm values (k8app/app format)
+│   ├── default.yaml       # Базовые Helm values (k8app/app v3.4.0 format)
 │   ├── dev.yaml           # Dev overrides + GitLab Registry image
 │   ├── staging.yaml       # Staging overrides
 │   └── prod.yaml          # Prod overrides
-├── vault-secret.yaml      # Vault secrets config (VaultStaticSecret)
 └── .gitlab-ci.yml         # CI/CD pipeline
 ```
+
+> **Note:** С k8app v3.4.0 отдельный `vault-secret.yaml` не нужен — chart автоматически создаёт `VaultStaticSecret` на основе секции `secrets:` в values.
 
 ### Сервисы
 
@@ -79,18 +87,34 @@ service-repo/
 | `default.yaml` | Общие настройки для всех окружений | `appName`, `service.ports`, `configmap`, `configfiles` |
 | `{env}.yaml` | Env-specific переопределения + image | `image.repository/tag`, `replicas`, `resources`, `configmap` overrides |
 
-**Формат k8app/app chart:**
+**Формат k8app/app chart v3.4.0:**
 ```yaml
 # default.yaml
 configmap:              # Env vars через ConfigMap
   LOG_LEVEL: "info"
-  AUTH_HOST: "auth-adapter"
+  AUTH_HOST: "auth-adapter-sv"
 
 configfiles:            # Конфиг файлы через ConfigMap
   mountPath: "/config"
   data:
     config.yaml: |
       key: value
+
+# Секреты из Vault (k8app v3.4.0 автоматически создаёт VaultStaticSecret)
+secrets:
+  API_KEY: "/gitops-poc-dzha/my-service/dev/config"  # Абсолютный путь
+  DB_PASSWORD: "database"                             # Относительный: {ns}/{app}/{env}/database
+
+secretsProvider:
+  provider: "vault"      # vault | aws | none
+  vault:
+    authRef: "vault-auth"
+    mount: "secret"
+    type: "kv-v2"
+    refreshAfter: "1h"
+
+imagePullSecrets:       # Универсальный формат (v3.4.0+)
+  - name: regsecret
 
 # dev.yaml
 image:
@@ -233,7 +257,7 @@ echo 'GITLAB_DEPLOY_TOKEN="gldt-xxxxxxxxxxxx"' >> .env
 2. Секрет `regsecret` в каждом namespace
 3. Патчит `default` ServiceAccount — все pods автоматически получают доступ к registry
 
-> **Note:** Благодаря патчу ServiceAccount, `deploySecretHarbor: true` в values **не обязателен** — pods автоматически наследуют imagePullSecrets.
+> **Note:** Благодаря патчу ServiceAccount, `imagePullSecrets` в values **не обязателен** — pods автоматически наследуют imagePullSecrets. В k8app v3.4.0 используется универсальный формат `imagePullSecrets: [{name: regsecret}]`.
 
 #### Namespace схема
 
@@ -490,6 +514,7 @@ export GITLAB_AGENT_TOKEN='новый-токен'
 ```
 gitops-poc/                        # Этот репозиторий (GitHub)
 ├── README.md
+├── Makefile                       # Полезные команды (make proxy-all, etc.)
 ├── .env.example                   # Шаблон конфигурации
 ├── .env                           # Конфигурация проекта (не в git)
 ├── .gitignore
@@ -499,8 +524,10 @@ gitops-poc/                        # Этот репозиторий (GitHub)
 │   │       └── minikube-agent/
 │   │           └── config.yaml    # Конфиг GitLab Agent (Push-based)
 │   └── argocd/
-│       ├── applicationset.yaml    # ArgoCD ApplicationSet
-│       └── project.yaml           # ArgoCD Project
+│       ├── project.yaml           # ArgoCD Project
+│       ├── applicationset.yaml    # Генерирует 15 Apps (5 сервисов × 3 env)
+│       ├── bootstrap-app.yaml     # "App of Apps" - следит за этой папкой
+│       └── repo-credentials.yaml  # Шаблон для GitLab credentials
 ├── infrastructure/
 │   ├── vault/                     # Vault + VSO
 │   │   ├── helm-values.yaml
@@ -529,11 +556,10 @@ gitops-poc/                        # Этот репозиторий (GitHub)
 ├── services/                      # Примеры репозиториев сервисов
 │   ├── api-gateway/
 │   │   ├── .cicd/
-│   │   │   ├── default.yaml
+│   │   │   ├── default.yaml       # Включает secrets: и secretsProvider:
 │   │   │   ├── dev.yaml
 │   │   │   ├── staging.yaml
 │   │   │   └── prod.yaml
-│   │   ├── vault-secret.yaml
 │   │   └── .gitlab-ci.yml
 │   ├── auth-adapter/
 │   ├── web-grpc/
@@ -588,31 +614,161 @@ deploy:dev:
 
 ---
 
-## Vault Secrets
+## Vault Secrets (k8app v3.4.0)
 
-### Структура путей
+### Архитектура
 
 ```
-secret/data/${VAULT_PATH_PREFIX}/{service}/{env}/config
-                    │                │       │
-                    │                │       └── dev | staging | prod
-                    │                └── api-gateway | auth-adapter | ...
-                    └── Из .env (по умолчанию = GITLAB_GROUP)
+┌──────────────┐      ┌──────────────┐      ┌──────────────┐      ┌──────────────┐
+│    Vault     │─────▶│     VSO      │─────▶│  K8s Secret  │─────▶│     Pod      │
+│  KV secrets  │      │VaultStatic   │      │ (appName)    │      │   env vars   │
+└──────────────┘      │   Secret     │      └──────────────┘      └──────────────┘
+                      └──────────────┘
+                            ▲
+                            │ создаёт автоматически
+                      ┌──────────────┐
+                      │   k8app      │
+                      │   chart      │
+                      │   v3.4.0     │
+                      └──────────────┘
 ```
 
-### Создание секретов
+### Структура путей в Vault
 
+```
+secret/data/${GITLAB_GROUP}/{service}/{env}/config
+             │               │         │
+             │               │         └── dev | staging | prod
+             │               └── api-gateway | auth-adapter | ...
+             └── gitops-poc-dzha (группа GitLab)
+
+Примеры:
+  secret/data/gitops-poc-dzha/api-gateway/dev/config
+  secret/data/gitops-poc-dzha/health-demo/dev/config
+```
+
+### Формат путей в k8app secrets
+
+```yaml
+secrets:
+  # Абсолютный путь (начинается с /) - используется как есть
+  API_KEY: "/gitops-poc-dzha/api-gateway/dev/config"
+
+  # Относительный путь - становится {namespace}/{appName}/{path}
+  DB_URL: "database"  # → poc-dev/api-gateway/database
+```
+
+> **Note:** В `secrets:` путь указывается БЕЗ `secret/data/` префикса — k8app добавляет его автоматически через `secretsProvider.vault.mount`.
+
+### Vault Policy и Role
+
+Для каждого namespace создаётся policy и role:
+
+**Policy `poc-dev-read`:**
+```hcl
+# Wildcard доступ ко всем сервисам в dev окружении
+path "secret/data/gitops-poc-dzha/*/dev/*" {
+  capabilities = ["read"]
+}
+path "secret/metadata/gitops-poc-dzha/*/dev/*" {
+  capabilities = ["read", "list"]
+}
+```
+
+**Role `poc-dev-default`:**
+```bash
+vault write auth/kubernetes/role/poc-dev-default \
+  bound_service_account_names=default \
+  bound_service_account_namespaces=poc-dev \
+  policies=poc-dev-read \
+  audience=vault \
+  ttl=1h
+```
+
+> **Важно:** `audience=vault` обязателен — VaultAuth использует `audiences: [vault]`.
+
+### Как настроить секреты
+
+**1. Создать секреты в Vault:**
 ```bash
 # Port-forward к Vault
 kubectl port-forward svc/vault -n vault 8200:8200 &
-
 export VAULT_ADDR='http://127.0.0.1:8200'
 export VAULT_TOKEN='root'
 
-# Создать секреты (путь из .env)
-vault kv put secret/${VAULT_PATH_PREFIX}/api-gateway/dev/config \
-  API_KEY="dev-secret" \
+# Создать секреты для сервиса
+vault kv put secret/gitops-poc-dzha/api-gateway/dev/config \
+  API_KEY="dev-secret-key" \
   DB_PASSWORD="dev-password"
+```
+
+**2. Добавить секцию secrets в .cicd/default.yaml:**
+```yaml
+# Формат: ENV_VAR_NAME: "vault-path"
+secrets:
+  API_KEY: "/gitops-poc-dzha/api-gateway/dev/config"
+  DB_PASSWORD: "/gitops-poc-dzha/api-gateway/dev/config"
+
+secretsProvider:
+  provider: "vault"
+  vault:
+    authRef: "vault-auth"   # VaultAuth ресурс в namespace
+    mount: "secret"         # KV secrets engine mount
+    type: "kv-v2"           # KV version 2
+    refreshAfter: "1h"      # Интервал синхронизации
+```
+
+**3. VaultAuth (создаётся infrastructure-app):**
+
+`gitops-config/infrastructure/poc-dev/vault-auth.yaml`:
+```yaml
+apiVersion: secrets.hashicorp.com/v1beta1
+kind: VaultAuth
+metadata:
+  name: vault-auth
+  namespace: poc-dev
+spec:
+  method: kubernetes
+  mount: kubernetes
+  kubernetes:
+    role: poc-dev-default    # Vault role
+    serviceAccount: default  # K8s SA
+    audiences:
+      - vault                # Должен совпадать с audience в role
+```
+
+### Что создаёт k8app chart
+
+При деплое с `secrets:` и `secretsProvider:` chart автоматически создаёт:
+
+1. **VaultStaticSecret** — запрашивает секреты из Vault
+2. **K8s Secret** — VSO синхронизирует данные из Vault
+3. **Pod env vars** — через `secretKeyRef` из созданного Secret
+
+### Требования
+
+| Компонент | Описание |
+|-----------|----------|
+| VSO | Vault Secrets Operator установлен в кластере |
+| VaultAuth | Ресурс `vault-auth` в namespace (создаётся `infrastructure-app`) |
+| Vault policy | `poc-{env}-read` с доступом к `secret/data/gitops-poc-dzha/*/{env}/*` |
+| Vault role | `poc-{env}-default` с audience=vault, привязан к SA default |
+
+### Troubleshooting Secrets
+
+```bash
+# Проверить VaultStaticSecret статус
+kubectl get vaultstaticsecret -n poc-dev
+kubectl describe vaultstaticsecret <name> -n poc-dev
+
+# Проверить созданный K8s Secret
+kubectl get secret -n poc-dev | grep -v regsecret
+
+# Проверить env vars в поде
+kubectl exec -n poc-dev deploy/api-gateway -- env | grep API_KEY
+
+# Логи VSO
+kubectl logs -n vault-secrets-operator-system -l control-plane=controller-manager
 ```
 
 ---

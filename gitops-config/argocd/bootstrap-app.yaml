@@ -6,8 +6,9 @@
 #
 # After that, ArgoCD will:
 # 1. Watch gitops-config/argocd/ folder
-# 2. Auto-apply project.yaml and applicationset.yaml
-# 3. ApplicationSet creates all service applications
+# 2. Auto-apply project.yaml, applicationset.yaml, and infrastructure-app.yaml
+# 3. infrastructure-app creates VaultAuth (required for k8app v3.4.0 secrets)
+# 4. ApplicationSet creates all service applications
 
 apiVersion: argoproj.io/v1alpha1
 kind: Application
@@ -25,7 +26,7 @@ spec:
     path: argocd
     directory:
       recurse: false
-      include: '{project.yaml,applicationset.yaml}'
+      include: '{project.yaml,applicationset.yaml,infrastructure-app.yaml}'
 
   destination:
     server: https://kubernetes.default.svc

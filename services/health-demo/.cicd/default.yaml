@@ -1,7 +1,7 @@
 # Health Demo Service - Default Values
 # gRPC health check and streaming demo service
 # Implements grpc.health.v1.Health with Check and Watch methods
-# Based on k8app/app chart: https://github.com/d7561985/k8app
+# Based on k8app/app chart v3.4.0: https://github.com/d7561985/k8app
 
 appName: health-demo
 version: "1.0.0"
@@ -16,6 +16,10 @@ image:
   repository: health-demo
   tag: local
   pullPolicy: Never  # Change to IfNotPresent for GitLab Registry
+
+# Image Pull Secrets - universal format (k8app v3.4.0+)
+imagePullSecrets:
+  - name: regsecret
 
 # Service configuration (k8app format)
 service:
@@ -51,3 +55,26 @@ readinessProbe:
 # Command line args passed to the binary
 args:
   - "-port=8081"
+
+# =============================================================================
+# Secrets Configuration (k8app v3.4.0+)
+# =============================================================================
+# Simple interface: ENV_VAR_NAME: "vault-path"
+# - Relative path: {namespace}/{appName}/{environment}/{path}
+# - Absolute path (starts with /): used as-is
+#
+# Chart automatically creates VaultStaticSecret and syncs to K8s Secret
+# =============================================================================
+secrets:
+  # Using absolute path to match existing Vault structure
+  ENVIRONMENT: "/gitops-poc-dzha/health-demo/dev/config"
+  SERVICE_NAME: "/gitops-poc-dzha/health-demo/dev/config"
+
+# Secrets Provider Configuration (k8app v3.4.0+)
+secretsProvider:
+  provider: "vault"  # vault | aws | none
+  vault:
+    authRef: "vault-auth"  # VaultAuth resource in namespace
+    mount: "secret"
+    type: "kv-v2"
+    refreshAfter: "1h"

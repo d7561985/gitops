@@ -1,6 +1,6 @@
 # Web HTTP Backend - Default Values
 # Uses nicholasjackson/fake-service for testing
-# Based on k8app/app chart: https://github.com/d7561985/k8app
+# Based on k8app/app chart v3.4.0: https://github.com/d7561985/k8app
 
 appName: web-http
 version: "v0.19.1"
@@ -13,6 +13,8 @@ image:
   repository: nicholasjackson/fake-service
   tag: v0.19.1
   pullPolicy: IfNotPresent
+
+# No imagePullSecrets needed - public image
 
 # Service configuration (k8app format)
 service:

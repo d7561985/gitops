@@ -1,5 +1,5 @@
 # API Gateway - Default Values (inherited by all environments)
-# Based on k8app/app chart: https://github.com/d7561985/k8app
+# Based on k8app/app chart v3.4.0: https://github.com/d7561985/k8app
 # Envoy Proxy with Go config generator
 
 appName: api-gateway
@@ -15,6 +15,10 @@ image:
   repository: api-gateway
   tag: local
   pullPolicy: Never  # Change to IfNotPresent for GitLab Registry
+
+# Image Pull Secrets - universal format (k8app v3.4.0+)
+imagePullSecrets:
+  - name: regsecret
 
 # Service configuration (k8app format)
 service:
@@ -102,3 +106,23 @@ configfiles:
           methods:
             - name: Check
               auth: {policy: no-need}
+
+# =============================================================================
+# Secrets Configuration (k8app v3.4.0+)
+# =============================================================================
+# Simple interface: ENV_VAR_NAME: "vault-path"
+# Absolute path (starts with /): used as-is
+# Chart automatically creates VaultStaticSecret and syncs to K8s Secret
+# =============================================================================
+secrets:
+  API_KEY: "/gitops-poc-dzha/api-gateway/dev/config"
+  # Note: LOG_LEVEL and AUTH_ADAPTER_HOST are in configmap, not secrets
+
+# Secrets Provider Configuration (k8app v3.4.0+)
+secretsProvider:
+  provider: "vault"
+  vault:
+    authRef: "vault-auth"
+    mount: "secret"
+    type: "kv-v2"
+    refreshAfter: "1h"
