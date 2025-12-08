@@ -1,0 +1,40 @@
+# Bootstrap Application - "App of Apps" pattern
+# This Application watches gitops-config repo and applies all ArgoCD resources
+#
+# Apply once manually:
+#   kubectl apply -f bootstrap-app.yaml
+#
+# After that, ArgoCD will:
+# 1. Watch gitops-config/argocd/ folder
+# 2. Auto-apply project.yaml and applicationset.yaml
+# 3. ApplicationSet creates all service applications
+
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: gitops-bootstrap
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+
+  source:
+    repoURL: https://gitlab.com/gitops-poc-dzha/gitops-config.git
+    targetRevision: main
+    path: argocd
+    directory:
+      recurse: false
+      include: '{project.yaml,applicationset.yaml}'
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=false
+      - ApplyOutOfSyncOnly=true

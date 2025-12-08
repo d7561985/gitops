@@ -273,34 +273,77 @@ poc-prod/         ← api-gateway, auth-adapter, web-grpc, web-http, health-demo
 
 ### 5. Pull-based (ArgoCD)
 
-ApplicationSet находится в репозитории `gitops-config` и создаёт Application для каждого сервиса.
+Pull-based подход использует **App of Apps** паттерн — ArgoCD следит за репозиторием `gitops-config` и автоматически создаёт все Application'ы.
+
+#### Структура gitops-config/argocd/
+
+```
+gitops-config/argocd/
+├── project.yaml           # ArgoCD Project с permissions
+├── applicationset.yaml    # Генерирует 15 Apps (5 сервисов × 3 env)
+├── bootstrap-app.yaml     # "App of Apps" — следит за этой папкой
+└── repo-credentials.yaml  # Шаблон для GitLab credentials
+```
+
+#### Быстрый старт
 
 ```bash
-# 1. Добавить репозитории в ArgoCD (если приватные)
-argocd repo add https://gitlab.com/${GITLAB_GROUP}/api-gateway.git \
-  --username git --password <gitlab-token>
-# Повторить для каждого сервиса...
+# 1. Добавить GITLAB_TOKEN в .env (нужен scope: read_repository)
+echo 'GITLAB_TOKEN="glpat-xxxxxxxxxxxx"' >> .env
 
-# Или добавить credentials для всей группы:
-argocd repocreds add https://gitlab.com/${GITLAB_GROUP} \
-  --username git --password <gitlab-token>
+# 2. Запустить скрипт настройки
+./scripts/setup-pull-based.sh
+```
 
-# 2. Применить ArgoCD Project и ApplicationSet
+Скрипт автоматически:
+- Добавит GitLab credentials в ArgoCD
+- Применит Project и Bootstrap Application
+- Bootstrap App создаст все 15 Application'ов из ApplicationSet
+
+#### Ручная настройка (альтернатива)
+
+```bash
+# 1. Добавить credentials для всей группы
+kubectl create secret generic gitlab-repo-creds -n argocd \
+  --from-literal=type=git \
+  --from-literal=url=https://gitlab.com/${GITLAB_GROUP} \
+  --from-literal=username=oauth2 \
+  --from-literal=password=${GITLAB_TOKEN}
+kubectl label secret gitlab-repo-creds -n argocd \
+  argocd.argoproj.io/secret-type=repo-creds
+
+# 2. Применить ArgoCD конфигурацию
 kubectl apply -f gitops-config/argocd/project.yaml
-kubectl apply -f gitops-config/argocd/applicationset.yaml
+kubectl apply -f gitops-config/argocd/bootstrap-app.yaml
 
 # 3. Проверить созданные приложения
 kubectl get applications -n argocd
 
 # 4. Открыть ArgoCD UI
-kubectl port-forward svc/argocd-server -n argocd 8080:443
-# https://localhost:8080
+make proxy-argocd
+# http://localhost:8081
 ```
 
-**Как это работает:**
-- ApplicationSet генерирует 15 Applications (5 сервисов × 3 окружения)
-- Каждый Application следит за своим репо сервиса (`api-gateway`, `auth-adapter`, ...)
-- При изменении `.cicd/*.yaml` в репо сервиса → ArgoCD деплоит
+#### Как это работает (App of Apps)
+
+```
+┌─────────────────┐     ┌───────────────────┐     ┌─────────────────┐
+│ gitops-config/  │────▶│  bootstrap-app    │────▶│  ApplicationSet │
+│ argocd/         │     │  (watches folder) │     │  (15 apps)      │
+└─────────────────┘     └───────────────────┘     └─────────────────┘
+                                                          │
+                               ┌──────────────────────────┼──────────────────────────┐
+                               ▼                          ▼                          ▼
+                        ┌─────────────┐           ┌─────────────┐           ┌─────────────┐
+                        │api-gateway  │           │auth-adapter │           │ ... (x15)   │
+                        │  -dev       │           │  -dev       │           │             │
+                        └─────────────┘           └─────────────┘           └─────────────┘
+```
+
+- **bootstrap-app** следит за `gitops-config/argocd/` в GitLab
+- При изменении автоматически применяет `project.yaml` и `applicationset.yaml`
+- **ApplicationSet** генерирует 15 Applications (5 сервисов × 3 окружения)
+- Каждый Application следит за `.cicd/*.yaml` в репо сервиса
 
 ### 6. Push-based (GitLab Agent)
 
