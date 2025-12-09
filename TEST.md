@@ -1,0 +1,27 @@
+# TEST
+
+## === web-http ==== ##
+
+```bash
+# Basic HTTP request through gateway
+curl -v 'http://127.0.0.1:8080/api/HttpService/health'
+
+# Expected: HTTP 200 with JSON response from fake-service
+```
+
+## === web-grpc ==== ##
+
+```bash
+# Simple call (empty request)
+grpcwebcli  -url http://127.0.0.1:8080/api -method FakeService/Handle
+```
+
+## === health-demo ==== ##
+
+```bash
+# Server streaming (gRPC-Web over HTTP)
+grpcwebcli -url http://127.0.0.1:8080/api -method grpc.health.v1.Health/Watch  -stream -timeout 10s
+
+# gRPC Health Check with JSON response
+grpcwebcli -url http://127.0.0.1:8080/api -method grpc.health.v1.Health/Check
+```

@@ -666,14 +666,17 @@ secrets:
 
 **Policy `poc-dev-read`:**
 ```hcl
-# Wildcard доступ ко всем сервисам в dev окружении
-path "secret/data/gitops-poc-dzha/*/dev/*" {
+# Glob доступ ко всем сервисам в dev окружении
+# ВАЖНО: используем + (single segment glob), а не * (wildcard)
+path "secret/data/gitops-poc-dzha/+/dev/+" {
   capabilities = ["read"]
 }
-path "secret/metadata/gitops-poc-dzha/*/dev/*" {
+path "secret/metadata/gitops-poc-dzha/+/dev/+" {
   capabilities = ["read", "list"]
 }
 ```
+
+> **Note:** В Vault HCL `*` матчит любое количество символов в пределах одного сегмента, но `+` явно указывает на single segment glob match, что более предсказуемо.
 
 **Role `poc-dev-default`:**
 ```bash
