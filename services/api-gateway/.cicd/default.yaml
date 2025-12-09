@@ -1,6 +1,6 @@
 # API Gateway - Default Values (inherited by all environments)
-# Based on k8app/app chart v3.4.0: https://github.com/d7561985/k8app
-# Envoy Proxy with Go config generator
+# Based on k8app/app chart v3.5.1: https://github.com/d7561985/k8app
+# Envoy Proxy with Go config generator + auth-adapter sidecar
 
 appName: api-gateway
 version: "1.0.0"
@@ -60,20 +60,15 @@ readinessProbe:
 # Environment variables via configmap (injected via envFrom)
 configmap:
   LOG_LEVEL: "info"
-  AUTH_ADAPTER_HOST: "auth-adapter-sv"
+  AUTH_ADAPTER_HOST: "127.0.0.1"  # Sidecar via localhost
   OPEN_TELEMETRY_HOST: "127.0.0.1"
   OPEN_TELEMETRY_PORT: "4317"
 
 # =============================================================================
 # Secrets Configuration (k8app v3.4.0+)
 # =============================================================================
-# Simple interface: ENV_VAR_NAME: "vault-path"
-# Absolute path (starts with /): used as-is
-# Chart automatically creates VaultStaticSecret and syncs to K8s Secret
-# =============================================================================
 secrets:
   API_KEY: "/gitops-poc-dzha/api-gateway/dev/config"
-  # Note: LOG_LEVEL and AUTH_ADAPTER_HOST are in configmap, not secrets
 
 # Secrets Provider Configuration (k8app v3.4.0+)
 secretsProvider:
@@ -83,3 +78,54 @@ secretsProvider:
     mount: "secret"
     type: "kv-v2"
     refreshAfter: "1h"
+
+# =============================================================================
+# Shared Volumes (k8app v3.5.0+)
+# =============================================================================
+# config.yaml is in Docker image at /opt/auth-adapter/config.yaml
+# initContainer copies it to emptyDir, which is mounted to both containers
+sharedVolumes:
+  auth-config:
+    type: emptyDir
+    mountPath: "/opt/auth-adapter"
+
+# =============================================================================
+# Init Container (k8app v3.5.0+)
+# =============================================================================
+# Uses main image (api-gateway) to copy config from /opt/config-source to shared volume
+initContainers:
+  command:
+    - sh
+    - -c
+  args:
+    - cp /opt/config-source/config.yaml /opt/auth-adapter/config.yaml
+
+# =============================================================================
+# Auth-Adapter Sidecar (k8app v3.5.0+ extensions)
+# =============================================================================
+extensions:
+  auth-adapter:
+    image:
+      repository: auth-adapter
+      tag: local
+    command:
+      - /app/auth-adapter
+    env:
+      OTEL_SERVICE_NAME: "auth-adapter"
+    livenessProbe:
+      tcpSocket:
+        port: 9000
+      initialDelaySeconds: 10
+      periodSeconds: 10
+    readinessProbe:
+      tcpSocket:
+        port: 9000
+      initialDelaySeconds: 5
+      periodSeconds: 5
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 100m
+        memory: 128Mi

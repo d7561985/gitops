@@ -16,6 +16,7 @@ RUN apt-get update && apt-get install -y curl gettext-base && apt-get clean && r
 
 COPY --chmod=755 entrypoint.sh /
 COPY --from=build  /app/conf-generator/conf-generator /opt/conf-generator/conf-generator
-COPY config.yaml /opt/auth-adapter/config.yaml
+# Config source for initContainer to copy to shared volume
+COPY config.yaml /opt/config-source/config.yaml
 
 ENTRYPOINT ["/entrypoint.sh"]

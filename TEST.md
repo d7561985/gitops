@@ -9,6 +9,17 @@ curl -v 'http://127.0.0.1:8080/api/HttpService/health'
 # Expected: HTTP 200 with JSON response from fake-service
 ```
 
+## auth-adapter
+
+```bash
+# Без токена - должен вернуть 401 Unauthorized
+curl http://localhost:8080/api/HttpService/protected
+
+# С валидным токеном - должен вернуть 200
+curl -H "Cookie: token=demo-token" http://localhost:8080/api/HttpService/protected
+```
+
+
 ## === web-grpc ==== ##
 
 ```bash

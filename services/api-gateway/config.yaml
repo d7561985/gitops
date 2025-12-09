@@ -29,7 +29,7 @@ apis:
         auth:
           policy: no-need
 
-  # HTTP REST тестирование (public)
+  # HTTP REST тестирование (public + protected)
   - name: HttpService
     cluster: web-http
     auth: {policy: no-need}
@@ -38,6 +38,8 @@ apis:
         auth: {policy: no-need}
       - name: echo
         auth: {policy: no-need}
+      - name: protected
+        auth: {policy: required}
 
   # gRPC Health service (streaming test via Watch method)
   - name: grpc.health.v1.Health

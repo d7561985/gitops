@@ -1,5 +1,5 @@
 # ArgoCD ApplicationSet for Multi-Environment Deployment
-# Uses k8app/app chart v3.4.0 with Vault Secrets Operator integration
+# Uses k8app/app chart v3.5.1 with Vault Secrets Operator integration
 # GitLab Group: gitops-poc-dzha
 
 apiVersion: argoproj.io/v1alpha1
@@ -16,9 +16,7 @@ spec:
                 - service: api-gateway
                   repoURL: https://gitlab.com/gitops-poc-dzha/api-gateway.git
                   syncWave: "0"
-                - service: auth-adapter
-                  repoURL: https://gitlab.com/gitops-poc-dzha/auth-adapter.git
-                  syncWave: "0"
+                # auth-adapter is now a sidecar in api-gateway pod
                 - service: web-grpc
                   repoURL: https://gitlab.com/gitops-poc-dzha/web-grpc.git
                   syncWave: "0"
@@ -54,7 +52,7 @@ spec:
       sources:
         - repoURL: https://d7561985.github.io/k8app
           chart: app
-          targetRevision: '3.4.0'
+          targetRevision: '3.5.1'
           helm:
             valueFiles:
               - $values/.cicd/default.yaml
