@@ -64,49 +64,6 @@ configmap:
   OPEN_TELEMETRY_HOST: "127.0.0.1"
   OPEN_TELEMETRY_PORT: "4317"
 
-# ConfigFiles for gateway config (mounted to specified path)
-configfiles:
-  mountPath: "/opt/auth-adapter"
-  data:
-    config.yaml: |
-      api_route: /api/
-
-      clusters:
-        - name: web
-          addr: "web-grpc-sv:9091"
-          type: "grpc"
-        - name: web-http
-          addr: "web-http-sv:9092"
-          type: "http"
-          health_check:
-            path: "/health"
-            interval_seconds: 10
-        - name: health-demo
-          addr: "health-demo-sv:8081"
-          type: "grpc"
-
-      apis:
-        - name: FakeService
-          cluster: web
-          auth: {policy: no-need}
-          methods:
-            - name: Handle
-              auth: {policy: no-need}
-        - name: HttpService
-          cluster: web-http
-          auth: {policy: no-need}
-          methods:
-            - name: health
-              auth: {policy: no-need}
-            - name: echo
-              auth: {policy: no-need}
-        - name: grpc.health.v1.Health
-          cluster: health-demo
-          auth: {policy: no-need}
-          methods:
-            - name: Check
-              auth: {policy: no-need}
-
 # =============================================================================
 # Secrets Configuration (k8app v3.4.0+)
 # =============================================================================

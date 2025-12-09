@@ -3,12 +3,12 @@ api_route: /api/
 clusters:
   # gRPC сервис (fake-service в gRPC режиме)
   - name: web
-    addr: "web-grpc:9091"
+    addr: "web-grpc-sv:9091"
     type: "grpc"
 
   # HTTP сервис (fake-service в HTTP режиме)
   - name: web-http
-    addr: "web-http:9092"
+    addr: "web-http-sv:9092"
     type: "http"
     health_check:
       path: "/health"
@@ -16,7 +16,7 @@ clusters:
 
   # gRPC Health service (for streaming tests)
   - name: health-demo
-    addr: "health-demo:8081"
+    addr: "health-demo-sv:8081"
     type: "grpc"
 
 apis:

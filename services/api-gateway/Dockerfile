@@ -16,5 +16,6 @@ RUN apt-get update && apt-get install -y curl gettext-base && apt-get clean && r
 
 COPY --chmod=755 entrypoint.sh /
 COPY --from=build  /app/conf-generator/conf-generator /opt/conf-generator/conf-generator
+COPY config.yaml /opt/auth-adapter/config.yaml
 
 ENTRYPOINT ["/entrypoint.sh"]

@@ -1,4 +1,4 @@
-# TEST
+# TEST API
 
 ## === web-http ==== ##
 
@@ -25,3 +25,12 @@ grpcwebcli -url http://127.0.0.1:8080/api -method grpc.health.v1.Health/Watch  -
 # gRPC Health Check with JSON response
 grpcwebcli -url http://127.0.0.1:8080/api -method grpc.health.v1.Health/Check
 ```
+
+## Test Secrets
+
+1. Тест секрет добавился в сервис
+
+## Test Deploy
+
+1. Релиз нескольких окружений одновременно
+2. Как релизить через Ingress + LB ( Claudflare)
