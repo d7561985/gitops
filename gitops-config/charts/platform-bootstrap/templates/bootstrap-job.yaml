@@ -1,0 +1,146 @@
+{{- if .Values.job.enabled }}
+{{- /*
+Platform Bootstrap Job - runs as ArgoCD PreSync hook
+Creates in Vault:
+1. Namespace-level policies (poc-dev-read, poc-staging-read, etc.)
+2. Namespace-level roles (poc-dev-default, poc-staging-default, etc.)
+3. Service-level policies (gitops-poc-dzha-api-gateway-dev, etc.)
+4. Service-level roles (api-gateway-dev, web-grpc-dev, etc.)
+5. Secret placeholders (if not exist)
+*/ -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: platform-bootstrap-{{ now | date "20060102-150405" }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: platform-bootstrap
+    app.kubernetes.io/component: vault-config
+  annotations:
+    argocd.argoproj.io/hook: {{ .Values.job.hook }}
+    argocd.argoproj.io/hook-delete-policy: {{ .Values.job.hookDeletePolicy }}
+    argocd.argoproj.io/sync-wave: "{{ .Values.job.syncWave }}"
+spec:
+  backoffLimit: {{ .Values.job.backoffLimit }}
+  ttlSecondsAfterFinished: {{ .Values.job.ttlSecondsAfterFinished }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: platform-bootstrap
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: bootstrap
+        image: {{ .Values.job.image }}
+        env:
+        - name: VAULT_ADDR
+          value: {{ .Values.vault.address | quote }}
+        - name: VAULT_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.vault.tokenSecret.name }}
+              key: {{ .Values.vault.tokenSecret.key }}
+        command:
+        - /bin/sh
+        - -c
+        - |
+          set -e
+
+          MOUNT="{{ .Values.vault.mount }}"
+          PREFIX="{{ .Values.global.vaultPathPrefix }}"
+          NS_PREFIX="{{ .Values.global.namespacePrefix }}"
+
+          echo "============================================"
+          echo "  Platform Bootstrap"
+          echo "============================================"
+          echo ""
+
+          # Ensure kubernetes auth is enabled
+          if ! vault auth list 2>/dev/null | grep -q "kubernetes/"; then
+            echo "Enabling kubernetes auth..."
+            vault auth enable kubernetes || true
+            vault write auth/kubernetes/config \
+              kubernetes_host="https://kubernetes.default.svc:443"
+          fi
+
+          {{- range $envName, $env := .Values.environments }}
+          {{- if $env.enabled }}
+
+          echo ""
+          echo "=== Environment: {{ $envName }} ==="
+          NAMESPACE="${NS_PREFIX}-{{ $envName }}"
+
+          # ---------------------------------------------
+          # Namespace-level policy (for VaultAuth default SA)
+          # ---------------------------------------------
+          NS_POLICY="${NS_PREFIX}-{{ $envName }}-read"
+          echo "Policy: ${NS_POLICY}"
+          vault policy write ${NS_POLICY} - <<POLICY
+          # Namespace-level read policy for {{ $envName }}
+          path "secret/data/${PREFIX}/+/{{ $envName }}/*" {
+            capabilities = ["read"]
+          }
+          path "secret/metadata/${PREFIX}/+/{{ $envName }}/*" {
+            capabilities = ["read", "list"]
+          }
+          POLICY
+
+          # ---------------------------------------------
+          # Namespace-level role (for VaultAuth)
+          # ---------------------------------------------
+          NS_ROLE="${NS_PREFIX}-{{ $envName }}-default"
+          echo "Role: ${NS_ROLE}"
+          vault write auth/kubernetes/role/${NS_ROLE} \
+            bound_service_account_names=default \
+            bound_service_account_namespaces=${NAMESPACE} \
+            policies=${NS_POLICY} \
+            audience=vault \
+            ttl=1h
+
+          {{- range $serviceName, $service := $.Values.services }}
+
+          # ---------------------------------------------
+          # Service: {{ $serviceName }}
+          # ---------------------------------------------
+          SVC_POLICY="${PREFIX}-{{ $serviceName }}-{{ $envName }}"
+          SVC_ROLE="{{ $serviceName }}-{{ $envName }}"
+          SECRET_PATH="${PREFIX}/{{ $serviceName }}/{{ $envName }}/config"
+
+          echo "  Service: {{ $serviceName }}"
+
+          # Service policy
+          vault policy write ${SVC_POLICY} - <<POLICY
+          path "secret/data/${SECRET_PATH}" {
+            capabilities = ["read"]
+          }
+          path "secret/metadata/${SECRET_PATH}" {
+            capabilities = ["read", "list"]
+          }
+          POLICY
+
+          # Service role
+          vault write auth/kubernetes/role/${SVC_ROLE} \
+            bound_service_account_names={{ $serviceName }},default \
+            bound_service_account_namespaces=${NAMESPACE} \
+            policies=${SVC_POLICY} \
+            audience=vault \
+            ttl=1h
+
+          # Bootstrap secret placeholder
+          if vault kv get -mount=${MOUNT} "${SECRET_PATH}" >/dev/null 2>&1; then
+            echo "    Secret: EXISTS"
+          else
+            vault kv put -mount=${MOUNT} "${SECRET_PATH}" \
+              _bootstrapped_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)" >/dev/null
+            echo "    Secret: CREATED"
+          fi
+
+          {{- end }}
+          {{- end }}
+          {{- end }}
+
+          echo ""
+          echo "============================================"
+          echo "  Bootstrap Complete"
+          echo "============================================"
+{{- end }}

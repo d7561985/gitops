@@ -1,0 +1,85 @@
+{{- if .Values.applicationSet.enabled }}
+{{- /*
+ApplicationSet generated from services/environments registry
+Single source of truth - add service to values.yaml, get ArgoCD App automatically
+*/ -}}
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: {{ .Values.applicationSet.name }}
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: platform-bootstrap
+    app.kubernetes.io/component: applicationset
+spec:
+  generators:
+    - matrix:
+        generators:
+          # Services from values.yaml
+          - list:
+              elements:
+                {{- range $serviceName, $service := .Values.services }}
+                - service: {{ $serviceName }}
+                  repoURL: {{ $service.repoURL | default (printf "https://gitlab.com/%s/%s.git" $.Values.global.gitlabGroup $serviceName) }}
+                  syncWave: {{ $service.syncWave | default "0" | quote }}
+                {{- end }}
+
+          # Environments from values.yaml
+          - list:
+              elements:
+                {{- range $envName, $env := .Values.environments }}
+                {{- if $env.enabled }}
+                - env: {{ $envName }}
+                  autoSync: {{ $env.autoSync | default true | quote }}
+                {{- end }}
+                {{- end }}
+
+  template:
+    metadata:
+      name: '{{`{{service}}`}}-{{`{{env}}`}}'
+      namespace: argocd
+      labels:
+        app.kubernetes.io/name: '{{`{{service}}`}}'
+        environment: '{{`{{env}}`}}'
+        app.kubernetes.io/part-of: {{ .Values.global.gitlabGroup }}
+      annotations:
+        argocd.argoproj.io/sync-wave: '{{`{{syncWave}}`}}'
+    spec:
+      project: {{ .Values.applicationSet.project }}
+
+      sources:
+        # k8app Helm chart
+        - repoURL: {{ .Values.global.k8app.repoURL }}
+          chart: {{ .Values.global.k8app.chart }}
+          targetRevision: {{ .Values.global.k8app.version | quote }}
+          helm:
+            valueFiles:
+              - $values/.cicd/default.yaml
+              - $values/.cicd/{{`{{env}}`}}.yaml
+
+        # Service repository with values
+        - repoURL: '{{`{{repoURL}}`}}'
+          targetRevision: main
+          ref: values
+
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: '{{ .Values.global.namespacePrefix }}-{{`{{env}}`}}'
+
+      syncPolicy:
+        syncOptions:
+          - CreateNamespace=true
+          - PruneLast=true
+          - ApplyOutOfSyncOnly=true
+        automated:
+          prune: true
+          selfHeal: true
+
+      ignoreDifferences:
+        - group: apps
+          kind: Deployment
+          jsonPointers:
+            - /spec/replicas
+
+      revisionHistoryLimit: 3
+{{- end }}

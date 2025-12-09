@@ -1,0 +1,118 @@
+# =============================================================================
+# GitOps Platform Bootstrap Configuration
+# =============================================================================
+# Single source of truth for the entire platform.
+# Add a service/environment here -> automatically get everything configured.
+#
+# Generated resources:
+# 1. Namespaces (poc-dev, poc-staging, poc-prod)
+# 2. Vault policies per service/env
+# 3. Vault Kubernetes auth roles per service/env
+# 4. Vault secret path placeholders
+# 5. ArgoCD ApplicationSet for all services × environments
+# 6. VaultAuth resources per environment
+
+# -----------------------------------------------------------------------------
+# Global Settings
+# -----------------------------------------------------------------------------
+global:
+  # GitLab group for repo URLs
+  gitlabGroup: gitops-poc-dzha
+  # Vault path prefix for secrets
+  vaultPathPrefix: gitops-poc-dzha
+  # Namespace prefix (poc-dev, poc-staging, poc-prod)
+  namespacePrefix: poc
+  # k8app Helm chart settings
+  k8app:
+    repoURL: https://d7561985.github.io/k8app
+    chart: app
+    version: "3.5.2"
+
+# -----------------------------------------------------------------------------
+# Environments
+# -----------------------------------------------------------------------------
+# Each enabled environment gets:
+# - Namespace: {namespacePrefix}-{env}
+# - VaultAuth resource
+# - Vault policy: {namespacePrefix}-{env}-read
+# - Vault role: {namespacePrefix}-{env}-default
+environments:
+  dev:
+    enabled: true
+    autoSync: true
+  # staging:
+  #   enabled: true
+  #   autoSync: true
+  # prod:
+  #   enabled: true
+  #   autoSync: false  # Manual sync for production
+
+# -----------------------------------------------------------------------------
+# Services Registry
+# -----------------------------------------------------------------------------
+# Each service gets (per enabled environment):
+# - Vault path: {vaultPathPrefix}/{service}/{env}/config
+# - Vault policy: {vaultPathPrefix}-{service}-{env}
+# - Vault role: {service}-{env}
+# - ArgoCD Application: {service}-{env}
+services:
+  api-gateway:
+    syncWave: "0"
+    # repoURL: https://gitlab.com/custom/repo.git  # Override if needed
+
+  web-grpc:
+    syncWave: "0"
+
+  web-http:
+    syncWave: "0"
+
+  health-demo:
+    syncWave: "0"
+
+# -----------------------------------------------------------------------------
+# Vault Configuration
+# -----------------------------------------------------------------------------
+vault:
+  address: "http://vault.vault.svc:8200"
+  mount: "secret"
+  tokenSecret:
+    name: vault-admin-token
+    key: token
+
+# -----------------------------------------------------------------------------
+# Namespaces
+# -----------------------------------------------------------------------------
+namespaces:
+  enabled: true
+  # Labels applied to all created namespaces
+  labels:
+    app.kubernetes.io/managed-by: platform-bootstrap
+
+# -----------------------------------------------------------------------------
+# VaultAuth Configuration
+# -----------------------------------------------------------------------------
+vaultAuth:
+  enabled: true
+  audiences:
+    - vault
+
+# -----------------------------------------------------------------------------
+# Bootstrap Job Configuration
+# -----------------------------------------------------------------------------
+# Creates: policies, roles, secret placeholders
+job:
+  enabled: true
+  image: hashicorp/vault:1.15
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 300
+  hook: PreSync
+  hookDeletePolicy: HookSucceeded
+  syncWave: "-10"
+
+# -----------------------------------------------------------------------------
+# ApplicationSet Configuration
+# -----------------------------------------------------------------------------
+applicationSet:
+  enabled: true
+  name: gitops-services
+  project: gitops-poc-dzha

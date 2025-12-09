@@ -5,10 +5,11 @@
 #   kubectl apply -f bootstrap-app.yaml
 #
 # After that, ArgoCD will:
-# 1. Watch gitops-config/argocd/ folder
-# 2. Auto-apply project.yaml, applicationset.yaml, and infrastructure-app.yaml
-# 3. infrastructure-app creates VaultAuth (required for k8app v3.4.0 secrets)
-# 4. ApplicationSet creates all service applications
+# 1. Apply project.yaml (ArgoCD Project)
+# 2. Apply vault-bootstrap-app.yaml (Helm chart that generates everything else)
+#    - Vault path bootstrap Job
+#    - ApplicationSet for all services
+#    - VaultAuth for each environment
 
 apiVersion: argoproj.io/v1alpha1
 kind: Application
@@ -26,7 +27,7 @@ spec:
     path: argocd
     directory:
       recurse: false
-      include: '{project.yaml,applicationset.yaml,infrastructure-app.yaml}'
+      include: '{project.yaml,platform-bootstrap-app.yaml}'
 
   destination:
     server: https://kubernetes.default.svc

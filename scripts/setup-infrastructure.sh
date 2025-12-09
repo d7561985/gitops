@@ -75,6 +75,17 @@ chmod +x "$ROOT_DIR/infrastructure/argocd/setup.sh"
 "$ROOT_DIR/infrastructure/argocd/setup.sh"
 
 # ============================================
+# Create Vault Admin Token Secret
+# ============================================
+
+echo_header "Creating Vault admin token secret"
+kubectl create secret generic vault-admin-token \
+    --namespace=vault \
+    --from-literal=token=root \
+    --dry-run=client -o yaml | kubectl apply -f -
+echo_info "Created vault-admin-token secret in vault namespace"
+
+# ============================================
 # Summary
 # ============================================
 
@@ -87,27 +98,32 @@ echo "Installed components:"
 echo "  - Vault (namespace: vault)"
 echo "  - Vault Secrets Operator (namespace: vault-secrets-operator-system)"
 echo "  - ArgoCD (namespace: argocd)"
+echo "  - vault-admin-token secret (for platform-bootstrap)"
 echo ""
 echo "Next steps:"
 echo ""
-echo "1. Setup registry secrets (creates namespaces poc-dev/staging/prod):"
+echo "1. Setup registry secrets (for GitLab Container Registry):"
 echo "   ./scripts/setup-registry-secret.sh"
 echo ""
-echo "2. Configure Vault secrets:"
-echo "   ./scripts/setup-vault-secrets.sh"
+echo "2. Build local images (for testing without registry):"
+echo "   ./scripts/build-local-images.sh"
 echo ""
-echo "3. For Pull-based GitOps (ArgoCD) - recommended:"
+echo "3. Add GitLab repo credentials to ArgoCD:"
 echo "   kubectl port-forward svc/argocd-server -n argocd 8080:443"
 echo "   # Get password: kubectl get secret argocd-initial-admin-secret -n argocd -o jsonpath='{.data.password}' | base64 -d"
 echo "   # Login: admin / <password>"
-echo "   # Add GitLab repo credentials, then apply:"
+echo "   # UI: Settings -> Repositories -> Connect Repo"
+echo ""
+echo "4. Apply bootstrap (starts everything automatically):"
 echo "   kubectl apply -f gitops-config/argocd/project.yaml"
-echo "   kubectl apply -f gitops-config/argocd/applicationset.yaml"
+echo "   kubectl apply -f gitops-config/argocd/bootstrap-app.yaml"
 echo ""
-echo "4. For Push-based GitOps (GitLab Agent):"
-echo "   export GITLAB_AGENT_TOKEN='<your-token>'"
-echo "   ./scripts/setup-push-based.sh"
+echo "   This will automatically:"
+echo "   - Create namespaces (poc-dev, poc-staging, poc-prod)"
+echo "   - Create Vault policies and roles"
+echo "   - Create Vault secret placeholders"
+echo "   - Deploy all services via ApplicationSet"
 echo ""
-echo "5. Build local images (for testing without registry):"
-echo "   ./scripts/build-local-images.sh"
+echo "Note: setup-vault-secrets.sh is NO LONGER NEEDED!"
+echo "      platform-bootstrap chart handles all Vault configuration."
 echo ""

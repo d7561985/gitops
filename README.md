@@ -177,12 +177,11 @@ configmap:
 # Запустить Minikube
 minikube start --cpus 4 --memory 8192 --disk-size 40g
 
-# Установить инфраструктуру (Vault, ArgoCD)
+# Установить инфраструктуру (Vault, ArgoCD, vault-admin-token)
 ./scripts/setup-infrastructure.sh
-
-# Настроить Vault секреты
-./scripts/setup-vault-secrets.sh
 ```
+
+> **Note:** `setup-vault-secrets.sh` больше не нужен! Platform-bootstrap chart автоматически создаёт Vault policies, roles и secret placeholders.
 
 ### 2. GitLab Personal Access Token (CI Push)
 
@@ -299,14 +298,23 @@ poc-prod/         ← api-gateway, auth-adapter, web-grpc, web-http, health-demo
 
 Pull-based подход использует **App of Apps** паттерн — ArgoCD следит за репозиторием `gitops-config` и автоматически создаёт все Application'ы.
 
-#### Структура gitops-config/argocd/
+#### Структура gitops-config/
 
 ```
-gitops-config/argocd/
-├── project.yaml           # ArgoCD Project с permissions
-├── applicationset.yaml    # Генерирует 15 Apps (5 сервисов × 3 env)
-├── bootstrap-app.yaml     # "App of Apps" — следит за этой папкой
-└── repo-credentials.yaml  # Шаблон для GitLab credentials
+gitops-config/
+├── argocd/
+│   ├── project.yaml               # ArgoCD Project с permissions
+│   ├── bootstrap-app.yaml         # "App of Apps" — следит за этой папкой
+│   └── platform-bootstrap-app.yaml # ArgoCD Application для platform-bootstrap chart
+└── charts/
+    └── platform-bootstrap/        # Helm chart - single source of truth
+        ├── Chart.yaml
+        ├── values.yaml            # Конфигурация сервисов и окружений
+        └── templates/
+            ├── bootstrap-job.yaml     # Создаёт Vault policies/roles/secrets
+            ├── applicationset.yaml    # Генерирует 15 Apps (5 сервисов × 3 env)
+            ├── vault-auth.yaml        # VaultAuth для каждого namespace
+            └── namespaces.yaml        # Создаёт poc-dev/staging/prod
 ```
 
 #### Быстрый старт
@@ -348,14 +356,21 @@ make proxy-argocd
 # http://localhost:8081
 ```
 
-#### Как это работает (App of Apps)
+#### Как это работает (App of Apps + Platform Bootstrap)
 
 ```
-┌─────────────────┐     ┌───────────────────┐     ┌─────────────────┐
-│ gitops-config/  │────▶│  bootstrap-app    │────▶│  ApplicationSet │
-│ argocd/         │     │  (watches folder) │     │  (15 apps)      │
-└─────────────────┘     └───────────────────┘     └─────────────────┘
-                                                          │
+┌─────────────────┐     ┌───────────────────┐     ┌─────────────────────┐
+│ gitops-config/  │────▶│  bootstrap-app    │────▶│  platform-bootstrap │
+│ argocd/         │     │  (watches folder) │     │  (Helm chart)       │
+└─────────────────┘     └───────────────────┘     └──────────┬──────────┘
+                                                             │ генерирует
+                        ┌────────────────────────────────────┴────────────────────────────┐
+                        ▼                          ▼                          ▼           ▼
+                 ┌─────────────┐           ┌─────────────┐           ┌───────────┐ ┌──────────┐
+                 │ Namespaces  │           │  VaultAuth  │           │ApplicationSet│ │Vault Job│
+                 │poc-dev/...  │           │ per env     │           │ (15 apps) │ │policies  │
+                 └─────────────┘           └─────────────┘           └─────┬─────┘ └──────────┘
+                                                                           │
                                ┌──────────────────────────┼──────────────────────────┐
                                ▼                          ▼                          ▼
                         ┌─────────────┐           ┌─────────────┐           ┌─────────────┐
@@ -365,8 +380,12 @@ make proxy-argocd
 ```
 
 - **bootstrap-app** следит за `gitops-config/argocd/` в GitLab
-- При изменении автоматически применяет `project.yaml` и `applicationset.yaml`
-- **ApplicationSet** генерирует 15 Applications (5 сервисов × 3 окружения)
+- При изменении применяет `project.yaml` и `platform-bootstrap-app.yaml`
+- **platform-bootstrap** (Helm chart) создаёт:
+  - Namespaces для каждого окружения
+  - Vault policies и Kubernetes auth roles (через PreSync Job)
+  - VaultAuth ресурсы для VSO
+  - ApplicationSet для генерации 15 Applications
 - Каждый Application следит за `.cicd/*.yaml` в репо сервиса
 
 ### 6. Push-based (GitLab Agent)
@@ -523,11 +542,19 @@ gitops-poc/                        # Этот репозиторий (GitHub)
 │   │   └── agents/
 │   │       └── minikube-agent/
 │   │           └── config.yaml    # Конфиг GitLab Agent (Push-based)
-│   └── argocd/
-│       ├── project.yaml           # ArgoCD Project
-│       ├── applicationset.yaml    # Генерирует 15 Apps (5 сервисов × 3 env)
-│       ├── bootstrap-app.yaml     # "App of Apps" - следит за этой папкой
-│       └── repo-credentials.yaml  # Шаблон для GitLab credentials
+│   ├── argocd/
+│   │   ├── project.yaml           # ArgoCD Project
+│   │   ├── bootstrap-app.yaml     # "App of Apps" - следит за этой папкой
+│   │   └── platform-bootstrap-app.yaml  # ArgoCD Application для platform-bootstrap
+│   └── charts/
+│       └── platform-bootstrap/    # Single source of truth для платформы
+│           ├── Chart.yaml
+│           ├── values.yaml        # Сервисы, окружения, Vault config
+│           └── templates/
+│               ├── bootstrap-job.yaml     # Vault policies/roles/secrets
+│               ├── applicationset.yaml    # Генерирует 15 Apps
+│               ├── vault-auth.yaml        # VaultAuth per environment
+│               └── namespaces.yaml        # Namespaces
 ├── infrastructure/
 │   ├── vault/                     # Vault + VSO
 │   │   ├── helm-values.yaml
@@ -791,18 +818,28 @@ kubectl logs -n vault-secrets-operator-system -l control-plane=controller-manage
 3. **Создать репозиторий в GitLab:**
    - `${GITLAB_GROUP}/my-new-service`
 
-4. **Добавить сервис в `.env`:**
-   ```bash
-   SERVICES="api-gateway auth-adapter web-grpc web-http health-demo my-new-service"
+4. **Добавить сервис в `gitops-config/charts/platform-bootstrap/values.yaml`:**
+   ```yaml
+   services:
+     # ... существующие сервисы
+     my-new-service:
+       syncWave: "0"
    ```
 
-5. **Перезапустить init-project.sh:**
+5. **Закоммитить и запушить изменения:**
    ```bash
-   ./scripts/init-project.sh
+   cd gitops-config
+   git add charts/platform-bootstrap/values.yaml
+   git commit -m "feat: add my-new-service to platform"
+   git push
    ```
-   Это обновит ApplicationSet и другие файлы.
 
-6. **Создать Vault секреты:**
+   ArgoCD автоматически:
+   - Создаст Vault policy и role для сервиса
+   - Создаст placeholder для секретов в Vault
+   - Сгенерирует ArgoCD Applications для всех окружений
+
+6. **Обновить секреты в Vault (опционально):**
    ```bash
    vault kv put secret/${VAULT_PATH_PREFIX}/my-new-service/dev/config KEY=value
    ```

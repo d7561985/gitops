@@ -1,0 +1,12 @@
+apiVersion: v2
+name: platform-bootstrap
+description: |
+  GitOps Platform Bootstrap - single source of truth for:
+  - Vault policies and Kubernetes auth roles
+  - Vault secret path placeholders
+  - ArgoCD ApplicationSet for all services
+  - VaultAuth resources per environment
+  - Namespace creation
+type: application
+version: 1.0.0
+appVersion: "1.0.0"

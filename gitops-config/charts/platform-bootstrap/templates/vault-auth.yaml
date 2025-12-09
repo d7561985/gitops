@@ -1,0 +1,28 @@
+{{- if .Values.vaultAuth.enabled }}
+{{- /*
+VaultAuth resources for each enabled environment
+Required by VSO to authenticate to Vault
+*/ -}}
+{{- range $envName, $env := .Values.environments }}
+{{- if $env.enabled }}
+---
+apiVersion: secrets.hashicorp.com/v1beta1
+kind: VaultAuth
+metadata:
+  name: vault-auth
+  namespace: {{ $.Values.global.namespacePrefix }}-{{ $envName }}
+  labels:
+    app.kubernetes.io/name: platform-bootstrap
+    app.kubernetes.io/component: vault-auth
+    environment: {{ $envName }}
+spec:
+  method: kubernetes
+  mount: kubernetes
+  kubernetes:
+    role: {{ $.Values.global.namespacePrefix }}-{{ $envName }}-default
+    serviceAccount: default
+    audiences:
+      {{- toYaml $.Values.vaultAuth.audiences | nindent 6 }}
+{{- end }}
+{{- end }}
+{{- end }}

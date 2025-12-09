@@ -66,12 +66,20 @@ argocd repo add https://gitlab.com/your-group/gitops-poc.git \
 # Or via UI: Settings → Repositories → Connect Repo
 ```
 
-### 4. Apply ApplicationSet
+### 4. Apply Bootstrap (запускает всё автоматически)
 
 ```bash
 kubectl apply -f gitops-config/argocd/project.yaml
-kubectl apply -f gitops-config/argocd/applicationset.yaml
+kubectl apply -f gitops-config/argocd/bootstrap-app.yaml
 ```
+
+Bootstrap Application автоматически создаёт:
+- **platform-bootstrap** — Helm chart, который генерирует:
+  - Namespaces (poc-dev, poc-staging, poc-prod)
+  - Vault policies и Kubernetes auth roles
+  - Vault secret placeholders
+  - ApplicationSet для всех сервисов
+  - VaultAuth ресурсы для каждого окружения
 
 ## Sync Waves
 

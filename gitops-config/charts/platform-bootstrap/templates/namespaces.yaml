@@ -1,0 +1,20 @@
+{{- if .Values.namespaces.enabled }}
+{{- /*
+Namespaces for each enabled environment
+*/ -}}
+{{- range $envName, $env := .Values.environments }}
+{{- if $env.enabled }}
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ $.Values.global.namespacePrefix }}-{{ $envName }}
+  labels:
+    app.kubernetes.io/name: platform-bootstrap
+    environment: {{ $envName }}
+    {{- range $key, $value := $.Values.namespaces.labels }}
+    {{ $key }}: {{ $value | quote }}
+    {{- end }}
+{{- end }}
+{{- end }}
+{{- end }}
