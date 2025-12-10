@@ -27,7 +27,7 @@ spec:
     path: argocd
     directory:
       recurse: false
-      include: '{project.yaml,platform-bootstrap-app.yaml}'
+      include: '{project.yaml,platform-bootstrap-app.yaml,infra-app.yaml}'
 
   destination:
     server: https://kubernetes.default.svc

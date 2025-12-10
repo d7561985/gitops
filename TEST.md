@@ -1,3 +1,10 @@
+## Фишки релиза
+
+- Фронтенд
+- Реплики
+- ИЗменить реурсы
+- Health Check
+
 # TEST API
 
 ## === web-http ==== ##
@@ -37,11 +44,7 @@ grpcwebcli -url http://127.0.0.1:8080/api -method grpc.health.v1.Health/Watch  -
 grpcwebcli -url http://127.0.0.1:8080/api -method grpc.health.v1.Health/Check
 ```
 
-## Фишки релиза
 
-1. Реплики
-2. ИЗменить реурсы
-3. Health Check
 
 ## Test Secrets
 

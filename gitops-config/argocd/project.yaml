@@ -12,6 +12,7 @@ spec:
   sourceRepos:
     - 'https://d7561985.github.io/k8app'
     - 'https://gitlab.com/gitops-poc-dzha/*'
+    - 'https://gitlab.com/gitops-poc-dzha/sentry-demo.git'
 
   destinations:
     - namespace: 'vault'
@@ -23,6 +24,8 @@ spec:
     - namespace: 'poc-staging'
       server: https://kubernetes.default.svc
     - namespace: 'poc-prod'
+      server: https://kubernetes.default.svc
+    - namespace: 'infra-dev'
       server: https://kubernetes.default.svc
 
   clusterResourceWhitelist:

@@ -19,6 +19,28 @@ clusters:
     addr: "health-demo-sv:8081"
     type: "grpc"
 
+  # Sentry Demo Services
+  - name: sentry-frontend
+    addr: "sentry-frontend-sv:4200"
+    type: "http"
+    health_check:
+      path: "/"
+      interval_seconds: 30
+
+  - name: sentry-game-engine
+    addr: "sentry-game-engine-sv:8082"
+    type: "http"
+    health_check:
+      path: "/health"
+      interval_seconds: 10
+
+  - name: sentry-payment
+    addr: "sentry-payment-sv:8083"
+    type: "http"
+    health_check:
+      path: "/health"
+      interval_seconds: 10
+
 apis:
   # gRPC-Web тестирование
   - name: FakeService
@@ -48,3 +70,37 @@ apis:
     methods:
       - name: Check
         auth: {policy: no-need}
+
+  # Sentry Demo - Frontend (static files)
+  - name: SentryFrontend
+    cluster: sentry-frontend
+    auth: {policy: no-need}
+    methods:
+      - name: "*"
+        auth: {policy: no-need}
+
+  # Sentry Demo - Game Engine API
+  - name: SentryGame
+    cluster: sentry-game-engine
+    auth: {policy: no-need}
+    methods:
+      - name: health
+        auth: {policy: no-need}
+      - name: spin
+        auth: {policy: required}
+      - name: slots
+        auth: {policy: no-need}
+
+  # Sentry Demo - Payment API
+  - name: SentryPayment
+    cluster: sentry-payment
+    auth: {policy: no-need}
+    methods:
+      - name: health
+        auth: {policy: no-need}
+      - name: deposit
+        auth: {policy: required}
+      - name: withdraw
+        auth: {policy: required}
+      - name: balance
+        auth: {policy: required}

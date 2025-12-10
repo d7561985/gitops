@@ -6,7 +6,8 @@
     { "path": "services/health-demo", "name": "health-demo" },
     { "path": "services/web-grpc", "name": "web-grpc" },
     { "path": "services/web-http", "name": "web-http" },
-    { "path": "gitops-config", "name": "gitops-config" }
+    { "path": "gitops-config", "name": "gitops-config" },
+    { "path": "services/sentry-demo", "name": "sentry-demo" }
   ],
   "settings": {
     "git.autoRepositoryDetection": true,

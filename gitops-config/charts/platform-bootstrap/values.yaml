@@ -69,6 +69,26 @@ services:
   health-demo:
     syncWave: "0"
 
+  # ---------------------------------------------------------------------------
+  # Sentry Demo Services (monorepo)
+  # ---------------------------------------------------------------------------
+  # These services come from a single monorepo with custom paths
+  # Repo: gitlab.com/gitops-poc-dzha/sentry-demo
+  sentry-frontend:
+    syncWave: "1"
+    repoURL: https://gitlab.com/gitops-poc-dzha/sentry-demo.git
+    path: frontend/.cicd
+
+  sentry-game-engine:
+    syncWave: "0"
+    repoURL: https://gitlab.com/gitops-poc-dzha/sentry-demo.git
+    path: game-engine/.cicd
+
+  sentry-payment:
+    syncWave: "0"
+    repoURL: https://gitlab.com/gitops-poc-dzha/sentry-demo.git
+    path: payment-service/.cicd
+
 # -----------------------------------------------------------------------------
 # Vault Configuration
 # -----------------------------------------------------------------------------
