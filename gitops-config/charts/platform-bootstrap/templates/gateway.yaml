@@ -2,34 +2,26 @@
 {{- /*
 Gateway resources for each enabled environment.
 Creates:
-  - Gateway namespace (gateway-{env})
-  - Gateway resource with configured listeners
-  - Wildcard Certificate for each listener (via cert-manager)
+  - Gateway resource with configured listeners (in service namespace like poc-dev)
+  - Certificate for each HTTPS listener (via cert-manager)
 */ -}}
 
 {{- range $envName, $env := .Values.environments }}
 {{- if $env.enabled }}
 
-{{- /* Gateway namespace */ -}}
----
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: gateway-{{ $envName }}
-  labels:
-    app.kubernetes.io/name: platform-bootstrap
-    app.kubernetes.io/component: gateway
-    environment: {{ $envName }}
+{{- /* Determine namespace - use service namespace (poc-dev) or separate gateway namespace */ -}}
+{{- $gatewayNamespace := printf "%s-%s" $.Values.global.namespacePrefix $envName }}
 
 {{- /* Gateway resource */ -}}
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
-  name: gateway-{{ $envName }}
-  namespace: gateway-{{ $envName }}
+  name: gateway
+  namespace: {{ $gatewayNamespace }}
   labels:
     app.kubernetes.io/name: platform-bootstrap
+    app.kubernetes.io/component: gateway
     environment: {{ $envName }}
   annotations:
     {{- if $.Values.gateway.certManager.enabled }}
@@ -52,17 +44,10 @@ spec:
       {{- end }}
       allowedRoutes:
         namespaces:
-          {{- if $listener.allowedNamespaces }}
-          from: Selector
-          selector:
-            matchLabels:
-              {{- toYaml $listener.allowedNamespaces | nindent 14 }}
-          {{- else }}
-          from: All
-          {{- end }}
+          from: Same
     {{- end }}
 
-{{- /* Certificates for each listener (if cert-manager enabled) */ -}}
+{{- /* Certificates for each HTTPS listener (if cert-manager enabled) */ -}}
 {{- if $.Values.gateway.certManager.enabled }}
 {{- range $listenerName, $listener := $.Values.gateway.listeners }}
 {{- if ne ($listener.protocol | default "HTTPS") "HTTP" }}
@@ -71,7 +56,10 @@ apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
   name: {{ $listenerName }}-tls
-  namespace: gateway-{{ $envName }}
+  namespace: {{ $gatewayNamespace }}
+  labels:
+    app.kubernetes.io/name: platform-bootstrap
+    environment: {{ $envName }}
 spec:
   secretName: {{ $listener.certSecretName | default (printf "%s-tls" $listenerName) }}
   issuerRef:

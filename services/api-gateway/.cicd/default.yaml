@@ -129,3 +129,25 @@ extensions:
       limits:
         cpu: 100m
         memory: 128Mi
+
+# =============================================================================
+# Gateway API HTTPRoute (k8app v3.6.0+)
+# =============================================================================
+# Routes /api/* traffic from Gateway to api-gateway
+# More specific path (/api) takes precedence over frontend's (/)
+httpRoute:
+  enabled: true
+  parentRefs:
+    - name: gateway
+      namespace: poc-dev
+      sectionName: https-app
+  hostnames:
+    - app.demo-poc-01.work
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /api
+      backendRefs:
+        - name: api-gateway-sv
+          port: 8080

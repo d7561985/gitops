@@ -26,7 +26,7 @@ global:
   k8app:
     repoURL: https://d7561985.github.io/k8app
     chart: app
-    version: "3.5.2"
+    version: "3.6.0"
 
 # -----------------------------------------------------------------------------
 # Environments
@@ -143,60 +143,28 @@ applicationSet:
 # Creates Gateway resources for each environment with TLS termination.
 # Supports multiple listeners (domains) with automatic cert-manager certificates.
 gateway:
-  enabled: false  # Enable when ready to use Gateway API
+  enabled: true
 
   # GatewayClass name (cilium, nginx, etc.)
   gatewayClassName: cilium
 
+  # Gateway is created in the same namespace as services (poc-dev, poc-staging, etc.)
+  # This simplifies routing - no cross-namespace ReferenceGrants needed
+  useServiceNamespace: true
+
   # cert-manager integration
   certManager:
     enabled: true
-    clusterIssuer: letsencrypt-prod  # or letsencrypt-staging for testing
+    clusterIssuer: letsencrypt-staging  # Use staging first to avoid rate limits
 
   # Listeners - each listener is a domain/hostname
-  # Example configuration for a typical platform:
   listeners:
-    # Main site
+    # Main app (frontend + API on same domain via path routing)
     https-app:
-      hostname: "app.example.com"
-      protocol: HTTPS
-      port: 443
-      # Optional: additional DNS names for the certificate
-      # additionalDnsNames:
-      #   - "www.app.example.com"
-
-    # Public API
-    https-api:
-      hostname: "api.example.com"
-      protocol: HTTPS
-      port: 443
-
-    # Partner callbacks (typically needs IP whitelist via CiliumNetworkPolicy)
-    https-callbacks:
-      hostname: "callbacks.example.com"
-      protocol: HTTPS
-      port: 443
-
-    # Admin panel
-    https-admin:
-      hostname: "admin.example.com"
-      protocol: HTTPS
-      port: 443
-
-    # Admin API
-    https-admin-api:
-      hostname: "admin-api.example.com"
+      hostname: "app.demo-poc-01.work"
       protocol: HTTPS
       port: 443
 
   # Domain Mirrors - additional hostnames that route to the same service
-  # Useful for multi-region or backup domains
   domainMirrors:
     enabled: false
-    mirrors:
-      # Example:
-      # - primaryHost: app.example.com
-      #   mirrors:
-      #     - mirror1.example.com
-      #     - mirror2.example.net
-      #     - app-backup.example.org
