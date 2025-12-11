@@ -140,8 +140,8 @@ applicationSet:
 # -----------------------------------------------------------------------------
 # Gateway API Configuration
 # -----------------------------------------------------------------------------
-# Creates Gateway resources for each environment with TLS termination.
-# Supports multiple listeners (domains) with automatic cert-manager certificates.
+# Creates Gateway resources for each environment.
+# TLS is terminated at CloudFlare Tunnel - internal traffic is HTTP.
 gateway:
   enabled: true
 
@@ -152,18 +152,17 @@ gateway:
   # This simplifies routing - no cross-namespace ReferenceGrants needed
   useServiceNamespace: true
 
-  # cert-manager integration
+  # cert-manager integration (disabled - TLS at CloudFlare Tunnel)
   certManager:
-    enabled: true
-    clusterIssuer: letsencrypt-staging  # Use staging first to avoid rate limits
+    enabled: false
 
   # Listeners - each listener is a domain/hostname
   listeners:
     # Main app (frontend + API on same domain via path routing)
-    https-app:
+    http-app:
       hostname: "app.demo-poc-01.work"
-      protocol: HTTPS
-      port: 443
+      protocol: HTTP
+      port: 80
 
   # Domain Mirrors - additional hostnames that route to the same service
   domainMirrors:

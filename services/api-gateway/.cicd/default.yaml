@@ -140,7 +140,7 @@ httpRoute:
   parentRefs:
     - name: gateway
       namespace: poc-dev
-      sectionName: https-app
+      sectionName: http-app
   hostnames:
     - app.demo-poc-01.work
   rules:
