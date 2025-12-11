@@ -1,4 +1,4 @@
 # Web HTTP Backend
-# Re-tags nicholasjackson/fake-service for internal registry
+# Uses mendhak/http-https-echo for debugging request headers
 
-FROM nicholasjackson/fake-service:v0.19.1
+FROM mendhak/http-https-echo:latest

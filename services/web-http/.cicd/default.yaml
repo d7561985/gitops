@@ -1,37 +1,39 @@
 # Web HTTP Backend - Default Values
-# Uses nicholasjackson/fake-service for testing
+# Uses mendhak/http-https-echo for debugging request headers
 # Based on k8app/app chart v3.4.0: https://github.com/d7561985/k8app
 
 appName: web-http
-version: "v0.19.1"
+version: "latest"
 
 # Service Account (use default, k8app doesn't create SA)
 serviceAccountName: default
 
 # Image configuration (public image - no registry secret needed)
 image:
-  repository: nicholasjackson/fake-service
-  tag: v0.19.1
+  repository: mendhak/http-https-echo
+  tag: latest
   pullPolicy: IfNotPresent
 
 # No imagePullSecrets needed - public image
 
 # Service configuration (k8app format)
+# mendhak/http-https-echo listens on port 8080 (HTTP) and 8443 (HTTPS) by default
 service:
   enabled: true
   type: ClusterIP
   ports:
     http:
       externalPort: 9092
-      internalPort: 9092
+      internalPort: 8080
       protocol: TCP
 
 # Health checks (k8app format)
+# mendhak/http-https-echo responds on any path
 livenessProbe:
   enabled: true
   mode: httpGet
   httpGet:
-    port: 9092
+    port: 8080
     path: "/health"
   initialDelaySeconds: 5
   periodSeconds: 10
@@ -42,16 +44,15 @@ readinessProbe:
   enabled: true
   mode: httpGet
   httpGet:
-    port: 9092
+    port: 8080
     path: "/ready"
   initialDelaySeconds: 3
   periodSeconds: 5
   timeoutSeconds: 5
   failureThreshold: 3
 
-# fake-service configuration via configmap
+# mendhak/http-https-echo configuration via configmap
 configmap:
-  LISTEN_ADDR: "0.0.0.0:9092"
-  SERVER_TYPE: "http"
-  NAME: "web-http"
-  MESSAGE: "Hello from HTTP backend"
+  HTTP_PORT: "8080"
+  HTTPS_PORT: "8443"
+  PRESERVE_HEADER_CASE: "true"

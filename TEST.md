@@ -11,10 +11,11 @@
 ## === web-http ==== ##
 
 ```bash
-# Basic HTTP request through gateway
-curl -v 'http://127.0.0.1:8080/api/HttpService/health'
+# Basic HTTP request through gateway (mendhak/http-https-echo)
+# Возвращает JSON со всеми входящими headers
+curl -s 'http://127.0.0.1:8080/api/HttpService/health' | jq .
 
-# Expected: HTTP 200 with JSON response from fake-service
+# Expected: HTTP 200 with JSON containing path, headers, method, etc.
 ```
 
 ## auth-adapter
@@ -24,7 +25,13 @@ curl -v 'http://127.0.0.1:8080/api/HttpService/health'
 curl http://localhost:8080/api/HttpService/protected
 
 # С валидным токеном - должен вернуть 200
-curl -H "Cookie: token=demo-token" http://localhost:8080/api/HttpService/protected
+# Ответ содержит JSON со всеми headers (включая насыщенные от auth-adapter)
+curl -s -H "Cookie: token=demo-token" http://localhost:8080/api/HttpService/protected | jq .
+
+# Проверка только headers в ответе
+curl -s -H "Cookie: token=demo-token" http://localhost:8080/api/HttpService/protected | jq '.headers'
+
+# Expected headers от auth-adapter: X-User-Id, X-User-Email, X-User-Role и др.
 ```
 
 
