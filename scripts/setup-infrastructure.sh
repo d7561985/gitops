@@ -18,6 +18,7 @@ echo_header() { echo -e "\n${BLUE}=== $1 ===${NC}"; }
 
 echo "========================================"
 echo "  GitOps POC Infrastructure Setup"
+echo "  With Cilium CNI + Gateway API"
 echo "========================================"
 
 # ============================================
@@ -39,24 +40,79 @@ check_command kubectl || exit 1
 check_command helm || exit 1
 check_command docker || exit 1
 
+# Optional but recommended
+check_command cilium || echo_warn "cilium CLI not installed (optional)"
+check_command vault || echo_warn "vault CLI not installed (optional)"
+
 # ============================================
-# Minikube Status
+# Minikube with Cilium CNI
 # ============================================
 
-echo_header "Checking Minikube"
+echo_header "Setting up Minikube with Cilium"
 
-if ! minikube status &> /dev/null; then
-    echo_warn "Minikube is not running. Starting..."
-    minikube start --cpus 4 --memory 8192 --disk-size 40g
+MINIKUBE_RUNNING=false
+if minikube status &> /dev/null; then
+    MINIKUBE_RUNNING=true
+    echo_warn "Minikube is already running."
+    echo ""
+    echo "For Cilium CNI, it's recommended to start fresh."
+    echo "Current CNI:"
+    kubectl get pods -n kube-system -l k8s-app=cilium &>/dev/null && echo "  Cilium detected" || echo "  NOT Cilium"
+    echo ""
+    read -p "Delete and recreate minikube? (y/N): " RECREATE
+    if [[ "$RECREATE" =~ ^[Yy]$ ]]; then
+        echo_info "Deleting existing minikube..."
+        minikube delete
+        MINIKUBE_RUNNING=false
+    fi
 fi
 
-echo_info "Minikube is running"
-echo_info "Kubernetes version: $(kubectl version --client --short 2>/dev/null || echo 'unknown')"
+if [ "$MINIKUBE_RUNNING" = false ]; then
+    echo_info "Starting Minikube with Cilium CNI..."
+    minikube start \
+        --cpus 4 \
+        --memory 8192 \
+        --disk-size 40g \
+        --network-plugin=cni \
+        --cni=false \
+        --kubernetes-version=v1.30.0
 
-# Enable addons
-echo_info "Enabling Minikube addons..."
-minikube addons enable ingress 2>/dev/null || true
+    # Wait for API server
+    echo_info "Waiting for Kubernetes API..."
+    kubectl wait --for=condition=Ready node/minikube --timeout=120s
+fi
+
+# Enable metrics-server addon
+echo_info "Enabling metrics-server addon..."
 minikube addons enable metrics-server 2>/dev/null || true
+
+# ============================================
+# Install Gateway API CRDs (MUST be before Cilium)
+# ============================================
+
+echo_header "Installing Gateway API CRDs"
+chmod +x "$ROOT_DIR/infrastructure/gateway-api/setup.sh"
+"$ROOT_DIR/infrastructure/gateway-api/setup.sh"
+
+# ============================================
+# Install Cilium CNI with Gateway API
+# ============================================
+
+echo_header "Installing Cilium CNI"
+chmod +x "$ROOT_DIR/infrastructure/cilium/setup.sh"
+"$ROOT_DIR/infrastructure/cilium/setup.sh"
+
+# Wait for networking to stabilize
+echo_info "Waiting for cluster networking to stabilize..."
+sleep 10
+
+# ============================================
+# Install cert-manager
+# ============================================
+
+echo_header "Installing cert-manager"
+chmod +x "$ROOT_DIR/infrastructure/cert-manager/setup.sh"
+"$ROOT_DIR/infrastructure/cert-manager/setup.sh"
 
 # ============================================
 # Install Vault + VSO
@@ -95,35 +151,33 @@ echo_info "Infrastructure setup complete!"
 echo "========================================"
 echo ""
 echo "Installed components:"
+echo "  - Cilium CNI with Gateway API (namespace: kube-system)"
+echo "  - Gateway API CRDs v1.2.0"
+echo "  - cert-manager (namespace: cert-manager)"
 echo "  - Vault (namespace: vault)"
 echo "  - Vault Secrets Operator (namespace: vault-secrets-operator-system)"
 echo "  - ArgoCD (namespace: argocd)"
-echo "  - vault-admin-token secret (for platform-bootstrap)"
+echo ""
+echo "GatewayClass available:"
+kubectl get gatewayclass 2>/dev/null || echo "  (none yet - Cilium may still be initializing)"
 echo ""
 echo "Next steps:"
 echo ""
-echo "1. Setup registry secrets (for GitLab Container Registry):"
-echo "   ./scripts/setup-registry-secret.sh"
+echo "1. (Optional) Setup CloudFlare for automatic TLS:"
+echo "   export CLOUDFLARE_API_TOKEN=your-token"
+echo "   ./infrastructure/cert-manager/setup.sh"
 echo ""
-echo "2. Build local images (for testing without registry):"
-echo "   ./scripts/build-local-images.sh"
+echo "2. Setup registry secrets (for GitLab Container Registry):"
+echo "   ./scripts/setup-registry-secret.sh"
 echo ""
 echo "3. Add GitLab repo credentials to ArgoCD:"
 echo "   kubectl port-forward svc/argocd-server -n argocd 8080:443"
 echo "   # Get password: kubectl get secret argocd-initial-admin-secret -n argocd -o jsonpath='{.data.password}' | base64 -d"
-echo "   # Login: admin / <password>"
-echo "   # UI: Settings -> Repositories -> Connect Repo"
 echo ""
 echo "4. Apply bootstrap (starts everything automatically):"
 echo "   kubectl apply -f gitops-config/argocd/project.yaml"
 echo "   kubectl apply -f gitops-config/argocd/bootstrap-app.yaml"
 echo ""
-echo "   This will automatically:"
-echo "   - Create namespaces (poc-dev, poc-staging, poc-prod)"
-echo "   - Create Vault policies and roles"
-echo "   - Create Vault secret placeholders"
-echo "   - Deploy all services via ApplicationSet"
-echo ""
-echo "Note: setup-vault-secrets.sh is NO LONGER NEEDED!"
-echo "      platform-bootstrap chart handles all Vault configuration."
+echo "5. Access Hubble UI (network observability):"
+echo "   cilium hubble ui"
 echo ""

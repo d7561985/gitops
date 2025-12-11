@@ -1,0 +1,154 @@
+{{- if and .Values.gateway.enabled .Values.gateway.domainMirrors.enabled }}
+{{- /*
+Domain Mirrors - creates additional HTTPRoutes for mirror domains.
+This allows multiple hostnames to route to the same service.
+
+The mirrors are defined in values.yaml under gateway.domainMirrors.mirrors
+and a Job generates HTTPRoute resources for each mirror.
+*/ -}}
+
+{{- range $envName, $env := .Values.environments }}
+{{- if $env.enabled }}
+
+{{- /* ConfigMap with mirror definitions */ -}}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: domain-mirrors-config
+  namespace: gateway-{{ $envName }}
+  labels:
+    app.kubernetes.io/name: platform-bootstrap
+    app.kubernetes.io/component: domain-mirrors
+data:
+  mirrors.yaml: |
+    {{- toYaml $.Values.gateway.domainMirrors.mirrors | nindent 4 }}
+
+{{- /* Job to create HTTPRoutes for mirrors */ -}}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: domain-mirrors-sync-{{ now | date "20060102150405" }}
+  namespace: gateway-{{ $envName }}
+  labels:
+    app.kubernetes.io/name: platform-bootstrap
+    app.kubernetes.io/component: domain-mirrors
+  annotations:
+    argocd.argoproj.io/hook: PreSync
+    argocd.argoproj.io/hook-delete-policy: HookSucceeded
+spec:
+  ttlSecondsAfterFinished: 300
+  backoffLimit: 3
+  template:
+    spec:
+      restartPolicy: OnFailure
+      serviceAccountName: domain-mirrors-sa
+      containers:
+        - name: mirror-sync
+          image: bitnami/kubectl:latest
+          command:
+            - /bin/bash
+            - -c
+            - |
+              set -e
+
+              echo "=== Domain Mirrors Sync ==="
+
+              # Read mirrors config
+              MIRRORS_FILE="/config/mirrors.yaml"
+              if [ ! -f "$MIRRORS_FILE" ]; then
+                echo "No mirrors configured"
+                exit 0
+              fi
+
+              # Install yq for YAML parsing
+              curl -sL https://github.com/mikefarah/yq/releases/download/v4.40.5/yq_linux_amd64 -o /tmp/yq
+              chmod +x /tmp/yq
+
+              # Parse and create HTTPRoutes for each mirror
+              /tmp/yq e '.[] | .primaryHost as $primary | .mirrors[] | {"primary": $primary, "mirror": .}' "$MIRRORS_FILE" -o json | while read -r line; do
+                PRIMARY=$(echo "$line" | /tmp/yq e '.primary' -)
+                MIRROR=$(echo "$line" | /tmp/yq e '.mirror' -)
+
+                if [ -z "$PRIMARY" ] || [ -z "$MIRROR" ]; then
+                  continue
+                fi
+
+                ROUTE_NAME="mirror-$(echo "$MIRROR" | tr '.' '-' | tr -d '*')"
+
+                echo "Creating HTTPRoute for mirror: $MIRROR -> $PRIMARY"
+
+                cat <<EOF | kubectl apply -f -
+              apiVersion: gateway.networking.k8s.io/v1
+              kind: HTTPRoute
+              metadata:
+                name: ${ROUTE_NAME}
+                namespace: {{ $.Values.global.namespacePrefix }}-{{ $envName }}
+                labels:
+                  app.kubernetes.io/name: domain-mirror
+                  app.kubernetes.io/managed-by: domain-mirrors-job
+                  mirror-of: "${PRIMARY}"
+              spec:
+                parentRefs:
+                  - name: gateway-{{ $envName }}
+                    namespace: gateway-{{ $envName }}
+                hostnames:
+                  - "${MIRROR}"
+                rules:
+                  - matches:
+                      - path:
+                          type: PathPrefix
+                          value: /
+                    backendRefs:
+                      - name: $(kubectl get httproute -n {{ $.Values.global.namespacePrefix }}-{{ $envName }} -l "app.kubernetes.io/primary-host=${PRIMARY}" -o jsonpath='{.items[0].spec.rules[0].backendRefs[0].name}' 2>/dev/null || echo "frontend-sv")
+                        port: $(kubectl get httproute -n {{ $.Values.global.namespacePrefix }}-{{ $envName }} -l "app.kubernetes.io/primary-host=${PRIMARY}" -o jsonpath='{.items[0].spec.rules[0].backendRefs[0].port}' 2>/dev/null || echo "80")
+              EOF
+              done
+
+              echo "=== Mirror sync complete ==="
+          volumeMounts:
+            - name: config
+              mountPath: /config
+      volumes:
+        - name: config
+          configMap:
+            name: domain-mirrors-config
+
+{{- /* ServiceAccount for the Job */ -}}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: domain-mirrors-sa
+  namespace: gateway-{{ $envName }}
+
+{{- /* RBAC for the Job */ -}}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: domain-mirrors-role
+  namespace: {{ $.Values.global.namespacePrefix }}-{{ $envName }}
+rules:
+  - apiGroups: ["gateway.networking.k8s.io"]
+    resources: ["httproutes"]
+    verbs: ["get", "list", "create", "update", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: domain-mirrors-rolebinding
+  namespace: {{ $.Values.global.namespacePrefix }}-{{ $envName }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: domain-mirrors-role
+subjects:
+  - kind: ServiceAccount
+    name: domain-mirrors-sa
+    namespace: gateway-{{ $envName }}
+
+{{- end }}
+{{- end }}
+{{- end }}

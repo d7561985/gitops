@@ -4,6 +4,7 @@
 - Реплики
 - ИЗменить реурсы
 - Health Check
+- Canary / Blue/Green
 
 # TEST API
 

@@ -1,0 +1,44 @@
+# cert-manager Helm values
+# https://artifacthub.io/packages/helm/cert-manager/cert-manager
+
+# Install CRDs with Helm
+crds:
+  enabled: true
+  keep: true
+
+# Replica count
+replicaCount: 1
+
+# Enable Gateway API support
+featureGates: "ExperimentalGatewayAPISupport=true"
+
+# Resources for dev environment
+resources:
+  requests:
+    cpu: 10m
+    memory: 32Mi
+  limits:
+    cpu: 100m
+    memory: 128Mi
+
+webhook:
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      cpu: 100m
+      memory: 128Mi
+
+cainjector:
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      cpu: 100m
+      memory: 128Mi
+
+# Prometheus monitoring (optional)
+prometheus:
+  enabled: false

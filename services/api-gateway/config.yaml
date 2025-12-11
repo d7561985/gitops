@@ -24,7 +24,7 @@ clusters:
     addr: "sentry-frontend-sv:4200"
     type: "http"
     health_check:
-      path: "/"
+      path: "/healthz"
       interval_seconds: 30
 
   - name: sentry-game-engine

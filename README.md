@@ -912,6 +912,97 @@ kubectl describe pod -n poc-dev -l app=api-gateway
 
 ---
 
+## CloudFlare Integration
+
+### TLS Certificates (cert-manager + DNS01)
+
+Автоматические TLS сертификаты через Let's Encrypt с DNS01 challenge.
+
+#### Создание CloudFlare API Token
+
+1. Перейти в [CloudFlare API Tokens](https://dash.cloudflare.com/profile/api-tokens)
+
+2. Нажать **Create Token**
+
+3. Использовать шаблон **"Edit zone DNS"** или создать custom token:
+   - **Zone / DNS / Edit** — редактирование DNS записей
+   - **Zone / Zone / Read** — чтение информации о зоне
+   - **Zone Resources:** Include All Zones (или конкретная зона)
+
+4. Добавить токен в `.env`:
+   ```bash
+   CLOUDFLARE_API_TOKEN="your-actual-token"
+   ```
+
+5. Запустить setup:
+   ```bash
+   ./infrastructure/cert-manager/setup.sh
+   ```
+
+### CloudFlare Tunnel (expose local services)
+
+Позволяет выставить minikube сервисы в интернет без публичного IP и открытых портов.
+
+#### Как это работает
+
+```
+Internet → CloudFlare Edge → Tunnel → cloudflared pod → Gateway → Services
+                                      (outbound only)
+```
+
+- **Outbound-only connection** — не нужен публичный IP или открытые порты
+- **Automatic TLS** — CloudFlare терминирует TLS на edge
+- **Zero Trust** — интегрируется с CloudFlare Access для авторизации
+
+#### Создание Tunnel
+
+1. Перейти в [CloudFlare Zero Trust](https://one.dash.cloudflare.com/)
+
+2. **Networks** → **Tunnels** → **Create a tunnel**
+
+3. Выбрать **Cloudflared** connector
+
+4. Назвать tunnel (например: `minikube-dev`)
+
+5. Выбрать **Docker** environment → скопировать **token** (начинается с `eyJ...`)
+
+6. Добавить в `.env`:
+   ```bash
+   CLOUDFLARE_TUNNEL_TOKEN="eyJhIjoiNWFi..."
+   ```
+
+7. Запустить setup:
+   ```bash
+   ./infrastructure/cloudflare-tunnel/setup.sh
+   ```
+
+8. Настроить **Public Hostname** в dashboard:
+   | Public Hostname | Service |
+   |-----------------|---------|
+   | `app.example.com` | `http://gateway-dev-cilium-gateway.gateway-dev.svc:80` |
+   | `api.example.com` | `http://gateway-dev-cilium-gateway.gateway-dev.svc:80` |
+
+#### Когда использовать
+
+| Сценарий | Решение |
+|----------|---------|
+| Local dev с реальным доменом | CloudFlare Tunnel |
+| Показать demo клиенту | CloudFlare Tunnel |
+| Webhook тестирование (Stripe, GitHub) | CloudFlare Tunnel |
+| Production с публичным IP | cert-manager + DNS01 |
+
+#### Quick Tunnel (без регистрации)
+
+Для быстрого тестирования без настройки:
+```bash
+# Запустить временный tunnel
+cloudflared tunnel --url http://localhost:8080
+
+# Получите URL типа: https://random-name.trycloudflare.com
+```
+
+---
+
 ## Ссылки
 
 - [GitLab Agent CI/CD Workflow](https://docs.gitlab.com/user/clusters/agent/ci_cd_workflow/)
@@ -921,3 +1012,6 @@ kubectl describe pod -n poc-dev -l app=api-gateway
 - [ArgoCD Multi-Source Applications](https://argo-cd.readthedocs.io/en/stable/user-guide/multiple_sources/)
 - [Vault Secrets Operator](https://developer.hashicorp.com/vault/docs/deploy/kubernetes/vso)
 - [k8app Helm Chart](https://github.com/d7561985/k8app)
+- [CloudFlare Tunnel Kubernetes Guide](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/deployment-guides/kubernetes/)
+- [cert-manager CloudFlare DNS01](https://cert-manager.io/docs/configuration/acme/dns01/cloudflare/)
+- [Kubernetes Gateway API](https://gateway-api.sigs.k8s.io/)

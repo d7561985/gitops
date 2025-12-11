@@ -1,0 +1,37 @@
+# Cilium Helm values for GitOps POC
+# https://docs.cilium.io/en/stable/helm-reference/
+
+# IPAM mode - let Kubernetes manage IPs
+ipam:
+  mode: kubernetes
+
+# Replace kube-proxy entirely
+kubeProxyReplacement: true
+
+# Enable Gateway API support
+gatewayAPI:
+  enabled: true
+
+# Enable L7 proxy (required for Gateway API)
+l7Proxy: true
+
+# Hubble - observability
+hubble:
+  enabled: true
+  relay:
+    enabled: true
+  ui:
+    enabled: true
+
+# For minikube/local development - use NodePort for LoadBalancer services
+# In production, you'd use cloud provider's LB or MetalLB
+loadBalancer:
+  mode: snat
+
+# Operator settings
+operator:
+  replicas: 1
+
+# Enable debug for troubleshooting (disable in production)
+debug:
+  enabled: false

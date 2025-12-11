@@ -7,7 +7,7 @@ branch: main
 # Image - CI updates these values
 image:
   repository: registry.gitlab.com/gitops-poc-dzha/api-gateway
-  tag: 0d27cd64
+  tag: 0584a1e7
   pullPolicy: IfNotPresent
 # Replicas
 replicas: 1
@@ -29,3 +29,10 @@ labels:
 # Annotations for ArgoCD
 annotations:
   argocd.argoproj.io/sync-wave: "2" # Deploy after auth-adapter
+# Auth-adapter sidecar - override image from GitLab registry
+extensions:
+  auth-adapter:
+    image:
+      repository: registry.gitlab.com/gitops-poc-dzha/auth-adapter
+      tag: latest
+      pullPolicy: IfNotPresent

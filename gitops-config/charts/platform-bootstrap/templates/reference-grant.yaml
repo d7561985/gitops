@@ -1,0 +1,48 @@
+{{- if .Values.gateway.enabled }}
+{{- /*
+ReferenceGrant resources to allow HTTPRoutes from service namespaces
+to reference the Gateway in gateway-{env} namespace.
+
+Also allows HTTPRoutes to reference Services in other namespaces
+(for cross-service routing like frontend -> api-gateway).
+*/ -}}
+
+{{- range $envName, $env := .Values.environments }}
+{{- if $env.enabled }}
+
+{{- /* Allow HTTPRoutes from service namespace to attach to Gateway */ -}}
+---
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: allow-routes-from-services
+  namespace: gateway-{{ $envName }}
+spec:
+  from:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      namespace: {{ $.Values.global.namespacePrefix }}-{{ $envName }}
+  to:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: gateway-{{ $envName }}
+
+{{- /* Allow HTTPRoutes to reference Services across namespaces */ -}}
+---
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: allow-backend-refs
+  namespace: {{ $.Values.global.namespacePrefix }}-{{ $envName }}
+spec:
+  from:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      namespace: {{ $.Values.global.namespacePrefix }}-{{ $envName }}
+  to:
+    - group: ""
+      kind: Service
+
+{{- end }}
+{{- end }}
+{{- end }}

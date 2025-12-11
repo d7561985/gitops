@@ -12,6 +12,8 @@ metadata:
   labels:
     app.kubernetes.io/name: platform-bootstrap
     environment: {{ $envName }}
+    # Allow Gateway API HTTPRoutes to attach to Gateway
+    gateway-access: "true"
     {{- range $key, $value := $.Values.namespaces.labels }}
     {{ $key }}: {{ $value | quote }}
     {{- end }}

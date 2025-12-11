@@ -1,0 +1,93 @@
+{{- if .Values.gateway.enabled }}
+{{- /*
+Gateway resources for each enabled environment.
+Creates:
+  - Gateway namespace (gateway-{env})
+  - Gateway resource with configured listeners
+  - Wildcard Certificate for each listener (via cert-manager)
+*/ -}}
+
+{{- range $envName, $env := .Values.environments }}
+{{- if $env.enabled }}
+
+{{- /* Gateway namespace */ -}}
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: gateway-{{ $envName }}
+  labels:
+    app.kubernetes.io/name: platform-bootstrap
+    app.kubernetes.io/component: gateway
+    environment: {{ $envName }}
+
+{{- /* Gateway resource */ -}}
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: gateway-{{ $envName }}
+  namespace: gateway-{{ $envName }}
+  labels:
+    app.kubernetes.io/name: platform-bootstrap
+    environment: {{ $envName }}
+  annotations:
+    {{- if $.Values.gateway.certManager.enabled }}
+    cert-manager.io/cluster-issuer: {{ $.Values.gateway.certManager.clusterIssuer }}
+    {{- end }}
+spec:
+  gatewayClassName: {{ $.Values.gateway.gatewayClassName }}
+  listeners:
+    {{- range $listenerName, $listener := $.Values.gateway.listeners }}
+    - name: {{ $listenerName }}
+      protocol: {{ $listener.protocol | default "HTTPS" }}
+      port: {{ $listener.port | default 443 }}
+      hostname: {{ $listener.hostname | quote }}
+      {{- if eq ($listener.protocol | default "HTTPS") "HTTPS" }}
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: {{ $listener.certSecretName | default (printf "%s-tls" $listenerName) }}
+            kind: Secret
+      {{- end }}
+      allowedRoutes:
+        namespaces:
+          {{- if $listener.allowedNamespaces }}
+          from: Selector
+          selector:
+            matchLabels:
+              {{- toYaml $listener.allowedNamespaces | nindent 14 }}
+          {{- else }}
+          from: All
+          {{- end }}
+    {{- end }}
+
+{{- /* Certificates for each listener (if cert-manager enabled) */ -}}
+{{- if $.Values.gateway.certManager.enabled }}
+{{- range $listenerName, $listener := $.Values.gateway.listeners }}
+{{- if ne ($listener.protocol | default "HTTPS") "HTTP" }}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ $listenerName }}-tls
+  namespace: gateway-{{ $envName }}
+spec:
+  secretName: {{ $listener.certSecretName | default (printf "%s-tls" $listenerName) }}
+  issuerRef:
+    name: {{ $.Values.gateway.certManager.clusterIssuer }}
+    kind: ClusterIssuer
+  dnsNames:
+    - {{ $listener.hostname | quote }}
+    {{- if $listener.additionalDnsNames }}
+    {{- range $listener.additionalDnsNames }}
+    - {{ . | quote }}
+    {{- end }}
+    {{- end }}
+{{- end }}
+{{- end }}
+{{- end }}
+
+{{- end }}
+{{- end }}
+{{- end }}
