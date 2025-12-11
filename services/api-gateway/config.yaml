@@ -41,6 +41,14 @@ clusters:
       path: "/health"
       interval_seconds: 10
 
+  # Wager/Bonus service (PHP/Symfony)
+  - name: sentry-wager
+    addr: "sentry-wager-sv:8085"
+    type: "http"
+    health_check:
+      path: "/health"
+      interval_seconds: 10
+
 apis:
   # gRPC-Web тестирование
   - name: FakeService
@@ -71,36 +79,66 @@ apis:
       - name: Check
         auth: {policy: no-need}
 
-  # Sentry Demo - Frontend (static files)
-  - name: SentryFrontend
-    cluster: sentry-frontend
-    auth: {policy: no-need}
-    methods:
-      - name: "*"
-        auth: {policy: no-need}
-
   # Sentry Demo - Game Engine API
-  - name: SentryGame
+  # Routes: /api/game/* → game-engine /*
+  # Example: /api/game/calculate → /calculate
+  - name: game
     cluster: sentry-game-engine
     auth: {policy: no-need}
     methods:
       - name: health
         auth: {policy: no-need}
-      - name: spin
-        auth: {policy: required}
-      - name: slots
+      - name: calculate
+        auth: {policy: no-need}
+      - name: business-metrics
+        auth: {policy: no-need}
+      - name: debug
         auth: {policy: no-need}
 
   # Sentry Demo - Payment API
-  - name: SentryPayment
+  # Routes: /api/payment/* → payment-service /*
+  # Example: /api/payment/process → /process
+  - name: payment
     cluster: sentry-payment
     auth: {policy: no-need}
     methods:
       - name: health
         auth: {policy: no-need}
-      - name: deposit
-        auth: {policy: required}
-      - name: withdraw
-        auth: {policy: required}
-      - name: balance
-        auth: {policy: required}
+      - name: process
+        auth: {policy: no-need}
+      - name: financial-metrics
+        auth: {policy: no-need}
+      - name: debug
+        auth: {policy: no-need}
+
+  # Sentry Demo - Wager API
+  # Routes: /api/wager/* → wager-service /wager/*
+  - name: wager
+    cluster: sentry-wager
+    auth: {policy: no-need}
+    methods:
+      - name: validate
+        auth: {policy: no-need}
+      - name: place
+        auth: {policy: no-need}
+      - name: history
+        auth: {policy: no-need}
+      - name: demo
+        auth: {policy: no-need}
+      - name: test
+        auth: {policy: no-need}
+
+  # Sentry Demo - Bonus API
+  # Routes: /api/bonus/* → wager-service /bonus/*
+  - name: bonus
+    cluster: sentry-wager
+    auth: {policy: no-need}
+    methods:
+      - name: claim
+        auth: {policy: no-need}
+      - name: progress
+        auth: {policy: no-need}
+      - name: convert
+        auth: {policy: no-need}
+      - name: demo
+        auth: {policy: no-need}

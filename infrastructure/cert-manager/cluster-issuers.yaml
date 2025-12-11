@@ -1,5 +1,6 @@
 # ClusterIssuers for Let's Encrypt with CloudFlare DNS01
 # Supports wildcard certificates
+# Uses public DNS servers for verification (not internal CoreDNS)
 
 ---
 # Staging issuer (for testing - higher rate limits)
@@ -20,6 +21,9 @@ spec:
             apiTokenSecretRef:
               name: cloudflare-api-token
               key: api-token
+          # Use public DNS servers for challenge verification
+          # This fixes issues with internal CoreDNS not resolving external domains
+          cnameStrategy: Follow
 
 ---
 # Production issuer (real certificates)
@@ -40,3 +44,4 @@ spec:
             apiTokenSecretRef:
               name: cloudflare-api-token
               key: api-token
+          cnameStrategy: Follow
