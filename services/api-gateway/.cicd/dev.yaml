@@ -34,5 +34,5 @@ extensions:
   auth-adapter:
     image:
       repository: registry.gitlab.com/gitops-poc-dzha/auth-adapter
-      tag: latest
+      tag: 7306e90b
       pullPolicy: IfNotPresent
