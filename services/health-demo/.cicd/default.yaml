@@ -30,6 +30,10 @@ service:
       externalPort: 8081
       internalPort: 8081
       protocol: TCP
+    metrics:
+      externalPort: 9090
+      internalPort: 9090
+      protocol: TCP
 
 # Health checks - gRPC tcpSocket fallback (k8app format)
 livenessProbe:
@@ -55,6 +59,16 @@ readinessProbe:
 # Command line args passed to the binary
 args:
   - "-port=8081"
+  - "-metrics-port=9090"
+
+# =============================================================================
+# Prometheus ServiceMonitor (k8app v3.8.0+)
+# =============================================================================
+serviceMonitor:
+  enabled: true
+  port: "metrics"
+  path: "/metrics"
+  interval: 30s
 
 # =============================================================================
 # Secrets Configuration (k8app v3.4.0+)
