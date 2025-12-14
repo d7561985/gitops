@@ -1,19 +1,56 @@
-# Vault Helm Chart Values for Minikube (Dev Mode)
+# Vault Helm Chart Values
 # Source: https://developer.hashicorp.com/vault/docs/platform/k8s/helm
+#
+# Mode selection:
+#   - Dev mode (dev.enabled: true): No persistence, auto-unsealed, root token "root"
+#   - Standalone mode (standalone.enabled: true): Persistent storage, requires init/unseal
 
 global:
   enabled: true
 
 server:
-  # Dev mode for POC - NOT FOR PRODUCTION
-  dev:
-    enabled: true
-    devRootToken: "root"
+  # ==========================================================================
+  # Dev Mode - FOR LOCAL DEVELOPMENT ONLY
+  # ==========================================================================
+  # Pros: Auto-unsealed, no init required, easy to use
+  # Cons: Data lost on restart, insecure root token
+  # dev:
+  #   enabled: true
+  #   devRootToken: "root"
 
+  # ==========================================================================
+  # Standalone Mode - FOR PERSISTENT STORAGE
+  # ==========================================================================
+  # Pros: Data persisted, production-like, secure
+  # Cons: Requires init and unseal after restart
   standalone:
+    enabled: true
+    config: |
+      ui = true
+
+      listener "tcp" {
+        tls_disable = 1
+        address = "[::]:8200"
+        cluster_address = "[::]:8201"
+      }
+
+      storage "file" {
+        path = "/vault/data"
+      }
+
+  # HA mode - disabled for single-node setup
+  ha:
     enabled: false
 
-  ha:
+  # Persistent storage
+  dataStorage:
+    enabled: true
+    size: 1Gi
+    storageClass: null  # Use default storage class
+    accessMode: ReadWriteOnce
+
+  # Audit logs storage (optional)
+  auditStorage:
     enabled: false
 
   resources:
@@ -31,13 +68,17 @@ server:
     port: 8200
 
   # Readiness/Liveness probes
+  # IMPORTANT: sealedcode=204 allows sealed Vault to pass probes
+  # Without this, pod enters CrashLoopBackOff before we can unseal
   readinessProbe:
     enabled: true
     path: "/v1/sys/health?standbyok=true&sealedcode=204&uninitcode=204"
 
   livenessProbe:
     enabled: true
-    path: "/v1/sys/health?standbyok=true"
+    # CRITICAL: Must include sealedcode=204 for standalone mode!
+    # Default path without sealedcode will fail on sealed Vault
+    path: "/v1/sys/health?standbyok=true&sealedcode=204&uninitcode=204"
     initialDelaySeconds: 60
 
 # Injector disabled - using VSO instead

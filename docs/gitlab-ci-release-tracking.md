@@ -215,10 +215,11 @@ variables:
 .release-template:
   stage: release
   image: alpine:3.19
+  variables:
+    ARGOCD_VERSION: "v2.13.2"  # Pin to specific version
   before_script:
-    # Install argocd CLI from ArgoCD server (ensures version compatibility)
     - apk add --no-cache curl
-    - curl -sSL -o /usr/local/bin/argocd "https://${ARGOCD_SERVER}/download/argocd-linux-amd64"
+    - curl -sSL -o /usr/local/bin/argocd "https://github.com/argoproj/argo-cd/releases/download/${ARGOCD_VERSION}/argocd-linux-amd64"
     - chmod +x /usr/local/bin/argocd
   script:
     - echo "Waiting for ${ARGOCD_APP_NAME} to sync and become healthy..."

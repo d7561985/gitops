@@ -12,3 +12,7 @@
 .vscode/
 *.swp
 *.swo
+
+# Vault keys - NEVER COMMIT
+.vault-keys
+infrastructure/vault/.vault-keys

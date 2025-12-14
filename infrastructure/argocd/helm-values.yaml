@@ -105,8 +105,16 @@ configs:
       end
       return hs
 
-    # Application sync timeout
-    timeout.reconciliation: 180s
+    # Application sync timeout (default 180s = 3 min)
+    # Reduced to 30s for faster CI feedback
+    timeout.reconciliation: 30s
+
+    # Webhook secret for GitLab (optional, for instant sync)
+    # Configure webhook in GitLab: Settings -> Webhooks
+    # URL: https://argocd.demo-poc-01.work/api/webhook
+    # Secret: <same as webhook.gitlab.secret below>
+    # Events: Push events
+    webhook.gitlab.secret: ${ARGOCD_WEBHOOK_SECRET:=""}
 
   # Repository credentials (add your GitLab credentials here)
   repositories: {}
