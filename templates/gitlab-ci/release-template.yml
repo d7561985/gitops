@@ -1,0 +1,98 @@
+# =============================================================================
+# GitLab CI Release Template - ArgoCD Integration
+# =============================================================================
+# Include this template to add release tracking to your pipeline.
+# The release stage waits for ArgoCD to sync and reports success/failure.
+#
+# Required CI/CD Variables (set at Group level):
+#   ARGOCD_SERVER     - ArgoCD server URL (e.g., argocd.demo-poc-01.work)
+#   ARGOCD_AUTH_TOKEN - ArgoCD API token for ci-readonly account
+#
+# Usage in your .gitlab-ci.yml:
+#   include:
+#     - project: 'gitops-poc-dzha/gitops-config'
+#       ref: main
+#       file: '/templates/gitlab-ci/release-template.yml'
+#
+#   release:dev:
+#     extends: .release-template
+#     variables:
+#       ARGOCD_APP_NAME: ${SERVICE_NAME}-dev
+#     needs:
+#       - job: update:dev
+#         optional: true
+#     rules:
+#       - if: $GITOPS_MODE == "pull" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+# =============================================================================
+
+variables:
+  # ArgoCD connection settings
+  ARGOCD_OPTS: "--grpc-web"
+  RELEASE_TIMEOUT: "300"  # 5 minutes
+
+# =============================================================================
+# Release Template
+# =============================================================================
+# Waits for ArgoCD application to sync and become healthy.
+# Shows detailed status on success or failure.
+.release-template:
+  stage: release
+  image: alpine:3.19
+  before_script:
+    - |
+      echo "============================================="
+      echo "Installing ArgoCD CLI..."
+      echo "============================================="
+    - apk add --no-cache curl
+    - curl -sSL -o /usr/local/bin/argocd "https://${ARGOCD_SERVER}/download/argocd-linux-amd64"
+    - chmod +x /usr/local/bin/argocd
+    - argocd version --client
+  script:
+    - |
+      echo ""
+      echo "============================================="
+      echo "Waiting for ArgoCD deployment"
+      echo "============================================="
+      echo "Application: ${ARGOCD_APP_NAME}"
+      echo "Server:      ${ARGOCD_SERVER}"
+      echo "Timeout:     ${RELEASE_TIMEOUT}s"
+      echo "============================================="
+      echo ""
+    - |
+      if argocd app wait ${ARGOCD_APP_NAME} \
+        --timeout ${RELEASE_TIMEOUT} \
+        --health \
+        --sync \
+        ${ARGOCD_OPTS}; then
+        echo ""
+        echo "============================================="
+        echo "RELEASE SUCCESSFUL"
+        echo "============================================="
+        echo "Application: ${ARGOCD_APP_NAME}"
+        echo "Image Tag:   ${CI_COMMIT_SHORT_SHA}"
+        echo "============================================="
+        echo ""
+        argocd app get ${ARGOCD_APP_NAME} ${ARGOCD_OPTS} || true
+      else
+        EXIT_CODE=$?
+        echo ""
+        echo "============================================="
+        echo "RELEASE FAILED"
+        echo "============================================="
+        echo "Application: ${ARGOCD_APP_NAME}"
+        echo "Exit Code:   ${EXIT_CODE}"
+        echo "============================================="
+        echo ""
+        echo "--- Application Status ---"
+        argocd app get ${ARGOCD_APP_NAME} ${ARGOCD_OPTS} 2>&1 || true
+        echo ""
+        echo "--- Application Resources ---"
+        argocd app resources ${ARGOCD_APP_NAME} ${ARGOCD_OPTS} 2>&1 || true
+        echo ""
+        echo "--- Recent Events (last 20 lines) ---"
+        argocd app logs ${ARGOCD_APP_NAME} ${ARGOCD_OPTS} 2>&1 | tail -20 || true
+        exit $EXIT_CODE
+      fi
+  environment:
+    name: $CI_ENVIRONMENT_NAME
+    action: start

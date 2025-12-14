@@ -63,3 +63,14 @@ grpcwebcli -url http://127.0.0.1:8080/api -method grpc.health.v1.Health/Check
 
 1. Релиз нескольких окружений одновременно
 2. Как релизить через Ingress + LB ( Claudflare)
+
+
+# 
+   ADMIN_TOKEN="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJhcmdvY2QiLCJzdWIiOiJhZG1pbjpsb2dpbi
+   IsImV4cCI6MTc2NTY1ODc4NSwibmJmIjoxNzY1NTcyMzg1LCJpYXQiOjE3NjU1NzIzODUsImp0aSI6ImZiNjQ4OTFjLTVmNj
+   ItNGI2Ny05NzI3LTU1MjIzMzcyZDEzYiJ9.TpcFf6MFdIcXBI6U28tDSqj_1KgBqlXVy4JhWO1W03c"
+   curl -s -k -X POST 'http://localhost:8083/api/v1/account/ci-readonly/token' \
+     -H "Authorization: Bearer $ADMIN_TOKEN" \
+     -H 'Content-Type: application/json' \
+     -d '{"name":"gitlab-ci"}'
+   Generate token for ci-readonly account

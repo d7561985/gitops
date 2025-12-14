@@ -3,6 +3,11 @@
 #
 # Pull-based (ArgoCD): CI builds image, updates .cicd/{env}.yaml, pushes
 # Push-based (GitLab Agent): CI builds image, deploys directly via helm
+#
+# Required CI/CD Variables (set at Group level):
+#   CI_PUSH_TOKEN     - Group Access Token with write_repository scope
+#   ARGOCD_SERVER     - ArgoCD server URL (e.g., argocd.demo-poc-01.work)
+#   ARGOCD_AUTH_TOKEN - ArgoCD API token for ci-readonly account
 
 variables:
   SERVICE_NAME: "health-demo"
@@ -21,10 +26,65 @@ variables:
   # GitOps mode: "pull" or "push"
   GITOPS_MODE: "pull"
 
+  # ArgoCD settings for release tracking
+  ARGOCD_OPTS: "--grpc-web"
+  RELEASE_TIMEOUT: "300"
+
 stages:
   - build
   - update-manifests
-  - deploy  # Only for push-based
+  - release      # Wait for ArgoCD deployment (pull-based)
+  - deploy       # Only for push-based
+
+# ============================================
+# Release Stage: Wait for ArgoCD deployment
+# ============================================
+.release-template:
+  stage: release
+  image: alpine:3.19
+  before_script:
+    - apk add --no-cache curl
+    - curl -sSL -o /usr/local/bin/argocd "https://${ARGOCD_SERVER}/download/argocd-linux-amd64"
+    - chmod +x /usr/local/bin/argocd
+  script:
+    - |
+      echo "============================================="
+      echo "Waiting for ArgoCD deployment"
+      echo "============================================="
+      echo "Application: ${ARGOCD_APP_NAME}"
+      echo "Server:      ${ARGOCD_SERVER}"
+      echo "Timeout:     ${RELEASE_TIMEOUT}s"
+      echo "============================================="
+    - |
+      if argocd app wait ${ARGOCD_APP_NAME} \
+        --timeout ${RELEASE_TIMEOUT} \
+        --health \
+        --sync \
+        ${ARGOCD_OPTS}; then
+        echo ""
+        echo "============================================="
+        echo "RELEASE SUCCESSFUL"
+        echo "============================================="
+        echo "Application: ${ARGOCD_APP_NAME}"
+        echo "Image Tag:   ${CI_COMMIT_SHORT_SHA}"
+        echo "============================================="
+        argocd app get ${ARGOCD_APP_NAME} ${ARGOCD_OPTS} || true
+      else
+        EXIT_CODE=$?
+        echo ""
+        echo "============================================="
+        echo "RELEASE FAILED"
+        echo "============================================="
+        echo "Application: ${ARGOCD_APP_NAME}"
+        echo "============================================="
+        echo ""
+        echo "--- Application Status ---"
+        argocd app get ${ARGOCD_APP_NAME} ${ARGOCD_OPTS} 2>&1 || true
+        echo ""
+        echo "--- Application Resources ---"
+        argocd app resources ${ARGOCD_APP_NAME} ${ARGOCD_OPTS} 2>&1 || true
+        exit $EXIT_CODE
+      fi
 
 # ============================================
 # Build Stage
@@ -190,3 +250,45 @@ deploy:prod:
   when: manual
   needs:
     - deploy:staging
+
+# ============================================
+# Release Stage: Wait for ArgoCD deployment
+# ============================================
+
+release:dev:
+  extends: .release-template
+  variables:
+    ARGOCD_APP_NAME: ${SERVICE_NAME}-dev
+  environment:
+    name: dev
+  needs:
+    - job: update:dev
+      optional: true
+  rules:
+    - if: $GITOPS_MODE == "pull" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+release:staging:
+  extends: .release-template
+  variables:
+    ARGOCD_APP_NAME: ${SERVICE_NAME}-staging
+  environment:
+    name: staging
+  needs:
+    - job: update:staging
+      optional: true
+  rules:
+    - if: $GITOPS_MODE == "pull" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  when: manual
+
+release:prod:
+  extends: .release-template
+  variables:
+    ARGOCD_APP_NAME: ${SERVICE_NAME}-prod
+  environment:
+    name: production
+  needs:
+    - job: update:prod
+      optional: true
+  rules:
+    - if: $GITOPS_MODE == "pull" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  when: manual

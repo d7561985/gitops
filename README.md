@@ -1003,6 +1003,53 @@ cloudflared tunnel --url http://localhost:8080
 
 ---
 
+## GitLab CI Release Tracking
+
+Отслеживание статуса релиза прямо в GitLab Pipeline. Разработчик видит успех или ошибку деплоя.
+
+```
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│  Developer  │────▶│  GitLab CI  │────▶│   ArgoCD    │────▶│  Kubernetes │
+│   commit    │     │ build+push  │     │   sync      │     │   deploy    │
+└─────────────┘     └──────┬──────┘     └─────────────┘     └─────────────┘
+                           │
+                           ▼
+                    ┌─────────────┐
+                    │   release   │ ◀── argocd app wait
+                    │   stage     │     --health --sync
+                    │             │
+                    │ ✅ Success  │
+                    │ ❌ Failed   │
+                    └─────────────┘
+```
+
+**Быстрый старт:**
+
+1. Создать ArgoCD API token:
+   ```bash
+   argocd account generate-token --account ci-readonly
+   ```
+
+2. Добавить GitLab CI/CD Variables:
+   - `ARGOCD_SERVER` — URL ArgoCD сервера
+   - `ARGOCD_AUTH_TOKEN` — JWT token
+
+3. Добавить release stage в `.gitlab-ci.yml` (см. [документацию](docs/gitlab-ci-release-tracking.md))
+
+**Подробное руководство:** [docs/gitlab-ci-release-tracking.md](docs/gitlab-ci-release-tracking.md)
+
+---
+
+## Документация
+
+| Документ | Описание |
+|----------|----------|
+| [GitLab CI Release Tracking](docs/gitlab-ci-release-tracking.md) | Отслеживание деплоя в GitLab Pipeline |
+| [Gateway API Plan](docs/gateway-api-plan.md) | Настройка Gateway API с Cilium |
+| [k8app Recommendations](docs/k8app-recommendations.md) | Рекомендации по использованию k8app chart |
+
+---
+
 ## Ссылки
 
 - [GitLab Agent CI/CD Workflow](https://docs.gitlab.com/user/clusters/agent/ci_cd_workflow/)
@@ -1010,6 +1057,7 @@ cloudflared tunnel --url http://localhost:8080
 - [GitLab Deploy Tokens](https://docs.gitlab.com/user/project/deploy_tokens/)
 - [ArgoCD ApplicationSet](https://argo-cd.readthedocs.io/en/stable/user-guide/application-set/)
 - [ArgoCD Multi-Source Applications](https://argo-cd.readthedocs.io/en/stable/user-guide/multiple_sources/)
+- [ArgoCD CI Automation](https://argo-cd.readthedocs.io/en/stable/user-guide/ci_automation/)
 - [Vault Secrets Operator](https://developer.hashicorp.com/vault/docs/deploy/kubernetes/vso)
 - [k8app Helm Chart](https://github.com/d7561985/k8app)
 - [CloudFlare Tunnel Kubernetes Guide](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/deployment-guides/kubernetes/)

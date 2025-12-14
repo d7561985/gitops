@@ -5,7 +5,8 @@ resources:
   - namespace.yaml
   - mongodb/deployment.yaml
   - mongodb/service.yaml
-  - redis/deployment.yaml
-  - redis/service.yaml
+  # Redis removed - each service now uses k8app cache feature (v3.7.0+)
+  # - redis/deployment.yaml
+  # - redis/service.yaml
   - rabbitmq/deployment.yaml
   - rabbitmq/service.yaml
