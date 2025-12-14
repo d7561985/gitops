@@ -135,9 +135,25 @@ chmod +x "$ROOT_DIR/infrastructure/argocd/setup.sh"
 # ============================================
 
 echo_header "Creating Vault admin token secret"
+
+# Get token from vault-keys secret (created by vault/setup.sh)
+VAULT_TOKEN=$(kubectl get secret vault-keys -n vault -o jsonpath='{.data.root-token}' 2>/dev/null | base64 -d || echo "")
+
+# Fallback to local file
+if [ -z "$VAULT_TOKEN" ] && [ -f "$ROOT_DIR/infrastructure/vault/.vault-keys" ]; then
+    source "$ROOT_DIR/infrastructure/vault/.vault-keys"
+    VAULT_TOKEN="$VAULT_ROOT_TOKEN"
+fi
+
+# Fallback for dev mode (backward compatibility)
+if [ -z "$VAULT_TOKEN" ]; then
+    echo_warn "No vault-keys found, using 'root' token (dev mode only)"
+    VAULT_TOKEN="root"
+fi
+
 kubectl create secret generic vault-admin-token \
     --namespace=vault \
-    --from-literal=token=root \
+    --from-literal=token="$VAULT_TOKEN" \
     --dry-run=client -o yaml | kubectl apply -f -
 echo_info "Created vault-admin-token secret in vault namespace"
 

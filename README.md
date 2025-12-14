@@ -2,6 +2,8 @@
 
 Демонстрация GitOps подходов (Push и Pull) с мультирепозиторной архитектурой на базе GitLab Agent и ArgoCD.
 
+> **Первый раз?** См. [Pre-flight Checklist](docs/PREFLIGHT-CHECKLIST.md) — полный чеклист настройки GitLab, CloudFlare и инфраструктуры.
+
 ## Quick Start (Конфигурация)
 
 ```bash
@@ -643,6 +645,32 @@ deploy:dev:
 
 ## Vault Secrets (k8app v3.4.0)
 
+### Vault Mode: Standalone с Persistence
+
+Vault работает в **standalone mode** с persistent storage (PVC). Это означает:
+
+- Данные сохраняются между рестартами pod
+- **Требуется unseal после каждого рестарта**
+- Ключи хранятся в K8s secret `vault-keys` и файле `.vault-keys`
+
+**Unseal после рестарта:**
+```bash
+./infrastructure/vault/unseal.sh
+
+# Или вручную:
+UNSEAL_KEY=$(kubectl get secret vault-keys -n vault -o jsonpath='{.data.unseal-key}' | base64 -d)
+kubectl exec vault-0 -n vault -- vault operator unseal "$UNSEAL_KEY"
+```
+
+**Полная переустановка Vault:**
+```bash
+helm uninstall vault -n vault
+kubectl delete pvc data-vault-0 -n vault
+./infrastructure/vault/setup.sh
+```
+
+> **Важно:** После переустановки нужно пересинхронизировать `platform-bootstrap` для создания policies и roles.
+
 ### Архитектура
 
 ```
@@ -1044,6 +1072,7 @@ cloudflared tunnel --url http://localhost:8080
 
 | Документ | Описание |
 |----------|----------|
+| [Pre-flight Checklist](docs/PREFLIGHT-CHECKLIST.md) | Полный чеклист первоначальной настройки |
 | [GitLab CI Release Tracking](docs/gitlab-ci-release-tracking.md) | Отслеживание деплоя в GitLab Pipeline |
 | [Gateway API Plan](docs/gateway-api-plan.md) | Настройка Gateway API с Cilium |
 | [k8app Recommendations](docs/k8app-recommendations.md) | Рекомендации по использованию k8app chart |
