@@ -23,11 +23,16 @@ spec:
           name: amqp
         - containerPort: 15672
           name: management
+        - containerPort: 15692
+          name: metrics
         env:
         - name: RABBITMQ_DEFAULT_USER
           value: "guest"
         - name: RABBITMQ_DEFAULT_PASS
           value: "guest"
+        # Enable Prometheus plugin (built-in since RabbitMQ 3.8)
+        - name: RABBITMQ_PLUGINS
+          value: "rabbitmq_management,rabbitmq_prometheus"
         resources:
           requests:
             cpu: 100m

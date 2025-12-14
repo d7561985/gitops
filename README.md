@@ -831,6 +831,87 @@ kubectl logs -n vault-secrets-operator-system -l control-plane=controller-manage
 
 ---
 
+## Monitoring (Prometheus + Grafana + Hubble)
+
+Система мониторинга построена на двух уровнях:
+
+### 1. Application Metrics (Prometheus)
+
+**kube-prometheus-stack** собирает метрики приложений:
+- Request latency, error rates, throughput
+- Business metrics (orders, users, etc.)
+- Resource usage (CPU, memory)
+- Custom application metrics
+
+### 2. Network Observability (Cilium Hubble)
+
+**Hubble** с eBPF даёт сетевую видимость:
+- L3/L4 network flows (кто с кем общается)
+- L7 visibility (HTTP, gRPC, DNS запросы)
+- Network policy enforcement
+- Service dependency maps
+
+> **Важно:** Hubble и Prometheus **дополняют** друг друга, не заменяют!
+
+### Быстрый доступ
+
+```bash
+# Grafana (метрики + дашборды)
+kubectl port-forward svc/kube-prometheus-stack-grafana -n monitoring 3000:80
+# URL: http://localhost:3000 (admin / admin)
+
+# Prometheus (raw метрики)
+kubectl port-forward svc/kube-prometheus-stack-prometheus -n monitoring 9090:9090
+
+# Hubble UI (сетевые потоки)
+cilium hubble ui
+```
+
+### Grafana Dashboards
+
+**Включены по умолчанию:**
+- Kubernetes cluster overview
+- Node exporter metrics
+- Pod/Deployment/StatefulSet metrics
+- CoreDNS metrics
+
+**Cilium/Hubble (импортировать вручную):**
+| Dashboard | Grafana ID |
+|-----------|------------|
+| Cilium Agent | 13286 |
+| Hubble | 13502 |
+| Hubble DNS | 13537 |
+| Hubble HTTP | 13538 |
+
+### Service Discovery
+
+Prometheus автоматически обнаруживает все сервисы через:
+
+1. **ServiceMonitor** — для сервисов с K8s Service (предпочтительно)
+2. **Pod annotations** — fallback для legacy приложений:
+   ```yaml
+   annotations:
+     prometheus.io/scrape: "true"
+     prometheus.io/port: "8080"
+     prometheus.io/path: "/metrics"
+   ```
+
+> **Note:** k8app пока не поддерживает ServiceMonitor нативно. См. [feature request](docs/k8app-servicemonitor-feature-request.md).
+
+### Redis Cache Metrics
+
+Для сервисов с `cache.enabled: true`:
+```yaml
+cache:
+  enabled: true
+  exporter:
+    enabled: true  # Redis exporter на порту 9121
+```
+
+Redis exporter автоматически скрейпится через ServiceMonitor.
+
+---
+
 ## Добавление нового сервиса
 
 1. **Скопировать шаблон:**
@@ -1076,6 +1157,128 @@ cloudflared tunnel --url http://localhost:8080
 | [GitLab CI Release Tracking](docs/gitlab-ci-release-tracking.md) | Отслеживание деплоя в GitLab Pipeline |
 | [Gateway API Plan](docs/gateway-api-plan.md) | Настройка Gateway API с Cilium |
 | [k8app Recommendations](docs/k8app-recommendations.md) | Рекомендации по использованию k8app chart |
+| [k8app ServiceMonitor Feature](docs/k8app-servicemonitor-feature-request.md) | Feature request для ServiceMonitor в k8app |
+
+---
+
+## Tech Stack
+
+### Infrastructure Layer
+
+| Component | Version | Description |
+|-----------|---------|-------------|
+| **Kubernetes** | 1.28+ | Container orchestration (Minikube for local dev) |
+| **Cilium** | 1.15+ | CNI plugin with eBPF, Gateway API support |
+| **Gateway API** | v1.0 | Kubernetes-native ingress (HTTPRoute, Gateway) |
+
+### GitOps & Deployment
+
+| Component | Version | Description |
+|-----------|---------|-------------|
+| **ArgoCD** | 2.9+ | GitOps continuous delivery, App of Apps pattern |
+| **GitLab CI/CD** | - | Build pipelines, container registry |
+| **GitLab Agent** | - | Push-based deployment option |
+| **Helm** | 3.12+ | Package manager, k8app chart v3.6.0 |
+
+### Security & Secrets
+
+| Component | Version | Description |
+|-----------|---------|-------------|
+| **HashiCorp Vault** | 1.15+ | Secrets management, KV v2 engine |
+| **Vault Secrets Operator (VSO)** | - | K8s-native Vault integration |
+| **cert-manager** | 1.13+ | TLS certificates automation (Let's Encrypt) |
+
+### Networking & Exposure
+
+| Component | Version | Description |
+|-----------|---------|-------------|
+| **CloudFlare Tunnel** | - | Zero-trust access, outbound-only connection |
+| **CloudFlare DNS** | - | DNS01 challenge for cert-manager |
+| **Envoy Proxy** | - | API Gateway (api-gateway service) |
+
+### Observability
+
+| Component | Version | Description |
+|-----------|---------|-------------|
+| **Prometheus** | kube-prometheus-stack 80.4.1 | Metrics collection, alerting |
+| **Grafana** | (included in stack) | Visualization, dashboards |
+| **Hubble** | (Cilium) | eBPF-based network observability |
+| **Sentry** | - | Error tracking, performance monitoring, distributed tracing |
+
+### Application Services
+
+| Service | Language/Framework | Description |
+|---------|-------------------|-------------|
+| **api-gateway** | Go + Envoy | API Gateway with ext_authz |
+| **auth-adapter** | Go | gRPC ext_authz service for Envoy |
+| **sentry-demo/frontend** | Angular 17 | SPA slot machine demo |
+| **sentry-demo/game-engine** | Python/Tornado | Game logic, MongoDB balance tracking |
+| **sentry-demo/wager-service** | PHP 8.2/Symfony | Bonus & wagering management |
+| **sentry-demo/payment-service** | Node.js | Payment processing |
+
+### Data Stores
+
+| Component | Usage |
+|-----------|-------|
+| **MongoDB** | Game state, user balances, wager history |
+| **RabbitMQ** | Message queue (game events) |
+| **Redis** | Caching |
+
+### Architecture Diagram
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                              CloudFlare Edge                                     │
+│  ┌─────────────────┐    ┌─────────────────┐                                     │
+│  │   DNS (*.work)  │    │   TLS Termination│                                    │
+│  └────────┬────────┘    └────────┬────────┘                                     │
+└───────────┼──────────────────────┼──────────────────────────────────────────────┘
+            │                      │
+            ▼                      ▼
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                         CloudFlare Tunnel (cloudflared)                          │
+│                              outbound-only connection                            │
+└────────────────────────────────────┬────────────────────────────────────────────┘
+                                     │
+                                     ▼
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                            Kubernetes (Minikube)                                 │
+│  ┌──────────────────────────────────────────────────────────────────────────┐   │
+│  │                         Gateway API (Cilium)                              │   │
+│  │   ┌─────────────┐    ┌─────────────────────────────────────────────┐     │   │
+│  │   │   Gateway   │───▶│              HTTPRoute Rules                 │     │   │
+│  │   │   (port 80) │    │  /api/game/* → game-engine                  │     │   │
+│  │   └─────────────┘    │  /api/bonus/* → wager-service               │     │   │
+│  │                      │  /api/wager/* → wager-service               │     │   │
+│  │                      │  /* → frontend                              │     │   │
+│  │                      └─────────────────────────────────────────────┘     │   │
+│  └──────────────────────────────────────────────────────────────────────────┘   │
+│                                                                                  │
+│  ┌─────────────────────────────────────────────────────────────────────────┐    │
+│  │                           poc-dev namespace                              │    │
+│  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌─────────────┐  │    │
+│  │  │   frontend   │  │ game-engine  │  │wager-service │  │api-gateway  │  │    │
+│  │  │  (Angular)   │  │  (Python)    │  │   (PHP)      │  │  (Envoy)    │  │    │
+│  │  └──────────────┘  └──────┬───────┘  └──────┬───────┘  └─────────────┘  │    │
+│  │                           │                 │                            │    │
+│  │                           ▼                 ▼                            │    │
+│  │                    ┌──────────────────────────────┐                      │    │
+│  │                    │     infra-dev namespace      │                      │    │
+│  │                    │  ┌────────┐  ┌────────────┐  │                      │    │
+│  │                    │  │MongoDB │  │  RabbitMQ  │  │                      │    │
+│  │                    │  └────────┘  └────────────┘  │                      │    │
+│  │                    └──────────────────────────────┘                      │    │
+│  └─────────────────────────────────────────────────────────────────────────┘    │
+│                                                                                  │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐                  │
+│  │  vault (ns)     │  │   argocd (ns)   │  │ cert-manager(ns)│                  │
+│  │  ┌───────────┐  │  │  ┌───────────┐  │  │ ┌─────────────┐ │                  │
+│  │  │   Vault   │  │  │  │  ArgoCD   │  │  │ │cert-manager │ │                  │
+│  │  │    VSO    │  │  │  │ App of Apps│  │  │ │ ClusterIssuer│ │                │
+│  │  └───────────┘  │  │  └───────────┘  │  │ └─────────────┘ │                  │
+│  └─────────────────┘  └─────────────────┘  └─────────────────┘                  │
+└─────────────────────────────────────────────────────────────────────────────────┘
+```
 
 ---
 

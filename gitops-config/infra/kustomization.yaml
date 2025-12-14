@@ -3,10 +3,14 @@ kind: Kustomization
 
 resources:
   - namespace.yaml
+  # MongoDB with Prometheus exporter sidecar
   - mongodb/deployment.yaml
   - mongodb/service.yaml
+  - mongodb/servicemonitor.yaml
   # Redis removed - each service now uses k8app cache feature (v3.7.0+)
   # - redis/deployment.yaml
   # - redis/service.yaml
+  # RabbitMQ with built-in Prometheus plugin
   - rabbitmq/deployment.yaml
   - rabbitmq/service.yaml
+  - rabbitmq/servicemonitor.yaml

@@ -1,0 +1,291 @@
+# kube-prometheus-stack Helm values
+# Chart: prometheus-community/kube-prometheus-stack
+# Version: 80.4.1 (December 2025)
+#
+# Documentation: https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack
+#
+# This configuration integrates:
+# - Prometheus for metrics collection
+# - Grafana for visualization
+# - Alertmanager for alerting
+# - Cilium/Hubble metrics (via ServiceMonitor)
+# - Node-exporter for host metrics
+# - kube-state-metrics for K8s object metrics
+
+# =============================================================================
+# Global Settings
+# =============================================================================
+
+# Namespace to deploy (overridden by --namespace)
+namespaceOverride: "monitoring"
+
+# =============================================================================
+# Prometheus
+# =============================================================================
+
+prometheus:
+  enabled: true
+
+  prometheusSpec:
+    # Retention period
+    retention: 7d
+    retentionSize: "5GB"
+
+    # Storage (persistent)
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: standard
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 10Gi
+
+    # Resource limits
+    resources:
+      requests:
+        memory: 400Mi
+        cpu: 200m
+      limits:
+        memory: 1Gi
+        cpu: 500m
+
+    # IMPORTANT: Allow discovery of all ServiceMonitors across all namespaces
+    # Without this, Prometheus only discovers monitors with specific labels
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false
+    probeSelectorNilUsesHelmValues: false
+    scrapeConfigSelectorNilUsesHelmValues: false
+
+    # Scrape all namespaces
+    serviceMonitorNamespaceSelector: {}
+    podMonitorNamespaceSelector: {}
+
+    # Additional scrape configs for targets without ServiceMonitor
+    # (e.g., legacy apps with prometheus annotations)
+    additionalScrapeConfigs:
+      # Scrape pods with prometheus.io annotations
+      - job_name: 'kubernetes-pods'
+        kubernetes_sd_configs:
+          - role: pod
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+            action: keep
+            regex: true
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+            action: replace
+            target_label: __metrics_path__
+            regex: (.+)
+          - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+            action: replace
+            regex: ([^:]+)(?::\d+)?;(\d+)
+            replacement: $1:$2
+            target_label: __address__
+          - action: labelmap
+            regex: __meta_kubernetes_pod_label_(.+)
+          - source_labels: [__meta_kubernetes_namespace]
+            action: replace
+            target_label: kubernetes_namespace
+          - source_labels: [__meta_kubernetes_pod_name]
+            action: replace
+            target_label: kubernetes_pod_name
+
+# =============================================================================
+# Grafana
+# =============================================================================
+
+grafana:
+  enabled: true
+
+  # Admin credentials (change in production!)
+  adminPassword: "admin"
+
+  # Persistence for dashboards/settings
+  persistence:
+    enabled: true
+    type: pvc
+    size: 1Gi
+
+  # Resource limits
+  resources:
+    requests:
+      memory: 128Mi
+      cpu: 100m
+    limits:
+      memory: 256Mi
+      cpu: 200m
+
+  # Default dashboards (from kube-prometheus-stack)
+  defaultDashboardsEnabled: true
+  defaultDashboardsTimezone: utc
+
+  # Sidecar for auto-loading dashboards from ConfigMaps
+  # ConfigMaps with label grafana_dashboard=1 are automatically loaded
+  # Use annotation grafana_folder to organize into folders
+  sidecar:
+    dashboards:
+      enabled: true
+      label: grafana_dashboard
+      labelValue: "1"
+      # Search all namespaces for dashboards
+      searchNamespace: ALL
+      # Enable folder organization via annotations
+      folderAnnotation: grafana_folder
+      # Create folders based on annotations
+      provider:
+        foldersFromFilesStructure: false
+        allowUiUpdates: true
+    datasources:
+      enabled: true
+      label: grafana_datasource
+      labelValue: "1"
+
+  # Additional data sources
+  additionalDataSources:
+    # Prometheus is added automatically
+
+  # Grafana.ini settings
+  grafana.ini:
+    server:
+      # Auto-detect URL - works with both port-forward and ingress
+      root_url: "%(protocol)s://%(domain)s:%(http_port)s/"
+      serve_from_sub_path: false
+    auth.anonymous:
+      enabled: false
+    security:
+      admin_user: admin
+
+# =============================================================================
+# Alertmanager
+# =============================================================================
+
+alertmanager:
+  enabled: true
+
+  alertmanagerSpec:
+    storage:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: standard
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 1Gi
+
+    resources:
+      requests:
+        memory: 64Mi
+        cpu: 50m
+      limits:
+        memory: 128Mi
+        cpu: 100m
+
+  # Basic config (customize for your alert routing)
+  config:
+    global:
+      resolve_timeout: 5m
+    route:
+      group_by: ['alertname', 'namespace']
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 12h
+      receiver: 'null'
+      routes:
+        - match:
+            alertname: Watchdog
+          receiver: 'null'
+    receivers:
+      - name: 'null'
+    # Add Slack/PagerDuty/Email receivers as needed
+
+# =============================================================================
+# Node Exporter
+# =============================================================================
+
+nodeExporter:
+  enabled: true
+
+  resources:
+    requests:
+      memory: 32Mi
+      cpu: 50m
+    limits:
+      memory: 64Mi
+      cpu: 100m
+
+# =============================================================================
+# kube-state-metrics
+# =============================================================================
+
+kubeStateMetrics:
+  enabled: true
+
+# =============================================================================
+# Prometheus Operator
+# =============================================================================
+
+prometheusOperator:
+  enabled: true
+
+  resources:
+    requests:
+      memory: 128Mi
+      cpu: 100m
+    limits:
+      memory: 256Mi
+      cpu: 200m
+
+# =============================================================================
+# Component Scrapers (K8s internals)
+# =============================================================================
+
+# Scrape kube-scheduler
+kubeScheduler:
+  enabled: false  # Disabled for minikube (not accessible)
+
+# Scrape kube-controller-manager
+kubeControllerManager:
+  enabled: false  # Disabled for minikube (not accessible)
+
+# Scrape etcd
+kubeEtcd:
+  enabled: false  # Disabled for minikube (not accessible)
+
+# Scrape kube-proxy
+kubeProxy:
+  enabled: false  # Disabled - using Cilium kube-proxy replacement
+
+# Scrape CoreDNS
+coreDns:
+  enabled: true
+
+# Scrape kubelet
+kubelet:
+  enabled: true
+
+# =============================================================================
+# Additional ServiceMonitors
+# =============================================================================
+
+# Cilium and Hubble ServiceMonitors are created by cilium helm chart
+# when prometheus.enabled=true
+
+# =============================================================================
+# Grafana Dashboards (additional)
+# =============================================================================
+
+# The following dashboards are included by default:
+# - Kubernetes cluster overview
+# - Node exporter metrics
+# - Pod/Deployment/StatefulSet metrics
+# - CoreDNS metrics
+# - Prometheus self-monitoring
+#
+# Additional dashboards for Cilium/Hubble:
+# - Import from Grafana: ID 13286 (Cilium Agent)
+# - Import from Grafana: ID 13502 (Hubble)
+# - Import from Grafana: ID 13537 (Hubble DNS)
+# - Import from Grafana: ID 13538 (Hubble HTTP)
+
+# Custom dashboards can be added via ConfigMaps with label grafana_dashboard=1

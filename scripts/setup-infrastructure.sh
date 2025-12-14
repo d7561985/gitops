@@ -131,6 +131,14 @@ chmod +x "$ROOT_DIR/infrastructure/argocd/setup.sh"
 "$ROOT_DIR/infrastructure/argocd/setup.sh"
 
 # ============================================
+# Install Monitoring (Prometheus + Grafana)
+# ============================================
+
+echo_header "Installing Monitoring Stack"
+chmod +x "$ROOT_DIR/infrastructure/monitoring/setup.sh"
+"$ROOT_DIR/infrastructure/monitoring/setup.sh"
+
+# ============================================
 # Create Vault Admin Token Secret
 # ============================================
 
@@ -173,6 +181,7 @@ echo "  - cert-manager (namespace: cert-manager)"
 echo "  - Vault (namespace: vault)"
 echo "  - Vault Secrets Operator (namespace: vault-secrets-operator-system)"
 echo "  - ArgoCD (namespace: argocd)"
+echo "  - Prometheus + Grafana (namespace: monitoring)"
 echo ""
 echo "GatewayClass available:"
 kubectl get gatewayclass 2>/dev/null || echo "  (none yet - Cilium may still be initializing)"
@@ -196,4 +205,11 @@ echo "   kubectl apply -f gitops-config/argocd/bootstrap-app.yaml"
 echo ""
 echo "5. Access Hubble UI (network observability):"
 echo "   cilium hubble ui"
+echo ""
+echo "6. Access Grafana (metrics dashboards):"
+echo "   kubectl port-forward svc/kube-prometheus-stack-grafana -n monitoring 3000:80"
+echo "   # URL: http://localhost:3000 (admin / admin)"
+echo ""
+echo "7. Access Prometheus (raw metrics):"
+echo "   kubectl port-forward svc/kube-prometheus-stack-prometheus -n monitoring 9090:9090"
 echo ""

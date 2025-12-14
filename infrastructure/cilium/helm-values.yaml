@@ -15,7 +15,26 @@ gatewayAPI:
 # Enable L7 proxy (required for Gateway API)
 l7Proxy: true
 
-# Hubble - observability
+# =============================================================================
+# Hubble - eBPF-based Observability
+# =============================================================================
+# Hubble provides deep visibility into network flows, DNS, HTTP, and more
+# using eBPF. This COMPLEMENTS (not replaces) application-level metrics.
+#
+# Hubble gives you:
+# - L3/L4 network flows (who talks to who)
+# - L7 visibility (HTTP, gRPC, DNS requests)
+# - Network policy enforcement visibility
+# - Service dependency maps
+#
+# Application metrics (via Prometheus) give you:
+# - Request latency, error rates, throughput
+# - Business metrics (orders, users, etc.)
+# - Resource usage (CPU, memory)
+# - Custom application metrics
+#
+# Both work together for complete observability!
+# =============================================================================
 hubble:
   enabled: true
   relay:
@@ -23,14 +42,61 @@ hubble:
   ui:
     enabled: true
 
+  # Prometheus metrics from Hubble
+  # Exposes network-level metrics that complement app metrics
+  metrics:
+    enabled:
+      - dns:query;ignoreAAAA
+      - drop
+      - tcp
+      - flow
+      - icmp
+      - http
+      - port-distribution
+
+    # Create ServiceMonitor for Prometheus Operator
+    serviceMonitor:
+      enabled: true
+      labels:
+        release: kube-prometheus-stack
+
+    # Grafana dashboards as ConfigMaps
+    dashboards:
+      enabled: true
+      namespace: monitoring
+      annotations:
+        grafana_folder: "Cilium"
+
+# =============================================================================
+# Prometheus Metrics for Cilium Agent
+# =============================================================================
+prometheus:
+  enabled: true
+
+  # Create ServiceMonitor for Prometheus Operator
+  serviceMonitor:
+    enabled: true
+    labels:
+      release: kube-prometheus-stack
+    # Scrape interval
+    interval: 30s
+
+# =============================================================================
+# Operator Prometheus Metrics
+# =============================================================================
+operator:
+  replicas: 1
+  prometheus:
+    enabled: true
+    serviceMonitor:
+      enabled: true
+      labels:
+        release: kube-prometheus-stack
+
 # For minikube/local development - use NodePort for LoadBalancer services
 # In production, you'd use cloud provider's LB or MetalLB
 loadBalancer:
   mode: snat
-
-# Operator settings
-operator:
-  replicas: 1
 
 # Enable debug for troubleshooting (disable in production)
 debug:

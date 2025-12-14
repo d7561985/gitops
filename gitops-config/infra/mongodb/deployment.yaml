@@ -16,10 +16,12 @@ spec:
         app: mongodb
     spec:
       containers:
+      # MongoDB container
       - name: mongodb
         image: mongo:5.0
         ports:
         - containerPort: 27017
+          name: mongodb
         env:
         - name: MONGO_INITDB_ROOT_USERNAME
           value: "root"
@@ -35,6 +37,23 @@ spec:
           limits:
             cpu: 500m
             memory: 512Mi
+      # MongoDB Exporter sidecar for Prometheus
+      - name: mongodb-exporter
+        image: percona/mongodb_exporter:0.40
+        args:
+          - --mongodb.uri=mongodb://root:rootpassword@localhost:27017/admin
+          - --collect-all
+          - --compatible-mode
+        ports:
+        - containerPort: 9216
+          name: metrics
+        resources:
+          requests:
+            cpu: 50m
+            memory: 32Mi
+          limits:
+            cpu: 100m
+            memory: 64Mi
       volumes:
       - name: mongodb-data
         emptyDir: {}

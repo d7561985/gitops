@@ -131,6 +131,16 @@ extensions:
         memory: 128Mi
 
 # =============================================================================
+# Prometheus ServiceMonitor (k8app v3.8.0+)
+# =============================================================================
+# Envoy exposes Prometheus metrics on admin port
+serviceMonitor:
+  enabled: true
+  port: "admin"
+  path: "/stats/prometheus"
+  interval: 30s
+
+# =============================================================================
 # Gateway API HTTPRoute (k8app v3.6.0+)
 # =============================================================================
 # Routes /api/* traffic from Gateway to api-gateway
