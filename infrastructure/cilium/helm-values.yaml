@@ -81,6 +81,13 @@ prometheus:
     # Scrape interval
     interval: 30s
 
+# Cilium Agent Grafana dashboards
+dashboards:
+  enabled: true
+  namespace: monitoring
+  annotations:
+    grafana_folder: "Cilium"
+
 # =============================================================================
 # Operator Prometheus Metrics
 # =============================================================================
@@ -92,6 +99,12 @@ operator:
       enabled: true
       labels:
         release: kube-prometheus-stack
+  # Operator Grafana dashboards
+  dashboards:
+    enabled: true
+    namespace: monitoring
+    annotations:
+      grafana_folder: "Cilium"
 
 # For minikube/local development - use NodePort for LoadBalancer services
 # In production, you'd use cloud provider's LB or MetalLB
