@@ -7,7 +7,7 @@ branch: main
 # Image - CI updates these values
 image:
   repository: registry.gitlab.com/gitops-poc-dzha/health-demo
-  tag: "8f73c6b2"
+  tag: "4cda9a5a"
   pullPolicy: IfNotPresent
 replicas: 1
 resources:

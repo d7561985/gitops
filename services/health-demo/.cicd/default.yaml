@@ -30,11 +30,10 @@ service:
       externalPort: 8081
       internalPort: 8081
       protocol: TCP
-    # NOTE: Enable metrics port after image rebuild with prometheus support
-    # metrics:
-    #   externalPort: 9090
-    #   internalPort: 9090
-    #   protocol: TCP
+    metrics:
+      externalPort: 9090
+      internalPort: 9090
+      protocol: TCP
 
 # Health checks - gRPC tcpSocket fallback (k8app format)
 livenessProbe:
@@ -58,17 +57,15 @@ readinessProbe:
   failureThreshold: 3
 
 # Command line args passed to the binary
-# NOTE: -metrics-port will be added after image rebuild with prometheus support
 args:
   - "-port=8081"
-  # - "-metrics-port=9090"  # Uncomment after image 192f67f+ is deployed
+  - "-metrics-port=9090"
 
 # =============================================================================
 # Prometheus ServiceMonitor (k8app v3.8.0+)
-# NOTE: Enable after image rebuild with prometheus support (commit 192f67f+)
 # =============================================================================
 serviceMonitor:
-  enabled: false  # TODO: Enable after new image deployed
+  enabled: true
   port: "metrics"
   path: "/metrics"
   interval: 30s
