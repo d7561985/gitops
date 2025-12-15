@@ -44,15 +44,24 @@ hubble:
 
   # Prometheus metrics from Hubble
   # Exposes network-level metrics that complement app metrics
+  #
+  # IMPORTANT: Use labelsContext to see source/destination workload names!
+  # Without labelsContext, you only see Cilium Agent metrics, not your services.
+  #
+  # Available context labels:
+  # - source_namespace, source_pod, source_workload, source_app
+  # - destination_namespace, destination_pod, destination_workload, destination_app
+  # - traffic_direction (ingress/egress)
   metrics:
     enabled:
-      - dns:query;ignoreAAAA
-      - drop
-      - tcp
-      - flow
+      - dns:query;ignoreAAAA;labelsContext=source_namespace,source_workload,destination_namespace,destination_workload
+      - drop:labelsContext=source_namespace,source_workload,destination_namespace,destination_workload
+      - tcp:labelsContext=source_namespace,source_workload,destination_namespace,destination_workload
+      - flow:labelsContext=source_namespace,source_workload,destination_namespace,destination_workload
       - icmp
-      - http
-      - port-distribution
+      - port-distribution:labelsContext=source_namespace,destination_namespace
+      # httpV2 provides better labels than http (includes status code)
+      - httpV2:labelsContext=source_namespace,source_workload,destination_namespace,destination_workload,traffic_direction
 
     # Create ServiceMonitor for Prometheus Operator
     serviceMonitor:
