@@ -7,6 +7,8 @@ This document describes the infrastructure for automatic gRPC code generation fr
 ```
 gitlab.com/gitops-poc-dzha/
 └── api/
+    ├── ci/                           # CI/CD Components (reusable pipelines)
+    │   └── templates/proto-gen/      # Proto generation component
     ├── proto/                        # Proto definitions (source of truth)
     │   ├── user-service/             # Repository with .proto files
     │   ├── payment-service/
@@ -28,7 +30,7 @@ Each language gets its own **repository**, which ensures:
 ## Tools Used
 
 - **Buf CLI** - Modern protocol buffer tooling (linting, breaking change detection, code generation)
-- **GitLab CI/CD** - Automated pipeline for generation and publishing
+- **GitLab CI/CD Components** - Reusable pipeline configuration ([api/ci](https://gitlab.com/gitops-poc-dzha/api/ci))
 - **GitLab API** - Automatic sub-group and repository creation
 
 ## Versioning Strategy (GitFlow)
@@ -119,7 +121,35 @@ managed:
       value: gitlab.com/gitops-poc-dzha/api/gen/my-service/go  # Change to your service
 ```
 
-### Step 3: Write Your Proto Files
+### Step 3: Configure CI/CD
+
+The `.gitlab-ci.yml` uses CI/CD Components - just include the proto-gen component:
+
+```yaml
+include:
+  - component: gitlab.com/gitops-poc-dzha/api/ci/proto-gen@1.0.0
+    inputs:
+      languages: [go, nodejs, php, python, angular]
+```
+
+**Available inputs:**
+
+| Input | Type | Default | Description |
+|-------|------|---------|-------------|
+| `languages` | array | `[go, nodejs, php, python, angular]` | Languages to generate |
+| `buf_version` | string | `1.47.2` | Buf CLI version |
+| `gen_group_path` | string | `gitops-poc-dzha/api/gen` | GitLab group for generated repos |
+| `run_on_mr` | boolean | `true` | Run lint/breaking on MRs |
+
+**Example - generate only Go and Node.js:**
+```yaml
+include:
+  - component: gitlab.com/gitops-poc-dzha/api/ci/proto-gen@1.0.0
+    inputs:
+      languages: [go, nodejs]
+```
+
+### Step 4: Write Your Proto Files
 
 Create proto files in `proto/{domain}/v1/`:
 ```bash
@@ -135,7 +165,7 @@ proto/
         └── types.proto        # Shared message types
 ```
 
-### Step 4: Push to GitLab
+### Step 5: Push to GitLab
 
 ```bash
 git init
@@ -145,12 +175,12 @@ git remote add origin https://gitlab.com/gitops-poc-dzha/api/proto/my-service.gi
 git push -u origin main
 ```
 
-### Step 5: CI Does the Rest
+### Step 6: CI Does the Rest
 
 The pipeline automatically:
 1. Lints your proto files
 2. Checks for breaking changes
-3. Generates code for all 5 languages
+3. Generates code for selected languages
 4. Creates `api/gen/my-service/` sub-group if it doesn't exist
 5. Creates language repositories (go, nodejs, php, python, angular)
 6. Pushes generated code with proper versioning
@@ -576,28 +606,31 @@ docker run -d --name grpcwebproxy \
 
 ## CI/CD Pipeline Overview
 
+The pipeline is defined in the `proto-gen` CI/CD Component at [api/ci](https://gitlab.com/gitops-poc-dzha/api/ci).
+
 ```
 ┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│    lint     │────▶│   breaking  │────▶│  generate   │────▶│   publish   │
+│ proto-lint  │────▶│proto-breaking────▶│proto-generate───▶│proto-publish│
 │             │     │             │     │             │     │             │
 │ buf lint    │     │ buf breaking│     │ buf generate│     │ Create      │
 │             │     │ --against   │     │             │     │ sub-group + │
-│             │     │ main        │     │             │     │ 5 repos     │
+│             │     │ main        │     │             │     │ lang repos  │
 └─────────────┘     └─────────────┘     └─────────────┘     └─────────────┘
 ```
 
 ### Stages
 
-1. **lint** - Validates proto file quality and style
-2. **breaking** - Detects breaking changes against main branch
-3. **generate** - Generates code for all 5 languages using Buf
-4. **publish** - Creates sub-group, repositories, and pushes generated code
+1. **proto-lint** - Validates proto file quality and style
+2. **proto-breaking** - Detects breaking changes against main branch
+3. **proto-generate** - Generates code for selected languages using Buf
+4. **proto-publish** - Creates sub-group, repositories, and pushes generated code
 
 ### Triggers
 
 - **dev branch**: Generates v0.0.0-{sha} snapshot
 - **main branch**: Generates v0.0.0-{sha} snapshot
 - **Git tag (vX.Y.Z)**: Generates versioned release with tag in each language repo
+- **Merge Request** (optional): Runs lint and breaking checks only
 
 ---
 
