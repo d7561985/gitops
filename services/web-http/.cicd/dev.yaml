@@ -3,7 +3,7 @@
 
 environment: dev
 branch: main
-replicas: 1
+replicas: 2
 resources:
   requests:
     cpu: 50m
@@ -22,5 +22,5 @@ labels:
 annotations:
   argocd.argoproj.io/sync-wave: "0"
 image:
-  tag: c484b1d0
+  tag: 457b2e2b
   repository: registry.gitlab.com/gitops-poc-dzha/web-http

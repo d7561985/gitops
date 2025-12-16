@@ -145,6 +145,17 @@ grafana:
   additionalDataSources:
     # Prometheus is added automatically
 
+  # Image Renderer for screenshots and alerting
+  imageRenderer:
+    enabled: true
+    resources:
+      requests:
+        memory: 64Mi
+        cpu: 50m
+      limits:
+        memory: 256Mi
+        cpu: 200m
+
   # Grafana.ini settings
   grafana.ini:
     server:
@@ -152,9 +163,18 @@ grafana:
       root_url: "%(protocol)s://%(domain)s:%(http_port)s/"
       serve_from_sub_path: false
     auth.anonymous:
-      enabled: false
+      # Enable for image renderer internal access (Viewer role only)
+      enabled: true
+      org_role: Viewer
     security:
       admin_user: admin
+    rendering:
+      # Allow rendering without strict auth for internal renderer
+      server_url: http://kube-prometheus-stack-grafana-image-renderer.monitoring:8081/render
+      callback_url: http://kube-prometheus-stack-grafana.monitoring:80/
+    unified_alerting:
+      screenshots:
+        capture: true
 
 # =============================================================================
 # Alertmanager
