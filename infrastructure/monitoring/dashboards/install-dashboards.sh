@@ -55,6 +55,11 @@ create_dashboard_configmap "${JSON_DIR}/envoy-global.json" "envoy-dashboard" "In
 # Source: https://grafana.com/grafana/dashboards/11021
 create_dashboard_configmap "${JSON_DIR}/envoy-clusters.json" "envoy-clusters-dashboard" "Infrastructure"
 
+# Service Golden Signals - Universal dashboard for services using Hubble eBPF metrics
+# Shows 4 Golden Signals: Latency, Traffic, Errors, Saturation
+# Based on: https://grafana.com/grafana/dashboards/21073 + Hubble HTTP metrics
+create_dashboard_configmap "${JSON_DIR}/service-golden-signals.json" "service-golden-signals-dashboard" "Services"
+
 echo ""
 echo "Dashboards installed successfully!"
 echo ""
