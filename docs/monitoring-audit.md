@@ -1,6 +1,6 @@
 # Monitoring Audit Report
 
-**Date**: 2025-12-14
+**Date**: 2025-12-14 (updated: 2025-12-16)
 **Project**: GitOps POC
 **Author**: Claude Code Audit
 
@@ -101,20 +101,27 @@ Envoy автоматически предоставляет ~200+ метрик �
 
 ### 3.2 Cilium/Hubble Observability
 
-**Конфигурация**: `infrastructure/cilium/helm-values.yaml:38-68`
+**Конфигурация**: `infrastructure/cilium/helm-values.yaml:38-78`
 
 ```yaml
 hubble:
   metrics:
     enabled:
-      - dns:query;ignoreAAAA
-      - drop
-      - tcp
-      - flow
+      # labelsContext добавляет source_workload/destination_workload в метрики
+      # Без него видно только "cilium-agent", а не реальные сервисы!
+      - dns:query;ignoreAAAA;labelsContext=source_namespace,source_workload,destination_namespace,destination_workload
+      - drop:labelsContext=source_namespace,source_workload,destination_namespace,destination_workload
+      - tcp:labelsContext=source_namespace,source_workload,destination_namespace,destination_workload
+      - flow:labelsContext=source_namespace,source_workload,destination_namespace,destination_workload
       - icmp
-      - http  # L7 HTTP метрики
-      - port-distribution
+      - port-distribution:labelsContext=source_namespace,destination_namespace
+      # httpV2 вместо http - лучшие labels включая status code
+      - httpV2:labelsContext=source_namespace,source_workload,destination_namespace,destination_workload,traffic_direction
 ```
+
+**Что даёт labelsContext:**
+- Без него: `hubble_http_*{source="cilium-agent"}` (бесполезно)
+- С ним: `hubble_http_*{source_workload="api-gateway", destination_workload="game-engine"}` (полезно)
 
 ---
 
@@ -206,39 +213,39 @@ hubble:
 
 ### 7.2 Установленные дашборды
 
-| Dashboard | Grafana ID | Folder | Source |
-|-----------|-----------|--------|--------|
-| Redis Exporter Quickstart | 14091 | Infrastructure | [grafana.com](https://grafana.com/grafana/dashboards/14091) |
-| RabbitMQ Monitoring | 4279 | Infrastructure | [grafana.com](https://grafana.com/grafana/dashboards/4279) |
-| MongoDB Prometheus Exporter | 2583 | Infrastructure | [grafana.com](https://grafana.com/grafana/dashboards/2583) |
-| Envoy Global | 11022 | Infrastructure | [grafana.com](https://grafana.com/grafana/dashboards/11022) |
+| Dashboard | ID/Source | Folder | Описание |
+|-----------|-----------|--------|----------|
+| **Redis Exporter Quickstart** | 14091 | Infrastructure | Метрики Redis: память, клиенты, команды |
+| **RabbitMQ-Overview** | [Official](https://github.com/rabbitmq/rabbitmq-server/tree/main/deps/rabbitmq_prometheus) | Infrastructure | Официальный от RabbitMQ Team - сообщения, соединения, очереди |
+| **MongoDB (Percona Compat)** | 12079 | Infrastructure | Для percona/mongodb_exporter - connections, memory, ops |
+| **Envoy Global** | 11022 | Infrastructure | Общий обзор Envoy proxy |
+| **Envoy Clusters** | 11021 | Infrastructure | Детальные метрики по upstream clusters |
 
-### 7.3 Требования для работы дашбордов
+### 7.3 Совместимость дашбордов с экспортерами
 
-#### MongoDB Dashboard (ID: 2583)
-- **Exporter**: [percona/mongodb_exporter](https://github.com/percona/mongodb_exporter) v0.40.0+
-- **Метрики**: `mongodb_*`
-- **Порт**: 9216
-- **ВАЖНО**: Нужен отдельный deployment с mongodb-exporter
+#### MongoDB Dashboard
+- **Exporter**: `percona/mongodb_exporter:0.40` с флагом `--compatible-mode`
+- **Метрики**: `mongodb_*`, `mongodb_mongod_*`, `mongodb_ss_*` (1973 метрик)
+- **Dashboard 12079**: Совместим с percona exporter, показывает connections, memory, ops
+- **Примечание**: Dashboard 16490 (Opstree) не подходит - требует replica set метрики
+
+#### RabbitMQ Dashboard
+- **Source**: Официальный от [RabbitMQ Team](https://github.com/rabbitmq/rabbitmq-server/tree/main/deps/rabbitmq_prometheus/docker/grafana/dashboards)
+- **Plugin**: Встроенный `rabbitmq_prometheus` (RabbitMQ 3.8+)
+- **Метрики**: `rabbitmq_*` (1884 метрик)
+- **Endpoint**: `/metrics` на порту 15692
 
 #### Redis Dashboard (ID: 14091)
 - **Exporter**: Встроен в k8app cache (redis-exporter sidecar)
 - **Метрики**: `redis_*`
-- **ServiceMonitor**: `sentry-game-engine-cache`, `sentry-payment-cache`
 - **Статус**: Работает
 
-#### RabbitMQ Dashboard (ID: 4279)
-- **Exporter**: Встроен в RabbitMQ 3.8+ (`rabbitmq_prometheus` plugin)
-- **Метрики**: `rabbitmq_*`
-- **Endpoint**: `/metrics` на порту 15692
-- **ВАЖНО**: Нужен ServiceMonitor для RabbitMQ
-
-#### Envoy Dashboard (ID: 11022)
+#### Envoy Dashboards
 - **Exporter**: Встроен в Envoy
 - **Метрики**: `envoy_*`
 - **Endpoint**: `/stats/prometheus` на порту 8000
-- **ServiceMonitor**: `api-gateway`
-- **Статус**: Работает
+- **Dashboard 11022**: Global overview
+- **Dashboard 11021**: Clusters detail
 
 ### 7.4 Статус Prometheus Targets для инфраструктуры
 
@@ -264,10 +271,11 @@ hubble:
 
 # JSON файлы дашбордов
 infrastructure/monitoring/dashboards/json/
-├── redis-exporter.json      # ID: 14091
-├── rabbitmq-monitoring.json # ID: 4279
-├── mongodb.json             # ID: 2583
-└── envoy-global.json        # ID: 11022
+├── redis-exporter.json              # ID: 14091
+├── rabbitmq-overview-official.json  # Official RabbitMQ Team
+├── mongodb-percona-compat.json      # ID: 12079
+├── envoy-global.json                # ID: 11022
+└── envoy-clusters.json              # ID: 11021
 
 # Проверка
 kubectl get configmaps -n monitoring -l grafana_dashboard=1

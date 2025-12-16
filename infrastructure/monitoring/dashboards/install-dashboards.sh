@@ -37,10 +37,23 @@ create_dashboard_configmap() {
 }
 
 # Install dashboards
+# Redis
 create_dashboard_configmap "${JSON_DIR}/redis-exporter.json" "redis-dashboard" "Infrastructure"
-create_dashboard_configmap "${JSON_DIR}/rabbitmq-monitoring.json" "rabbitmq-dashboard" "Infrastructure"
-create_dashboard_configmap "${JSON_DIR}/mongodb.json" "mongodb-dashboard" "Infrastructure"
+
+# RabbitMQ - Official dashboard from RabbitMQ team (for rabbitmq_prometheus plugin)
+# Source: https://github.com/rabbitmq/rabbitmq-server/tree/main/deps/rabbitmq_prometheus/docker/grafana/dashboards
+create_dashboard_configmap "${JSON_DIR}/rabbitmq-overview-official.json" "rabbitmq-overview-dashboard" "Infrastructure"
+
+# MongoDB - Dashboard 12079: compatible with percona/mongodb_exporter
+# Source: https://grafana.com/grafana/dashboards/12079
+create_dashboard_configmap "${JSON_DIR}/mongodb-percona-compat.json" "mongodb-percona-dashboard" "Infrastructure"
+
+# Envoy - Global overview
 create_dashboard_configmap "${JSON_DIR}/envoy-global.json" "envoy-dashboard" "Infrastructure"
+
+# Envoy - Clusters detail
+# Source: https://grafana.com/grafana/dashboards/11021
+create_dashboard_configmap "${JSON_DIR}/envoy-clusters.json" "envoy-clusters-dashboard" "Infrastructure"
 
 echo ""
 echo "Dashboards installed successfully!"
