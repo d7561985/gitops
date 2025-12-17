@@ -364,9 +364,59 @@ EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]
 ```
 
-### Angular с приватными npm зависимостями (gRPC-Web)
+### Angular/React с Connect-ES (gRPC-Web)
 
-Если frontend использует сгенерированные gRPC-Web клиенты из `api/gen/*/angular`:
+Используем [Connect-ES](https://connectrpc.com/) от Buf — современную замену устаревшему `grpc-web`.
+
+#### Почему Connect-ES вместо grpc-web?
+
+| Проблема grpc-web | Решение Connect-ES |
+|-------------------|-------------------|
+| Бандл огромный | **На 80% меньше** размер бандла |
+| Java-style API (setters/getters) | Идиоматический TypeScript |
+| `@types/google-protobuf` не обновлялся 2+ года | Встроенные типы |
+| Нечитаемый бинарный формат в DevTools | JSON в network inspector |
+| Минимальная поддержка от Google | Активная разработка Buf |
+
+#### package.json
+
+```json
+{
+  "dependencies": {
+    "@bufbuild/protobuf": "^2.2.0",
+    "@connectrpc/connect": "^2.0.0",
+    "@connectrpc/connect-web": "^2.0.0",
+    "@gitops-poc-dzha/my-service-web": "git+https://gitlab.com/gitops-poc-dzha/api/gen/my-service/web.git#main"
+  }
+}
+```
+
+> **Важно:** Репозиторий теперь `web` вместо `angular` (генерация изменена на Connect-ES).
+
+#### Использование в Angular
+
+```typescript
+import { Injectable } from '@angular/core';
+import { createClient } from '@connectrpc/connect';
+import { createGrpcWebTransport } from '@connectrpc/connect-web';
+import { UserService } from '@gitops-poc-dzha/user-service-web/user/v1/user_connect';
+
+@Injectable({ providedIn: 'root' })
+export class AuthService {
+  private client = createClient(
+    UserService,
+    createGrpcWebTransport({ baseUrl: '/api' })
+  );
+
+  async login(email: string, password: string) {
+    // Идиоматический TypeScript — без setters!
+    const response = await this.client.login({ email, password });
+    return response.accessToken;
+  }
+}
+```
+
+#### Dockerfile
 
 ```dockerfile
 FROM node:22-alpine AS builder
@@ -374,17 +424,15 @@ FROM node:22-alpine AS builder
 ARG API_URL
 ARG APP_VERSION
 
-# Git для приватных npm git зависимостей
 RUN apk add --no-cache git sed
 
 WORKDIR /app
 COPY package*.json ./
 
-# BuildKit secret для GitLab токена (безопасный способ)
+# BuildKit secret для GitLab токена
 RUN --mount=type=secret,id=gitlab_token \
     GITLAB_TOKEN=$(cat /run/secrets/gitlab_token 2>/dev/null || echo "") && \
     if [ -n "$GITLAB_TOKEN" ]; then \
-        git config --global url."https://gitlab-ci-token:${GITLAB_TOKEN}@gitlab.com/".insteadOf "ssh://git@gitlab.com/" && \
         git config --global url."https://gitlab-ci-token:${GITLAB_TOKEN}@gitlab.com/".insteadOf "https://gitlab.com/" && \
         sed -i 's|git+ssh://git@gitlab.com/|https://gitlab-ci-token:'"${GITLAB_TOKEN}"'@gitlab.com/|g' package-lock.json 2>/dev/null || true; \
     fi && \
@@ -401,7 +449,8 @@ EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]
 ```
 
-**CI команда сборки:**
+#### CI команда сборки
+
 ```yaml
 script:
   # IMPORTANT: Use CI_PUSH_TOKEN, not CI_JOB_TOKEN (no cross-project access)
@@ -410,39 +459,27 @@ script:
   - rm -f /tmp/gitlab_token
 ```
 
-**package.json пример:**
-```json
-{
-  "dependencies": {
-    "@gitops-poc-dzha/my-service-web": "git+https://gitlab.com/gitops-poc-dzha/api/gen/my-service/angular.git#main",
-    "google-protobuf": "^3.21.0",
-    "grpc-web": "^1.5.0"
-  }
-}
-```
+#### Локальная разработка
 
-**Локальная разработка (без Docker):**
-
-Сначала настройте доступ к приватным репозиториям GitLab:
+Настройте доступ к приватным репозиториям GitLab:
 
 ```bash
-# Вариант 1: Настроить ~/.netrc (рекомендуется, один раз)
+# Вариант 1: ~/.netrc (рекомендуется)
 echo "machine gitlab.com login YOUR_USERNAME password YOUR_GITLAB_TOKEN" >> ~/.netrc
 chmod 600 ~/.netrc
 
-# Вариант 2: Настроить git URL replacement
+# Вариант 2: git URL replacement
 git config --global url."https://oauth2:YOUR_GITLAB_TOKEN@gitlab.com/".insteadOf "https://gitlab.com/"
 ```
 
-Затем установите зависимости:
+Установка и запуск:
 
 ```bash
-cd your-frontend-project
 npm install
-npm start  # или npm run serve
+npm start
 ```
 
-> **Важно:** Токен должен иметь scope `read_api` для доступа к приватным репозиториям.
+> **Важно:** Токен должен иметь scope `read_api`.
 
 ## gRPC сервисы
 

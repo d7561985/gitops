@@ -2,15 +2,22 @@
 {{- /*
 Gateway resources for each enabled environment.
 Creates:
-  - Gateway resource with configured listeners (in service namespace like poc-dev)
-  - Certificate for each HTTPS listener (via cert-manager)
+  - Gateway resource with environment-specific domain
+  - Certificate for HTTPS listener (via cert-manager, if enabled)
+
+Each environment gets its own Gateway in its namespace with unique hostname.
+CloudFlare Tunnel routes traffic to the correct Gateway based on hostname.
+
+Cilium creates a LoadBalancer service: cilium-gateway-{gateway-name}
+Example: cilium-gateway-gateway in poc-dev namespace
 */ -}}
 
 {{- range $envName, $env := .Values.environments }}
 {{- if $env.enabled }}
+{{- if $env.domain }}
 
-{{- /* Determine namespace - use service namespace (poc-dev) or separate gateway namespace */ -}}
 {{- $gatewayNamespace := printf "%s-%s" $.Values.global.namespacePrefix $envName }}
+{{- $listenerName := $.Values.gateway.listener.name | default "http-app" }}
 
 {{- /* Gateway resource */ -}}
 ---
@@ -30,27 +37,24 @@ metadata:
 spec:
   gatewayClassName: {{ $.Values.gateway.gatewayClassName }}
   listeners:
-    {{- range $listenerName, $listener := $.Values.gateway.listeners }}
     - name: {{ $listenerName }}
-      protocol: {{ $listener.protocol | default "HTTPS" }}
-      port: {{ $listener.port | default 443 }}
-      hostname: {{ $listener.hostname | quote }}
-      {{- if eq ($listener.protocol | default "HTTPS") "HTTPS" }}
+      protocol: {{ $.Values.gateway.listener.protocol | default "HTTP" }}
+      port: {{ $.Values.gateway.listener.port | default 80 }}
+      hostname: {{ $env.domain | quote }}
+      {{- if eq ($.Values.gateway.listener.protocol | default "HTTP") "HTTPS" }}
       tls:
         mode: Terminate
         certificateRefs:
-          - name: {{ $listener.certSecretName | default (printf "%s-tls" $listenerName) }}
+          - name: {{ $listenerName }}-tls
             kind: Secret
       {{- end }}
       allowedRoutes:
         namespaces:
           from: Same
-    {{- end }}
 
-{{- /* Certificates for each HTTPS listener (if cert-manager enabled) */ -}}
+{{- /* Certificate for HTTPS listener (if cert-manager enabled) */ -}}
 {{- if $.Values.gateway.certManager.enabled }}
-{{- range $listenerName, $listener := $.Values.gateway.listeners }}
-{{- if ne ($listener.protocol | default "HTTPS") "HTTP" }}
+{{- if eq ($.Values.gateway.listener.protocol | default "HTTP") "HTTPS" }}
 ---
 apiVersion: cert-manager.io/v1
 kind: Certificate
@@ -61,21 +65,20 @@ metadata:
     app.kubernetes.io/name: platform-bootstrap
     environment: {{ $envName }}
 spec:
-  secretName: {{ $listener.certSecretName | default (printf "%s-tls" $listenerName) }}
+  secretName: {{ $listenerName }}-tls
   issuerRef:
     name: {{ $.Values.gateway.certManager.clusterIssuer }}
     kind: ClusterIssuer
   dnsNames:
-    - {{ $listener.hostname | quote }}
-    {{- if $listener.additionalDnsNames }}
-    {{- range $listener.additionalDnsNames }}
-    - {{ . | quote }}
-    {{- end }}
-    {{- end }}
-{{- end }}
+    - {{ $env.domain | quote }}
 {{- end }}
 {{- end }}
 
+{{- else }}
+{{- /* Warning if domain not set */ -}}
+# WARNING: Environment {{ $envName }} has no domain configured!
+# Gateway not created. Add 'domain' to environments.{{ $envName }} in values.yaml
+{{- end }}
 {{- end }}
 {{- end }}
 {{- end }}

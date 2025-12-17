@@ -393,28 +393,40 @@ environments:
   dev:
     enabled: true
     autoSync: true
-  staging:           # ← Add new environment
+    domain: "app.demo-poc-01.work"
+    infraNamespace: "infra-dev"
+  staging:                                  # ← Add new environment
     enabled: true
     autoSync: true
-  prod:              # ← Add new environment
+    domain: "app.staging.example.com"       # ← Each env needs unique domain
+    infraNamespace: "infra-staging"
+  prod:                                     # ← Add new environment
     enabled: true
-    autoSync: false  # Manual sync for production
+    autoSync: false                         # Manual sync for production
+    domain: "app.prod.example.com"          # ← Each env needs unique domain
+    infraNamespace: "infra-prod"
 ```
 
-### Step 2: Configure Gateway Listener (if new domain)
+**Important**: Each environment MUST have a unique `domain`. The Gateway template creates a separate Gateway per environment with the specified hostname.
 
-If the new environment needs a different domain, add listener in `values.yaml`:
+### Step 2: Configure CloudFlare Tunnel
 
-```yaml
-gateway:
-  listeners:
-    http-app:
-      hostname: "app.demo-poc-01.work"      # dev
-    http-app-staging:                        # ← Add for staging
-      hostname: "app.staging.example.com"
-    http-app-prod:                           # ← Add for prod
-      hostname: "app.prod.example.com"
-```
+Add a Public Hostname in CloudFlare Dashboard for the new environment:
+
+1. Go to https://one.dash.cloudflare.com/
+2. Navigate to: Networks → Tunnels → Your tunnel → Public Hostname
+3. Add hostname:
+   - **Public hostname**: `app.staging.example.com`
+   - **Service Type**: HTTP
+   - **URL**: `cilium-gateway-gateway.poc-staging.svc.cluster.local:80`
+
+| Environment | Public Hostname           | Service URL                                              |
+|-------------|---------------------------|----------------------------------------------------------|
+| dev         | app.demo-poc-01.work      | `cilium-gateway-gateway.poc-dev.svc.cluster.local:80`    |
+| staging     | app.staging.example.com   | `cilium-gateway-gateway.poc-staging.svc.cluster.local:80`|
+| prod        | app.prod.example.com      | `cilium-gateway-gateway.poc-prod.svc.cluster.local:80`   |
+
+**Note**: Cilium creates a LoadBalancer service named `cilium-gateway-{gateway-name}`. Since our Gateway is named `gateway`, the service is `cilium-gateway-gateway`.
 
 ### Step 3: Deploy Infrastructure
 
@@ -467,9 +479,9 @@ httpRoute:
   parentRefs:
     - name: gateway
       namespace: poc-staging
-      sectionName: http-app-staging
+      sectionName: http-app          # ← Same listener name across all environments
   hostnames:
-    - app.staging.example.com
+    - app.staging.example.com        # ← Must match environments.staging.domain
 ```
 
 ### Step 6: Create Vault Secrets

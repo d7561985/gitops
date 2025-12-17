@@ -7,7 +7,7 @@ branch: main
 # Image - CI updates these values
 image:
   repository: registry.gitlab.com/gitops-poc-dzha/api-gateway
-  tag: faf34818
+  tag: b2c5c5ac
   pullPolicy: IfNotPresent
 # Replicas
 replicas: 1
@@ -36,7 +36,6 @@ extensions:
       repository: registry.gitlab.com/gitops-poc-dzha/auth-adapter
       tag: 7306e90b
       pullPolicy: IfNotPresent
-
 # HTTPRoute (environment-specific)
 httpRoute:
   parentRefs:

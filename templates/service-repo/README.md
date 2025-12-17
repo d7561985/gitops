@@ -146,22 +146,26 @@ build:
 
 ## Private npm Dependencies (Angular/Node.js)
 
-If your frontend uses private GitLab npm packages (e.g., gRPC-Web stubs from `api/gen/*/angular`):
+If your frontend uses private GitLab npm packages (e.g., Connect-ES stubs from `api/gen/*/web`):
 
-### package.json
+### package.json (Connect-ES - Recommended)
 
 ```json
 {
   "dependencies": {
-    "@gitops-poc-dzha/my-service-web": "git+https://gitlab.com/gitops-poc-dzha/api/gen/my-service/angular.git#main",
-    "google-protobuf": "^3.21.0",
-    "grpc-web": "^1.5.0"
-  },
-  "devDependencies": {
-    "@types/google-protobuf": "^3.15.12"
+    "@bufbuild/protobuf": "^2.2.0",
+    "@connectrpc/connect": "^2.0.0",
+    "@connectrpc/connect-web": "^2.0.0",
+    "@gitops-poc-dzha/my-service-web": "git+https://gitlab.com/gitops-poc-dzha/api/gen/my-service/web.git#main"
   }
 }
 ```
+
+> **Note:** We use [Connect-ES](https://connectrpc.com/) instead of deprecated `grpc-web`. Benefits:
+> - 80% smaller bundle size
+> - Idiomatic TypeScript (no Java-style setters/getters)
+> - Built-in TypeScript types (no `@types/google-protobuf` needed)
+> - Human-readable JSON in DevTools network inspector
 
 ### Dockerfile (BuildKit Secrets)
 

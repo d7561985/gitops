@@ -33,19 +33,32 @@ global:
 # -----------------------------------------------------------------------------
 # Each enabled environment gets:
 # - Namespace: {namespacePrefix}-{env}
+# - Gateway with environment-specific domain
 # - VaultAuth resource
 # - Vault policy: {namespacePrefix}-{env}-read
 # - Vault role: {namespacePrefix}-{env}-default
+# - Infrastructure namespace: infra-{env}
+#
+# IMPORTANT: Each environment MUST have a unique domain for Gateway!
+# CloudFlare Tunnel routes traffic based on hostname.
 environments:
   dev:
     enabled: true
     autoSync: true
+    # Domain for this environment's Gateway (required if gateway.enabled)
+    domain: "app.demo-poc-01.work"
+    # Infrastructure namespace for MongoDB, RabbitMQ, etc.
+    infraNamespace: "infra-dev"
   # staging:
   #   enabled: true
   #   autoSync: true
+  #   domain: "app.staging.example.com"
+  #   infraNamespace: "infra-staging"
   # prod:
   #   enabled: true
   #   autoSync: false  # Manual sync for production
+  #   domain: "app.example.com"
+  #   infraNamespace: "infra-prod"
 
 # -----------------------------------------------------------------------------
 # Services Registry
@@ -154,28 +167,32 @@ applicationSet:
 # Gateway API Configuration
 # -----------------------------------------------------------------------------
 # Creates Gateway resources for each environment.
+# Each environment gets its own Gateway with environment-specific domain.
 # TLS is terminated at CloudFlare Tunnel - internal traffic is HTTP.
+#
+# Architecture:
+#   CloudFlare Tunnel → cilium-gateway-gateway.{ns}.svc → HTTPRoutes → Services
+#
+# CloudFlare Dashboard configuration (per environment):
+#   Public hostname: {env.domain}
+#   Service: HTTP://cilium-gateway-gateway.{namespacePrefix}-{env}.svc.cluster.local:80
 gateway:
   enabled: true
 
   # GatewayClass name (cilium, nginx, etc.)
   gatewayClassName: cilium
 
-  # Gateway is created in the same namespace as services (poc-dev, poc-staging, etc.)
-  # This simplifies routing - no cross-namespace ReferenceGrants needed
-  useServiceNamespace: true
+  # Listener configuration (applied to each environment's Gateway)
+  # Hostname comes from environments.{env}.domain
+  listener:
+    name: http-app
+    protocol: HTTP
+    port: 80
 
   # cert-manager integration (disabled - TLS at CloudFlare Tunnel)
   certManager:
     enabled: false
-
-  # Listeners - each listener is a domain/hostname
-  listeners:
-    # Main app (frontend + API on same domain via path routing)
-    http-app:
-      hostname: "app.demo-poc-01.work"
-      protocol: HTTP
-      port: 80
+    # clusterIssuer: letsencrypt-prod
 
   # Domain Mirrors - additional hostnames that route to the same service
   domainMirrors:
