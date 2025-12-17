@@ -116,6 +116,13 @@ extensions:
       AUTH_SERVICE_ADDR: "user-service-sv:8081"
       # Enable real user-service (set to "false" to use stub)
       USE_USER_SERVICE: "true"
+    ports:
+      - name: grpc
+        containerPort: 9000
+        protocol: TCP
+      - name: metrics
+        containerPort: 9090
+        protocol: TCP
     livenessProbe:
       tcpSocket:
         port: 9000

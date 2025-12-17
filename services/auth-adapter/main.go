@@ -2,10 +2,13 @@ package main
 
 import (
 	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 
+	grpcprometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	grpcx "github.com/tel-io/instrumentation/middleware/grpc"
 	"github.com/tel-io/tel/v2"
 	"golang.org/x/net/context"
@@ -43,8 +46,22 @@ func main() {
 	}
 
 	grpcServer := grpc.NewServer(
-		grpc.ChainUnaryInterceptor(grpcx.UnaryServerInterceptor()),
+		grpc.ChainUnaryInterceptor(
+			grpcprometheus.UnaryServerInterceptor,
+			grpcx.UnaryServerInterceptor(),
+		),
+		grpc.StreamInterceptor(grpcprometheus.StreamServerInterceptor),
 	)
+
+	// Start metrics server
+	go func() {
+		mux := http.NewServeMux()
+		mux.Handle("/metrics", promhttp.Handler())
+		logg.Info("Metrics server listening on :9090")
+		if err := http.ListenAndServe(":9090", mux); err != nil {
+			logg.Error("Metrics server error: " + err.Error())
+		}
+	}()
 
 	go func() {
 		listener, err := net.Listen("tcp", ":9000")
@@ -58,6 +75,9 @@ func main() {
 		}
 
 		envoy_service_auth_v3.RegisterAuthorizationServer(grpcServer, s)
+
+		// Register gRPC metrics
+		grpcprometheus.Register(grpcServer)
 
 		logg.Info("gRPC service started at :9000")
 		err = grpcServer.Serve(listener)
