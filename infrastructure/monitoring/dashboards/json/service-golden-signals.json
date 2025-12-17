@@ -15,7 +15,7 @@
       }
     ]
   },
-  "description": "Four Golden Signals dashboard for services. Supports HTTP (via Hubble eBPF) and gRPC (via application metrics). Shows Latency, Traffic, Errors, and Saturation.",
+  "description": "Four Golden Signals dashboard for services using Hubble eBPF metrics. Shows Latency, Traffic, Errors, and Saturation for HTTP/gRPC services.",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
@@ -50,35 +50,56 @@
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "green", "value": null },
-              { "color": "yellow", "value": 0.01 },
-              { "color": "red", "value": 0.05 }
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 5
+              }
             ]
           },
           "unit": "percentunit"
         },
         "overrides": []
       },
-      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 1 },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 1
+      },
       "id": 1,
       "options": {
         "colorMode": "background",
         "graphMode": "area",
         "justifyMode": "auto",
         "orientation": "auto",
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
         "textMode": "auto"
       },
       "pluginVersion": "10.0.0",
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "${datasource}" },
-          "expr": "(\n  sum(rate(hubble_http_requests_total{destination_namespace=~\"$namespace\", destination_workload=~\"$workload\", status=~\"5..\"}[$__rate_interval]))\n  + sum(rate(grpc_server_handled_total{grpc_code!=\"OK\", namespace=~\"$namespace\", pod=~\"$workload.*\"}[$__rate_interval]) or vector(0))\n  + sum(rate(${workload}_grpc_requests_total{status!=\"OK\", namespace=~\"$namespace\"}[$__rate_interval]) or vector(0))\n) / (\n  sum(rate(hubble_http_requests_total{destination_namespace=~\"$namespace\", destination_workload=~\"$workload\"}[$__rate_interval]))\n  + sum(rate(grpc_server_handled_total{namespace=~\"$namespace\", pod=~\"$workload.*\"}[$__rate_interval]) or vector(0))\n  + sum(rate(${workload}_grpc_requests_total{namespace=~\"$namespace\"}[$__rate_interval]) or vector(0))\n) or vector(0)",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "sum(rate(hubble_http_requests_total{destination_namespace=~\"$namespace\", destination_workload=~\"$workload\", status=~\"5..\"}[$__rate_interval])) / sum(rate(hubble_http_requests_total{destination_namespace=~\"$namespace\", destination_workload=~\"$workload\"}[$__rate_interval])) or vector(0)",
           "legendFormat": "Error Rate",
           "refId": "A"
         }
       ],
-      "title": "Error Rate (HTTP+gRPC)",
+      "title": "Error Rate",
       "type": "stat"
     },
     {
@@ -95,30 +116,51 @@
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "green", "value": null },
-              { "color": "yellow", "value": 100 },
-              { "color": "red", "value": 500 }
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 100
+              },
+              {
+                "color": "red",
+                "value": 500
+              }
             ]
           },
           "unit": "ms"
         },
         "overrides": []
       },
-      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 1 },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 6,
+        "y": 1
+      },
       "id": 2,
       "options": {
         "colorMode": "background",
         "graphMode": "area",
         "justifyMode": "auto",
         "orientation": "auto",
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
         "textMode": "auto"
       },
       "pluginVersion": "10.0.0",
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "${datasource}" },
-          "expr": "max(\n  histogram_quantile(0.95, sum(rate(hubble_http_request_duration_seconds_bucket{destination_namespace=~\"$namespace\", destination_workload=~\"$workload\"}[$__rate_interval])) by (le)) * 1000,\n  histogram_quantile(0.95, sum(rate(grpc_server_handling_seconds_bucket{namespace=~\"$namespace\", pod=~\"$workload.*\"}[$__rate_interval])) by (le)) * 1000,\n  histogram_quantile(0.95, sum(rate(${workload}_grpc_request_duration_seconds_bucket{namespace=~\"$namespace\"}[$__rate_interval])) by (le)) * 1000\n) or histogram_quantile(0.95, sum(rate(hubble_http_request_duration_seconds_bucket{destination_namespace=~\"$namespace\", destination_workload=~\"$workload\"}[$__rate_interval])) by (le)) * 1000",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "histogram_quantile(0.95, sum(rate(hubble_http_request_duration_seconds_bucket{destination_namespace=~\"$namespace\", destination_workload=~\"$workload\"}[$__rate_interval])) by (le)) * 1000",
           "legendFormat": "P95 Latency",
           "refId": "A"
         }
@@ -140,29 +182,44 @@
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "blue", "value": null }
+              {
+                "color": "blue",
+                "value": null
+              }
             ]
           },
           "unit": "reqps"
         },
         "overrides": []
       },
-      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 1 },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 12,
+        "y": 1
+      },
       "id": 3,
       "options": {
         "colorMode": "background",
         "graphMode": "area",
         "justifyMode": "auto",
         "orientation": "auto",
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
         "textMode": "auto"
       },
       "pluginVersion": "10.0.0",
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "${datasource}" },
-          "expr": "sum(rate(hubble_http_requests_total{destination_namespace=~\"$namespace\", destination_workload=~\"$workload\"}[$__rate_interval])) + sum(rate(grpc_server_started_total{namespace=~\"$namespace\", pod=~\"$workload.*\"}[$__rate_interval]) or vector(0)) + sum(rate(${workload}_grpc_requests_total{namespace=~\"$namespace\"}[$__rate_interval]) or vector(0))",
-          "legendFormat": "RPS",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "sum(rate(hubble_http_requests_total{destination_namespace=~\"$namespace\", destination_workload=~\"$workload\"}[$__rate_interval]))",
+          "legendFormat": "Requests/sec",
           "refId": "A"
         }
       ],
@@ -183,30 +240,51 @@
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "green", "value": null },
-              { "color": "yellow", "value": 70 },
-              { "color": "red", "value": 90 }
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 70
+              },
+              {
+                "color": "red",
+                "value": 90
+              }
             ]
           },
           "unit": "percent"
         },
         "overrides": []
       },
-      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 1 },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 18,
+        "y": 1
+      },
       "id": 4,
       "options": {
         "colorMode": "background",
         "graphMode": "area",
         "justifyMode": "auto",
         "orientation": "auto",
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
         "textMode": "auto"
       },
       "pluginVersion": "10.0.0",
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "${datasource}" },
-          "expr": "avg(sum by (pod) (container_memory_working_set_bytes{namespace=~\"$namespace\", pod=~\"$workload.*\"}) / sum by (pod) (kube_pod_container_resource_limits{namespace=~\"$namespace\", pod=~\"$workload.*\", resource=\"memory\"}) * 100)",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "avg(container_memory_working_set_bytes{namespace=~\"$namespace\", pod=~\"$workload.*\"} / container_spec_memory_limit_bytes{namespace=~\"$namespace\", pod=~\"$workload.*\"} * 100) or avg(sum by (pod) (container_memory_working_set_bytes{namespace=~\"$namespace\", pod=~\"$workload.*\"}) / sum by (pod) (kube_pod_container_resource_limits{namespace=~\"$namespace\", pod=~\"$workload.*\", resource=\"memory\"}) * 100)",
           "legendFormat": "Memory %",
           "refId": "A"
         }
@@ -216,17 +294,27 @@
     },
     {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 5 },
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 5
+      },
       "id": 101,
       "panels": [],
-      "title": "HTTP Metrics (Hubble eBPF)",
+      "title": "Latency",
       "type": "row"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "palette-classic" },
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
             "axisCenteredZero": false,
             "axisColorMode": "text",
@@ -236,387 +324,1167 @@
             "drawStyle": "line",
             "fillOpacity": 10,
             "gradientMode": "none",
-            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
             "lineInterpolation": "linear",
             "lineWidth": 1,
             "pointSize": 5,
-            "scaleDistribution": { "type": "linear" },
+            "scaleDistribution": {
+              "type": "linear"
+            },
             "showPoints": "never",
             "spanNulls": false,
-            "stacking": { "group": "A", "mode": "none" },
-            "thresholdsStyle": { "mode": "off" }
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
           },
           "mappings": [],
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
           "unit": "ms"
         },
         "overrides": [
-          { "matcher": { "id": "byName", "options": "P50" }, "properties": [{ "id": "color", "value": { "fixedColor": "green", "mode": "fixed" } }] },
-          { "matcher": { "id": "byName", "options": "P95" }, "properties": [{ "id": "color", "value": { "fixedColor": "yellow", "mode": "fixed" } }] },
-          { "matcher": { "id": "byName", "options": "P99" }, "properties": [{ "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }] }
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "P50"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "green",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "P95"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "yellow",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "P99"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "red",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
         ]
       },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 6
+      },
       "id": 10,
       "options": {
-        "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true },
-        "tooltip": { "mode": "multi", "sort": "desc" }
+        "legend": {
+          "calcs": ["mean", "max"],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
       },
       "targets": [
-        { "datasource": { "type": "prometheus", "uid": "${datasource}" }, "expr": "histogram_quantile(0.50, sum(rate(hubble_http_request_duration_seconds_bucket{destination_namespace=~\"$namespace\", destination_workload=~\"$workload\"}[$__rate_interval])) by (le)) * 1000", "legendFormat": "P50", "refId": "A" },
-        { "datasource": { "type": "prometheus", "uid": "${datasource}" }, "expr": "histogram_quantile(0.95, sum(rate(hubble_http_request_duration_seconds_bucket{destination_namespace=~\"$namespace\", destination_workload=~\"$workload\"}[$__rate_interval])) by (le)) * 1000", "legendFormat": "P95", "refId": "B" },
-        { "datasource": { "type": "prometheus", "uid": "${datasource}" }, "expr": "histogram_quantile(0.99, sum(rate(hubble_http_request_duration_seconds_bucket{destination_namespace=~\"$namespace\", destination_workload=~\"$workload\"}[$__rate_interval])) by (le)) * 1000", "legendFormat": "P99", "refId": "C" }
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "histogram_quantile(0.50, sum(rate(hubble_http_request_duration_seconds_bucket{destination_namespace=~\"$namespace\", destination_workload=~\"$workload\"}[$__rate_interval])) by (le)) * 1000",
+          "legendFormat": "P50",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "histogram_quantile(0.95, sum(rate(hubble_http_request_duration_seconds_bucket{destination_namespace=~\"$namespace\", destination_workload=~\"$workload\"}[$__rate_interval])) by (le)) * 1000",
+          "legendFormat": "P95",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "histogram_quantile(0.99, sum(rate(hubble_http_request_duration_seconds_bucket{destination_namespace=~\"$namespace\", destination_workload=~\"$workload\"}[$__rate_interval])) by (le)) * 1000",
+          "legendFormat": "P99",
+          "refId": "C"
+        }
       ],
-      "title": "HTTP Latency (P50/P95/P99)",
+      "title": "Request Latency (P50/P95/P99)",
       "type": "timeseries"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "palette-classic" },
-          "custom": {
-            "axisCenteredZero": false, "axisColorMode": "text", "axisPlacement": "auto",
-            "drawStyle": "line", "fillOpacity": 30, "lineWidth": 1, "showPoints": "never",
-            "stacking": { "group": "A", "mode": "normal" }
+          "color": {
+            "mode": "palette-classic"
           },
-          "unit": "reqps"
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 6
+      },
+      "id": 11,
+      "options": {
+        "legend": {
+          "calcs": ["mean", "max"],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
         }
       },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
-      "id": 20,
-      "options": {
-        "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true },
-        "tooltip": { "mode": "multi", "sort": "desc" }
-      },
       "targets": [
-        { "datasource": { "type": "prometheus", "uid": "${datasource}" }, "expr": "sum(rate(hubble_http_requests_total{destination_namespace=~\"$namespace\", destination_workload=~\"$workload\"}[$__rate_interval])) by (status)", "legendFormat": "{{status}}", "refId": "A" }
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "histogram_quantile(0.95, sum(rate(hubble_http_request_duration_seconds_bucket{destination_namespace=~\"$namespace\", destination_workload=~\"$workload\"}[$__rate_interval])) by (le, method)) * 1000",
+          "legendFormat": "{{method}}",
+          "refId": "A"
+        }
       ],
-      "title": "HTTP Request Rate by Status Code",
+      "title": "P95 Latency by HTTP Method",
       "type": "timeseries"
     },
     {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 14 },
-      "id": 200,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 14
+      },
+      "id": 102,
       "panels": [],
-      "title": "gRPC Metrics (Application)",
+      "title": "Traffic",
       "type": "row"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "description": "gRPC latency from go-grpc-prometheus interceptor or custom metrics.\nSupports: grpc_server_handling_seconds (go-grpc-prometheus) and {service}_grpc_request_duration_seconds (custom)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "palette-classic" },
-          "custom": {
-            "axisCenteredZero": false, "axisColorMode": "text", "axisPlacement": "auto",
-            "drawStyle": "line", "fillOpacity": 10, "lineWidth": 1, "showPoints": "never",
-            "stacking": { "group": "A", "mode": "none" }
+          "color": {
+            "mode": "palette-classic"
           },
-          "unit": "ms"
-        },
-        "overrides": [
-          { "matcher": { "id": "byName", "options": "P50" }, "properties": [{ "id": "color", "value": { "fixedColor": "green", "mode": "fixed" } }] },
-          { "matcher": { "id": "byName", "options": "P95" }, "properties": [{ "id": "color", "value": { "fixedColor": "yellow", "mode": "fixed" } }] },
-          { "matcher": { "id": "byName", "options": "P99" }, "properties": [{ "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }] }
-        ]
-      },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 15 },
-      "id": 210,
-      "options": {
-        "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true },
-        "tooltip": { "mode": "multi", "sort": "desc" }
-      },
-      "targets": [
-        { "datasource": { "type": "prometheus", "uid": "${datasource}" }, "expr": "histogram_quantile(0.50, sum(rate(grpc_server_handling_seconds_bucket{namespace=~\"$namespace\", pod=~\"$workload.*\"}[$__rate_interval])) by (le)) * 1000 or histogram_quantile(0.50, sum(rate(health_demo_grpc_request_duration_seconds_bucket{namespace=~\"$namespace\"}[$__rate_interval])) by (le)) * 1000", "legendFormat": "P50", "refId": "A" },
-        { "datasource": { "type": "prometheus", "uid": "${datasource}" }, "expr": "histogram_quantile(0.95, sum(rate(grpc_server_handling_seconds_bucket{namespace=~\"$namespace\", pod=~\"$workload.*\"}[$__rate_interval])) by (le)) * 1000 or histogram_quantile(0.95, sum(rate(health_demo_grpc_request_duration_seconds_bucket{namespace=~\"$namespace\"}[$__rate_interval])) by (le)) * 1000", "legendFormat": "P95", "refId": "B" },
-        { "datasource": { "type": "prometheus", "uid": "${datasource}" }, "expr": "histogram_quantile(0.99, sum(rate(grpc_server_handling_seconds_bucket{namespace=~\"$namespace\", pod=~\"$workload.*\"}[$__rate_interval])) by (le)) * 1000 or histogram_quantile(0.99, sum(rate(health_demo_grpc_request_duration_seconds_bucket{namespace=~\"$namespace\"}[$__rate_interval])) by (le)) * 1000", "legendFormat": "P99", "refId": "C" }
-      ],
-      "title": "gRPC Latency (P50/P95/P99)",
-      "type": "timeseries"
-    },
-    {
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "description": "gRPC request rate by method and status code.\nSupports: grpc_server_handled_total (go-grpc-prometheus) and {service}_grpc_requests_total (custom)",
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "palette-classic" },
           "custom": {
-            "axisCenteredZero": false, "axisColorMode": "text", "axisPlacement": "auto",
-            "drawStyle": "line", "fillOpacity": 30, "lineWidth": 1, "showPoints": "never",
-            "stacking": { "group": "A", "mode": "normal" }
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 30,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "normal"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
           },
           "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 15
+      },
+      "id": 20,
+      "options": {
+        "legend": {
+          "calcs": ["mean", "max"],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
         }
       },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 15 },
-      "id": 220,
-      "options": {
-        "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true },
-        "tooltip": { "mode": "multi", "sort": "desc" }
-      },
       "targets": [
-        { "datasource": { "type": "prometheus", "uid": "${datasource}" }, "expr": "sum(rate(grpc_server_handled_total{namespace=~\"$namespace\", pod=~\"$workload.*\"}[$__rate_interval])) by (grpc_method, grpc_code) or sum(rate(health_demo_grpc_requests_total{namespace=~\"$namespace\"}[$__rate_interval])) by (method, status)", "legendFormat": "{{grpc_method}}:{{grpc_code}}{{method}}:{{status}}", "refId": "A" }
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "sum(rate(hubble_http_requests_total{destination_namespace=~\"$namespace\", destination_workload=~\"$workload\"}[$__rate_interval])) by (status)",
+          "legendFormat": "{{status}}",
+          "refId": "A"
+        }
       ],
-      "title": "gRPC Request Rate by Method/Status",
+      "title": "Request Rate by Status Code",
       "type": "timeseries"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "description": "gRPC error rate (non-OK responses)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "palette-classic" },
-          "custom": {
-            "axisCenteredZero": false, "axisColorMode": "text", "axisPlacement": "auto",
-            "drawStyle": "line", "fillOpacity": 10, "lineWidth": 1, "showPoints": "never"
+          "color": {
+            "mode": "palette-classic"
           },
-          "unit": "percentunit"
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 30,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "normal"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 15
+      },
+      "id": 21,
+      "options": {
+        "legend": {
+          "calcs": ["mean", "max"],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
         }
       },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 23 },
-      "id": 230,
-      "options": {
-        "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true },
-        "tooltip": { "mode": "multi", "sort": "desc" }
-      },
       "targets": [
-        { "datasource": { "type": "prometheus", "uid": "${datasource}" }, "expr": "sum(rate(grpc_server_handled_total{namespace=~\"$namespace\", pod=~\"$workload.*\", grpc_code!=\"OK\"}[$__rate_interval])) / sum(rate(grpc_server_handled_total{namespace=~\"$namespace\", pod=~\"$workload.*\"}[$__rate_interval])) or sum(rate(health_demo_grpc_requests_total{namespace=~\"$namespace\", status!=\"OK\"}[$__rate_interval])) / sum(rate(health_demo_grpc_requests_total{namespace=~\"$namespace\"}[$__rate_interval]))", "legendFormat": "gRPC Error Rate", "refId": "A" }
-      ],
-      "title": "gRPC Error Rate",
-      "type": "timeseries"
-    },
-    {
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "description": "Active gRPC streams (for streaming RPCs)",
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "palette-classic" },
-          "custom": {
-            "axisCenteredZero": false, "axisColorMode": "text", "axisPlacement": "auto",
-            "drawStyle": "line", "fillOpacity": 30, "lineWidth": 1, "showPoints": "never"
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
           },
-          "unit": "short"
+          "expr": "sum(rate(hubble_http_requests_total{destination_namespace=~\"$namespace\", destination_workload=~\"$workload\"}[$__rate_interval])) by (method)",
+          "legendFormat": "{{method}}",
+          "refId": "A"
         }
-      },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 23 },
-      "id": 240,
-      "options": {
-        "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true },
-        "tooltip": { "mode": "multi", "sort": "desc" }
-      },
-      "targets": [
-        { "datasource": { "type": "prometheus", "uid": "${datasource}" }, "expr": "sum(grpc_server_started_total{namespace=~\"$namespace\", pod=~\"$workload.*\"}) - sum(grpc_server_handled_total{namespace=~\"$namespace\", pod=~\"$workload.*\"})", "legendFormat": "Active Streams", "refId": "A" }
       ],
-      "title": "Active gRPC Streams",
+      "title": "Request Rate by HTTP Method",
       "type": "timeseries"
     },
     {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 31 },
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 23
+      },
       "id": 103,
       "panels": [],
       "title": "Errors",
       "type": "row"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "palette-classic" },
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
-            "axisCenteredZero": false, "axisColorMode": "text", "axisPlacement": "auto",
-            "drawStyle": "line", "fillOpacity": 30, "lineWidth": 1, "showPoints": "never"
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 30,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
           },
           "unit": "percentunit"
-        }
+        },
+        "overrides": []
       },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 32 },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 24
+      },
       "id": 30,
       "options": {
-        "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true },
-        "tooltip": { "mode": "multi", "sort": "desc" }
+        "legend": {
+          "calcs": ["mean", "max"],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
       },
       "targets": [
-        { "datasource": { "type": "prometheus", "uid": "${datasource}" }, "expr": "sum(rate(hubble_http_requests_total{destination_namespace=~\"$namespace\", destination_workload=~\"$workload\", status=~\"5..\"}[$__rate_interval])) / sum(rate(hubble_http_requests_total{destination_namespace=~\"$namespace\", destination_workload=~\"$workload\"}[$__rate_interval]))", "legendFormat": "HTTP 5xx", "refId": "A" },
-        { "datasource": { "type": "prometheus", "uid": "${datasource}" }, "expr": "sum(rate(hubble_http_requests_total{destination_namespace=~\"$namespace\", destination_workload=~\"$workload\", status=~\"4..\"}[$__rate_interval])) / sum(rate(hubble_http_requests_total{destination_namespace=~\"$namespace\", destination_workload=~\"$workload\"}[$__rate_interval]))", "legendFormat": "HTTP 4xx", "refId": "B" }
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "sum(rate(hubble_http_requests_total{destination_namespace=~\"$namespace\", destination_workload=~\"$workload\", status=~\"5..\"}[$__rate_interval])) / sum(rate(hubble_http_requests_total{destination_namespace=~\"$namespace\", destination_workload=~\"$workload\"}[$__rate_interval]))",
+          "legendFormat": "5xx Error Rate",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "sum(rate(hubble_http_requests_total{destination_namespace=~\"$namespace\", destination_workload=~\"$workload\", status=~\"4..\"}[$__rate_interval])) / sum(rate(hubble_http_requests_total{destination_namespace=~\"$namespace\", destination_workload=~\"$workload\"}[$__rate_interval]))",
+          "legendFormat": "4xx Error Rate",
+          "refId": "B"
+        }
       ],
-      "title": "HTTP Error Rate (4xx / 5xx)",
+      "title": "Error Rate (4xx / 5xx)",
       "type": "timeseries"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "palette-classic" },
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
-            "axisCenteredZero": false, "axisColorMode": "text", "axisPlacement": "auto",
-            "drawStyle": "line", "fillOpacity": 30, "lineWidth": 1, "showPoints": "never",
-            "stacking": { "group": "A", "mode": "normal" }
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 30,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "normal"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
           },
           "unit": "short"
-        }
+        },
+        "overrides": []
       },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 32 },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 24
+      },
       "id": 31,
       "options": {
-        "legend": { "calcs": ["sum"], "displayMode": "table", "placement": "bottom", "showLegend": true },
-        "tooltip": { "mode": "multi", "sort": "desc" }
+        "legend": {
+          "calcs": ["sum"],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
       },
       "targets": [
-        { "datasource": { "type": "prometheus", "uid": "${datasource}" }, "expr": "sum(increase(hubble_drop_total{destination_namespace=~\"$namespace\"}[$__rate_interval])) by (reason)", "legendFormat": "{{reason}}", "refId": "A" }
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "sum(increase(hubble_drop_total{destination_namespace=~\"$namespace\"}[$__rate_interval])) by (reason)",
+          "legendFormat": "{{reason}}",
+          "refId": "A"
+        }
       ],
       "title": "Network Drops by Reason (Hubble)",
       "type": "timeseries"
     },
     {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 40 },
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 32
+      },
       "id": 104,
       "panels": [],
       "title": "Saturation",
       "type": "row"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "palette-classic" },
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
-            "axisCenteredZero": false, "axisColorMode": "text", "axisPlacement": "auto",
-            "drawStyle": "line", "fillOpacity": 30, "lineWidth": 1, "showPoints": "never"
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 30,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
           },
           "unit": "percent"
-        }
+        },
+        "overrides": []
       },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 41 },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 33
+      },
       "id": 40,
       "options": {
-        "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true },
-        "tooltip": { "mode": "multi", "sort": "desc" }
+        "legend": {
+          "calcs": ["mean", "max"],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
       },
       "targets": [
-        { "datasource": { "type": "prometheus", "uid": "${datasource}" }, "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=~\"$namespace\", pod=~\"$workload.*\"}[$__rate_interval])) by (pod) * 100", "legendFormat": "{{pod}}", "refId": "A" }
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=~\"$namespace\", pod=~\"$workload.*\"}[$__rate_interval])) by (pod) * 100",
+          "legendFormat": "{{pod}}",
+          "refId": "A"
+        }
       ],
       "title": "CPU Usage by Pod",
       "type": "timeseries"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "palette-classic" },
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
-            "axisCenteredZero": false, "axisColorMode": "text", "axisPlacement": "auto",
-            "drawStyle": "line", "fillOpacity": 30, "lineWidth": 1, "showPoints": "never"
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 30,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
           },
           "unit": "bytes"
-        }
+        },
+        "overrides": []
       },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 41 },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 33
+      },
       "id": 41,
       "options": {
-        "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true },
-        "tooltip": { "mode": "multi", "sort": "desc" }
+        "legend": {
+          "calcs": ["mean", "max"],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
       },
       "targets": [
-        { "datasource": { "type": "prometheus", "uid": "${datasource}" }, "expr": "sum(container_memory_working_set_bytes{namespace=~\"$namespace\", pod=~\"$workload.*\"}) by (pod)", "legendFormat": "{{pod}}", "refId": "A" }
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "sum(container_memory_working_set_bytes{namespace=~\"$namespace\", pod=~\"$workload.*\"}) by (pod)",
+          "legendFormat": "{{pod}}",
+          "refId": "A"
+        }
       ],
       "title": "Memory Usage by Pod",
       "type": "timeseries"
     },
     {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 49 },
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 41
+      },
       "id": 105,
       "panels": [],
-      "title": "Deployment Info",
+      "title": "Deployment Status",
       "type": "row"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "thresholds" },
-          "custom": { "align": "auto", "cellOptions": { "type": "auto" }, "filterable": false, "inspect": false },
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "filterable": false,
+            "inspect": false
+          },
           "mappings": [],
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
         },
         "overrides": [
-          { "matcher": { "id": "byName", "options": "Age" }, "properties": [{ "id": "unit", "value": "dtdurations" }, { "id": "color", "value": { "fixedColor": "green", "mode": "fixed" } }] },
-          { "matcher": { "id": "byName", "options": "Tag" }, "properties": [{ "id": "color", "value": { "fixedColor": "blue", "mode": "fixed" } }, { "id": "custom.width", "value": 100 }] }
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Age"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "dtdurations"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "green",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Tag"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "blue",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.width",
+                "value": 100
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Service"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 180
+              }
+            ]
+          }
         ]
       },
-      "gridPos": { "h": 6, "w": 24, "x": 0, "y": 50 },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 42
+      },
       "id": 50,
-      "options": { "cellHeight": "sm", "footer": { "countRows": false, "fields": "", "reducer": ["sum"], "show": false }, "showHeader": true },
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": ["sum"],
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": []
+      },
       "targets": [
-        { "datasource": { "type": "prometheus", "uid": "${datasource}" }, "expr": "label_replace(kube_pod_container_info{namespace=~\"$namespace\", pod=~\"$workload.*\"}, \"tag\", \"$1\", \"image_spec\", \".*:([^@]+).*\")", "format": "table", "instant": true, "refId": "A" },
-        { "datasource": { "type": "prometheus", "uid": "${datasource}" }, "expr": "time() - kube_pod_start_time{namespace=~\"$namespace\", pod=~\"$workload.*\"}", "format": "table", "instant": true, "refId": "B" }
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "label_replace(kube_pod_container_info{namespace=~\"$namespace\", pod=~\"$workload.*\"}, \"tag\", \"$1\", \"image_spec\", \".*:([^@]+).*\")",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "time() - kube_pod_start_time{namespace=~\"$namespace\", pod=~\"$workload.*\"}",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "",
+          "refId": "B"
+        }
       ],
       "title": "Container Images",
       "transformations": [
-        { "id": "joinByField", "options": { "byField": "pod", "mode": "outer" } },
-        { "id": "filterFieldsByName", "options": { "include": { "names": ["container 1", "tag", "Value #B", "pod", "image_spec"] } } },
-        { "id": "organize", "options": { "renameByName": { "Value #B": "Age", "container 1": "Service", "image_spec": "Image", "pod": "Pod", "tag": "Tag" } } }
+        {
+          "id": "joinByField",
+          "options": {
+            "byField": "pod",
+            "mode": "outer"
+          }
+        },
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": ["container 1", "tag", "Value #B", "pod", "image_spec"]
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {},
+            "indexByName": {
+              "container 1": 0,
+              "tag": 1,
+              "Value #B": 2,
+              "pod": 3,
+              "image_spec": 4
+            },
+            "renameByName": {
+              "Value #B": "Age",
+              "container 1": "Service",
+              "image_spec": "Image",
+              "pod": "Pod",
+              "tag": "Tag"
+            }
+          }
+        }
       ],
       "type": "table"
     },
     {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 56 },
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 50
+      },
       "id": 106,
       "panels": [],
       "title": "Service Dependencies (Traffic Flow)",
       "type": "row"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "palette-classic" },
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
-            "axisCenteredZero": false, "axisColorMode": "text", "axisPlacement": "auto",
-            "drawStyle": "line", "fillOpacity": 30, "lineWidth": 1, "showPoints": "never",
-            "stacking": { "group": "A", "mode": "normal" }
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 30,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "normal"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
           },
           "unit": "reqps"
-        }
+        },
+        "overrides": []
       },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 57 },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 51
+      },
       "id": 60,
       "options": {
-        "legend": { "calcs": ["mean"], "displayMode": "table", "placement": "bottom", "showLegend": true },
-        "tooltip": { "mode": "multi", "sort": "desc" }
+        "legend": {
+          "calcs": ["mean"],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
       },
       "targets": [
-        { "datasource": { "type": "prometheus", "uid": "${datasource}" }, "expr": "sum(rate(hubble_http_requests_total{destination_namespace=~\"$namespace\", destination_workload=~\"$workload\"}[$__rate_interval])) by (source_namespace, source_workload)", "legendFormat": "{{source_namespace}}/{{source_workload}}", "refId": "A" }
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "sum(rate(hubble_http_requests_total{destination_namespace=~\"$namespace\", destination_workload=~\"$workload\"}[$__rate_interval])) by (source_namespace, source_workload)",
+          "legendFormat": "{{source_namespace}}/{{source_workload}}",
+          "refId": "A"
+        }
       ],
       "title": "Incoming Traffic Sources",
       "type": "timeseries"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "palette-classic" },
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
-            "axisCenteredZero": false, "axisColorMode": "text", "axisPlacement": "auto",
-            "drawStyle": "line", "fillOpacity": 30, "lineWidth": 1, "showPoints": "never",
-            "stacking": { "group": "A", "mode": "normal" }
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 30,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "normal"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
           },
           "unit": "reqps"
-        }
+        },
+        "overrides": []
       },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 57 },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 51
+      },
       "id": 61,
       "options": {
-        "legend": { "calcs": ["mean"], "displayMode": "table", "placement": "bottom", "showLegend": true },
-        "tooltip": { "mode": "multi", "sort": "desc" }
+        "legend": {
+          "calcs": ["mean"],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
       },
       "targets": [
-        { "datasource": { "type": "prometheus", "uid": "${datasource}" }, "expr": "sum(rate(hubble_http_requests_total{source_namespace=~\"$namespace\", source_workload=~\"$workload\"}[$__rate_interval])) by (destination_namespace, destination_workload)", "legendFormat": "{{destination_namespace}}/{{destination_workload}}", "refId": "A" }
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "sum(rate(hubble_http_requests_total{source_namespace=~\"$namespace\", source_workload=~\"$workload\"}[$__rate_interval])) by (destination_namespace, destination_workload)",
+          "legendFormat": "{{destination_namespace}}/{{destination_workload}}",
+          "refId": "A"
+        }
       ],
       "title": "Outgoing Traffic Destinations",
       "type": "timeseries"
@@ -629,7 +1497,11 @@
   "templating": {
     "list": [
       {
-        "current": { "selected": false, "text": "prometheus", "value": "prometheus" },
+        "current": {
+          "selected": false,
+          "text": "prometheus",
+          "value": "prometheus"
+        },
         "hide": 0,
         "includeAll": false,
         "label": "Data Source",
@@ -644,7 +1516,10 @@
       },
       {
         "current": {},
-        "datasource": { "type": "prometheus", "uid": "${datasource}" },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
         "definition": "label_values(kube_deployment_created, namespace)",
         "hide": 0,
         "includeAll": false,
@@ -652,7 +1527,10 @@
         "multi": false,
         "name": "namespace",
         "options": [],
-        "query": { "query": "label_values(kube_deployment_created, namespace)", "refId": "StandardVariableQuery" },
+        "query": {
+          "query": "label_values(kube_deployment_created, namespace)",
+          "refId": "StandardVariableQuery"
+        },
         "refresh": 2,
         "regex": "",
         "skipUrlSync": false,
@@ -661,7 +1539,10 @@
       },
       {
         "current": {},
-        "datasource": { "type": "prometheus", "uid": "${datasource}" },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
         "definition": "label_values(kube_deployment_created{namespace=\"$namespace\"}, deployment)",
         "hide": 0,
         "includeAll": true,
@@ -669,7 +1550,10 @@
         "multi": true,
         "name": "workload",
         "options": [],
-        "query": { "query": "label_values(kube_deployment_created{namespace=\"$namespace\"}, deployment)", "refId": "StandardVariableQuery" },
+        "query": {
+          "query": "label_values(kube_deployment_created{namespace=\"$namespace\"}, deployment)",
+          "refId": "StandardVariableQuery"
+        },
         "refresh": 2,
         "regex": "",
         "skipUrlSync": false,
@@ -678,11 +1562,14 @@
       }
     ]
   },
-  "time": { "from": "now-1h", "to": "now" },
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
   "timepicker": {},
   "timezone": "",
-  "title": "Service Golden Signals (HTTP + gRPC)",
+  "title": "Service Golden Signals (Hubble eBPF)",
   "uid": "service-golden-signals",
-  "version": 2,
+  "version": 1,
   "weekStart": ""
 }
