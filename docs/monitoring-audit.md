@@ -1,6 +1,6 @@
 # Monitoring Audit Report
 
-**Date**: 2025-12-14 (updated: 2025-12-16)
+**Date**: 2025-12-14 (updated: 2025-12-17)
 **Project**: GitOps POC
 **Author**: Claude Code Audit
 
@@ -12,6 +12,7 @@
 |--------|--------|--------|
 | `api-gateway` | UP | ServiceMonitor poc-dev |
 | `health-demo` | UP | ServiceMonitor poc-dev |
+| `user-service` | UP | ServiceMonitor poc-dev |
 | `sentry-game-engine` | DOWN | Образ без /metrics (ожидает CI/CD) |
 | `sentry-game-engine-cache` | UP | Redis exporter |
 | `sentry-payment` | UP | ServiceMonitor poc-dev |
@@ -76,7 +77,19 @@
 | `health_demo_grpc_request_duration_seconds` | Histogram | method | gRPC latency |
 | + **Default metrics** | Various | - | go_*, process_* |
 
-### 2.5 API Gateway (Envoy)
+### 2.5 User Service (Go/gRPC)
+
+**Конфигурация**: `services/user-service/.cicd/default.yaml`
+**Библиотека**: `github.com/prometheus/client_golang`
+
+| Метрика | Тип | Labels | Описание |
+|---------|-----|--------|----------|
+| + **Default metrics** | Various | - | go_*, process_* |
+
+> **TODO**: Добавить `go-grpc-prometheus` interceptors для полноценного gRPC мониторинга.
+> См. секцию 8.2 для инструкций.
+
+### 2.6 API Gateway (Envoy)
 
 **Endpoint**: `/stats/prometheus` на порту `8000`
 **Конфигурация**: `services/api-gateway/.cicd/default.yaml:72-76`
@@ -163,7 +176,10 @@ hubble:
 | game-engine | `_requests_total` | labels: status | `_duration_seconds` |
 | payment-service | `_requests_total` | labels: status | `_duration_seconds` |
 | health-demo | `_grpc_requests_total` | labels: status | `_duration_seconds` |
+| user-service | `go_*` (default only) | - | - |
 | api-gateway | Envoy auto | Envoy auto | Envoy auto |
+
+> **Примечание**: user-service требует добавления `go-grpc-prometheus` для полного RED compliance.
 
 ---
 
@@ -187,14 +203,15 @@ hubble:
         ▲                    ▲                    ▲
         │                    │                    │
 ┌───────┴───────┐  ┌─────────┴─────────┐  ┌──────┴───────┐
-│  poc-dev (7)  │  │  kube-system (3)  │  │ monitoring(9)│
+│  poc-dev (8)  │  │  kube-system (3)  │  │ monitoring(9)│
 │               │  │                   │  │              │
 │ • api-gateway │  │ • cilium-agent    │  │ • prometheus │
 │ • game-engine │  │ • cilium-operator │  │ • grafana    │
 │ • payment     │  │ • hubble          │  │ • alertmgr   │
 │ • wager       │  │                   │  │ • node-exp   │
 │ • health-demo │  └───────────────────┘  │ • kube-state │
-│ • *-cache (2) │                         └──────────────┘
+│ • user-service│                         └──────────────┘
+│ • *-cache (2) │
 └───────────────┘
 ```
 
@@ -271,6 +288,7 @@ hubble:
 
 # JSON файлы дашбордов
 infrastructure/monitoring/dashboards/json/
+├── service-golden-signals.json      # Custom: HTTP + gRPC Golden Signals
 ├── redis-exporter.json              # ID: 14091
 ├── rabbitmq-overview-official.json  # Official RabbitMQ Team
 ├── mongodb-percona-compat.json      # ID: 12079
@@ -283,9 +301,133 @@ kubectl get configmaps -n monitoring -l grafana_dashboard=1
 
 ---
 
-## 8. SOURCES
+## 8. GRPC МОНИТОРИНГ
+
+### 8.1 Важное ограничение Hubble/Cilium
+
+**Hubble eBPF метрики НЕ поддерживают gRPC на уровне L7!**
+
+Hubble предоставляет только `httpV2` метрики:
+- `hubble_http_requests_total` - HTTP запросы
+- `hubble_http_request_duration_seconds` - HTTP latency
+
+gRPC использует HTTP/2, но Hubble не декодирует gRPC фреймы. Для gRPC мониторинга необходимы **application-level метрики**.
+
+### 8.2 Два подхода к gRPC метрикам
+
+#### Подход 1: go-grpc-prometheus (рекомендуется)
+
+Стандартная библиотека для gRPC мониторинга. Создаёт метрики автоматически.
+
+```go
+import (
+    grpcprometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
+)
+
+// Server
+server := grpc.NewServer(
+    grpc.UnaryInterceptor(grpcprometheus.UnaryServerInterceptor),
+    grpc.StreamInterceptor(grpcprometheus.StreamServerInterceptor),
+)
+grpcprometheus.Register(server)
+
+// Client
+conn, _ := grpc.Dial(address,
+    grpc.WithUnaryInterceptor(grpcprometheus.UnaryClientInterceptor),
+    grpc.WithStreamInterceptor(grpcprometheus.StreamClientInterceptor),
+)
+```
+
+**Метрики:**
+| Метрика | Тип | Labels | Описание |
+|---------|-----|--------|----------|
+| `grpc_server_started_total` | Counter | method, service, type | Начатые RPC |
+| `grpc_server_handled_total` | Counter | method, service, code | Завершённые RPC |
+| `grpc_server_handling_seconds` | Histogram | method, service, type | Latency |
+| `grpc_server_msg_received_total` | Counter | method, service, type | Полученные сообщения |
+| `grpc_server_msg_sent_total` | Counter | method, service, type | Отправленные сообщения |
+
+#### Подход 2: Custom метрики (текущий health-demo)
+
+Ручное создание метрик в коде. Даёт полный контроль над labels.
+
+```go
+var (
+    grpcRequests = promauto.NewCounterVec(
+        prometheus.CounterOpts{
+            Name: "health_demo_grpc_requests_total",
+            Help: "Total gRPC requests",
+        },
+        []string{"method", "status"},
+    )
+    grpcDuration = promauto.NewHistogramVec(
+        prometheus.HistogramOpts{
+            Name: "health_demo_grpc_request_duration_seconds",
+            Help: "gRPC request duration",
+        },
+        []string{"method"},
+    )
+)
+```
+
+**Метрики:**
+| Метрика | Тип | Labels | Описание |
+|---------|-----|--------|----------|
+| `{service}_grpc_requests_total` | Counter | method, status | gRPC запросы |
+| `{service}_grpc_request_duration_seconds` | Histogram | method | Latency |
+
+### 8.3 Рекомендации по выбору
+
+| Критерий | go-grpc-prometheus | Custom |
+|----------|-------------------|--------|
+| Время интеграции | 5 минут | 30+ минут |
+| Стандартизация | Да (gRPC стандарт) | Нет |
+| Совместимость с дашбордами | Grafana ID 14061 и др. | Требуется кастомизация |
+| Контроль labels | Ограниченный | Полный |
+| Overhead | Минимальный | Зависит от реализации |
+
+**Рекомендация**: Используйте `go-grpc-prometheus` для новых сервисов.
+
+### 8.4 Dashboard для gRPC
+
+Обновлённый дашборд `service-golden-signals.json` поддерживает оба подхода:
+
+```
+infrastructure/monitoring/dashboards/json/service-golden-signals.json
+```
+
+Дашборд автоматически агрегирует:
+- HTTP метрики из Hubble (`hubble_http_*`)
+- gRPC метрики из go-grpc-prometheus (`grpc_server_*`)
+- Custom gRPC метрики (`{service}_grpc_*`)
+
+### 8.5 Добавление gRPC мониторинга в сервис
+
+1. Добавить зависимость:
+```bash
+go get github.com/grpc-ecosystem/go-grpc-prometheus
+```
+
+2. Подключить interceptors (см. код выше)
+
+3. Убедиться что ServiceMonitor настроен в `.cicd/default.yaml`:
+```yaml
+serviceMonitor:
+  enabled: true
+  port: "metrics"
+  path: "/metrics"
+  interval: 30s
+```
+
+4. Метрики появятся в Prometheus после деплоя
+
+---
+
+## 9. SOURCES
 
 - [The RED Method - Grafana Labs](https://grafana.com/blog/2018/08/02/the-red-method-how-to-instrument-your-services/)
 - [prom-client npm](https://www.npmjs.com/package/prom-client)
 - [prometheus_client PyPI](https://pypi.org/project/prometheus-client/)
 - [prometheus/client_golang](https://github.com/prometheus/client_golang)
+- [go-grpc-prometheus](https://github.com/grpc-ecosystem/go-grpc-prometheus)
+- [Cilium Hubble Metrics](https://docs.cilium.io/en/stable/observability/metrics/)
