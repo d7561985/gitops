@@ -94,97 +94,85 @@ gen/my-service/                        # Sub-group (auto-created)
 
 ---
 
-## Quick Start: Creating a New Proto Service
+## Quick Start: Creating a New Proto Service (Zero-Config!)
 
-### Step 1: Copy the Template
+### Step 1: Create Service Directory
 
 ```bash
-# From gitops repository root
-cp -r templates/proto-service my-service
+mkdir -p my-service/proto/myservice/v1
 cd my-service
 ```
 
-### Step 2: Update Configuration
+### Step 2: Add CI Configuration
 
-Edit `buf.yaml`:
-```yaml
-modules:
-  - path: proto
-    name: buf.build/gitops-poc-dzha/my-service  # Change to your service name
-```
-
-Edit `buf.gen.yaml`:
-```yaml
-managed:
-  override:
-    - file_option: go_package_prefix
-      value: gitlab.com/gitops-poc-dzha/api/gen/my-service/go  # Change to your service
-```
-
-### Step 3: Configure CI/CD
-
-The `.gitlab-ci.yml` uses CI/CD Components - just include the proto-gen component:
+Just one file with 3 lines:
 
 ```yaml
+# .gitlab-ci.yml
 include:
-  - component: gitlab.com/gitops-poc-dzha/api/ci/proto-gen@1.0.0
-    inputs:
-      languages: [go, nodejs, php, python, angular]
+  - project: 'gitops-poc-dzha/api/ci'
+    file: '/templates/proto-gen/template.yml'
 ```
 
-**Available inputs:**
+**That's it!** No `buf.yaml` or `buf.gen.yaml` needed - they are auto-generated from `$CI_PROJECT_NAME`.
 
-| Input | Type | Default | Description |
-|-------|------|---------|-------------|
-| `languages` | array | `[go, nodejs, php, python, angular]` | Languages to generate |
-| `buf_version` | string | `1.47.2` | Buf CLI version |
-| `gen_group_path` | string | `gitops-poc-dzha/api/gen` | GitLab group for generated repos |
-| `run_on_mr` | boolean | `true` | Run lint/breaking on MRs |
+### Step 3: Create Your Proto File
 
-**Example - generate only Go and Node.js:**
-```yaml
-include:
-  - component: gitlab.com/gitops-poc-dzha/api/ci/proto-gen@1.0.0
-    inputs:
-      languages: [go, nodejs]
+```protobuf
+// proto/myservice/v1/service.proto
+syntax = "proto3";
+
+package myservice.v1;
+
+service MyService {
+  rpc GetItem(GetItemRequest) returns (GetItemResponse);
+}
+
+message GetItemRequest { string id = 1; }
+message GetItemResponse { string id = 1; string name = 2; }
 ```
 
-### Step 4: Write Your Proto Files
-
-Create proto files in `proto/{domain}/v1/`:
-```bash
-mkdir -p proto/myservice/v1
-```
-
-Example structure:
-```
-proto/
-└── myservice/
-    └── v1/
-        ├── myservice.proto    # Service definitions
-        └── types.proto        # Shared message types
-```
-
-### Step 5: Push to GitLab
+### Step 4: Push and Done!
 
 ```bash
-git init
-git add .
-git commit -m "Initial proto definitions"
+git init && git add . && git commit -m "Initial proto"
 git remote add origin https://gitlab.com/gitops-poc-dzha/api/proto/my-service.git
 git push -u origin main
 ```
 
-### Step 6: CI Does the Rest
+CI will automatically generate code for Go, Node.js, PHP, Python, and Angular.
 
-The pipeline automatically:
-1. Lints your proto files
-2. Checks for breaking changes
-3. Generates code for selected languages
-4. Creates `api/gen/my-service/` sub-group if it doesn't exist
-5. Creates language repositories (go, nodejs, php, python, angular)
-6. Pushes generated code with proper versioning
-7. Creates git tags for releases
+### Optional: Customize Generation
+
+Override defaults in your `.gitlab-ci.yml`:
+
+```yaml
+include:
+  - project: 'gitops-poc-dzha/api/ci'
+    file: '/templates/proto-gen/template.yml'
+
+variables:
+  PROTO_GEN_LANGUAGES: "go,nodejs"  # Only these languages
+  BUF_VERSION: "1.48.0"             # Specific Buf version
+```
+
+**Available variables:**
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PROTO_GEN_LANGUAGES` | `go,nodejs,php,python,angular` | Languages to generate |
+| `BUF_VERSION` | `1.47.2` | Buf CLI version |
+| `DEFAULT_BRANCH` | `main` | Branch for breaking change detection |
+
+**Example - generate only Go and Node.js:**
+```yaml
+include:
+  - project: 'gitops-poc-dzha/api/ci'
+    file: '/templates/proto-gen/template.yml'
+
+variables:
+  PROTO_GEN_LANGUAGES: "go,nodejs"
+```
 
 ---
 
@@ -192,31 +180,63 @@ The pipeline automatically:
 
 ### Go
 
-**Install:**
+**Настройка для приватных репозиториев:**
+
 ```bash
-# For private GitLab repos, configure git first:
-git config --global url."git@gitlab.com:".insteadOf "https://gitlab.com/"
+# Установите переменные окружения
+export GOPRIVATE=gitlab.com/gitops-poc-dzha/*
+export GONOSUMDB=gitlab.com/gitops-poc-dzha/*
+export GONOPROXY=gitlab.com/gitops-poc-dzha/*
 
-# Or with token:
-git config --global url."https://oauth2:${GITLAB_TOKEN}@gitlab.com".insteadOf "https://gitlab.com"
+# Создайте ~/.netrc с токеном (требуется scope read_api!)
+echo "machine gitlab.com login YOUR_USERNAME password YOUR_GITLAB_TOKEN" > ~/.netrc
+chmod 600 ~/.netrc
 
-# Install specific version
+# Теперь можно устанавливать модули
 go get gitlab.com/gitops-poc-dzha/api/gen/my-service/go@v1.2.3
-
-# Install dev snapshot
-go get gitlab.com/gitops-poc-dzha/api/gen/my-service/go@v0.0.0-abc1234
 ```
+
+> **Важно:** Токен должен иметь scope `read_api`, а не только `read_repository`.
+> Это необходимо для корректной работы go-import meta tags.
 
 **go.mod example:**
 ```go
 module my-app
 
-go 1.21
+go 1.22
 
 require (
     gitlab.com/gitops-poc-dzha/api/gen/my-service/go v1.2.3
 )
 ```
+
+**Dockerfile для CI/CD:**
+
+При сборке Docker образов с приватными зависимостями используйте `.netrc`:
+
+```dockerfile
+FROM golang:1.22-alpine AS builder
+
+RUN apk add --no-cache git ca-certificates
+
+ARG GITLAB_TOKEN
+RUN if [ -n "$GITLAB_TOKEN" ]; then \
+    echo "machine gitlab.com login gitlab-ci-token password ${GITLAB_TOKEN}" > ~/.netrc && \
+    chmod 600 ~/.netrc; \
+    fi
+
+ENV GOPRIVATE=gitlab.com/gitops-poc-dzha/*
+ENV GONOSUMDB=gitlab.com/gitops-poc-dzha/*
+ENV GONOPROXY=gitlab.com/gitops-poc-dzha/*
+
+SHELL ["/bin/ash", "-c"]
+
+COPY go.mod go.sum ./
+RUN go mod download
+# ...
+```
+
+В CI передавайте токен: `docker build --build-arg GITLAB_TOKEN=${CI_PUSH_TOKEN} .`
 
 **Usage:**
 ```go
@@ -662,10 +682,24 @@ Check:
 
 ### Go module not found
 
-Ensure git is configured for private repos:
+Для приватных репозиториев настройте аутентификацию через `.netrc`:
+
 ```bash
-git config --global url."git@gitlab.com:".insteadOf "https://gitlab.com/"
+# 1. Установите переменные окружения
+export GOPRIVATE=gitlab.com/gitops-poc-dzha/*
+export GONOSUMDB=gitlab.com/gitops-poc-dzha/*
+export GONOPROXY=gitlab.com/gitops-poc-dzha/*
+
+# 2. Создайте ~/.netrc с токеном (scope: read_api)
+echo "machine gitlab.com login YOUR_USERNAME password YOUR_TOKEN" > ~/.netrc
+chmod 600 ~/.netrc
+
+# 3. Проверьте что работает
+go mod download
 ```
+
+> **НЕ используйте** `git config insteadOf` - это не работает с вложенными GitLab subgroups.
+> Используйте `.netrc` с токеном, имеющим scope `read_api`.
 
 ### Package installation fails
 
@@ -673,7 +707,12 @@ For private repositories, configure authentication:
 
 **Go:**
 ```bash
-git config --global url."git@gitlab.com:".insteadOf "https://gitlab.com/"
+# Используйте .netrc (НЕ git config insteadOf!)
+export GOPRIVATE=gitlab.com/gitops-poc-dzha/*
+export GONOSUMDB=gitlab.com/gitops-poc-dzha/*
+export GONOPROXY=gitlab.com/gitops-poc-dzha/*
+echo "machine gitlab.com login YOUR_USERNAME password YOUR_TOKEN" > ~/.netrc
+chmod 600 ~/.netrc
 ```
 
 **npm:**

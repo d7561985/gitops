@@ -85,3 +85,61 @@ vault kv put secret/gitops-poc-dzha/{{SERVICE_NAME}}/dev/config \
 ```
 
 k8app chart automatically creates VaultStaticSecret and injects env vars into pods.
+
+## Private Go Modules
+
+Если ваш сервис использует приватные Go модули из GitLab (например, gRPC код из `api/gen/`):
+
+### Локальная разработка
+
+```bash
+# Установите переменные окружения
+export GOPRIVATE=gitlab.com/gitops-poc-dzha/*
+export GONOSUMDB=gitlab.com/gitops-poc-dzha/*
+export GONOPROXY=gitlab.com/gitops-poc-dzha/*
+
+# Создайте ~/.netrc с токеном (требуется scope read_api!)
+echo "machine gitlab.com login YOUR_USERNAME password YOUR_GITLAB_TOKEN" > ~/.netrc
+chmod 600 ~/.netrc
+
+# Теперь go mod tidy/download будут работать
+go mod tidy
+```
+
+### Dockerfile
+
+Используйте `.netrc` для аутентификации:
+
+```dockerfile
+FROM golang:1.22-alpine AS builder
+
+RUN apk add --no-cache git ca-certificates
+
+ARG GITLAB_TOKEN
+RUN if [ -n "$GITLAB_TOKEN" ]; then \
+    echo "machine gitlab.com login gitlab-ci-token password ${GITLAB_TOKEN}" > ~/.netrc && \
+    chmod 600 ~/.netrc; \
+    fi
+
+ENV GOPRIVATE=gitlab.com/gitops-poc-dzha/*
+ENV GONOSUMDB=gitlab.com/gitops-poc-dzha/*
+ENV GONOPROXY=gitlab.com/gitops-poc-dzha/*
+
+SHELL ["/bin/ash", "-c"]
+
+COPY go.mod go.sum ./
+RUN go mod download
+# ...
+```
+
+### CI/CD
+
+В `.gitlab-ci.yml` передавайте токен через `--build-arg`:
+
+```yaml
+build:
+  script:
+    - docker build --build-arg GITLAB_TOKEN=${CI_PUSH_TOKEN} -t ${IMAGE_NAME}:${TAG} .
+```
+
+> **Важно:** `CI_PUSH_TOKEN` настраивается на уровне группы `gitops-poc-dzha` и должен иметь scope `read_api`.
