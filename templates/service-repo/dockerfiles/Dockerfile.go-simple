@@ -1,0 +1,28 @@
+# =============================================================================
+# Go Service Dockerfile (Distroless) - Simple Version
+# =============================================================================
+# Use this if you don't have private GitLab dependencies
+# Final image: gcr.io/distroless/static-debian12:nonroot (~2MB)
+#
+# Usage: Copy to your repo as 'Dockerfile'
+# Replace: {{SERVICE_NAME}} with your service name
+# =============================================================================
+
+FROM golang:1.23-alpine AS builder
+
+WORKDIR /app
+
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o /{{SERVICE_NAME}} ./cmd/server
+
+# Final distroless image (~2MB, secure by default)
+FROM gcr.io/distroless/static-debian12:nonroot
+
+COPY --from=builder /{{SERVICE_NAME}} /{{SERVICE_NAME}}
+
+EXPOSE 8081 9090
+
+ENTRYPOINT ["/{{SERVICE_NAME}}"]

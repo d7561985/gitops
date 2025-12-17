@@ -6,9 +6,10 @@
 
 Платформа следует GitOps подходу с использованием:
 - **ArgoCD** для деплоя
-- **k8app Helm chart** для стандартизации
+- **k8app Helm chart** (v3.8.0+) для стандартизации
 - **Vault** для секретов
 - **platform-bootstrap** для автоматической конфигурации
+- **Distroless images** для безопасности (Go, Node.js)
 
 ## Шаг 1: Регистрация сервиса
 
@@ -26,9 +27,29 @@ services:
 - ArgoCD Application: `my-service-dev`
 - Secret path placeholder: `secret/gitops-poc-dzha/my-service/dev/config`
 
-## Шаг 2: Создание репозитория
+## Шаг 2: Выбор Dockerfile
 
-### Структура репозитория
+Выберите подходящий Dockerfile из `templates/service-repo/dockerfiles/`:
+
+| Язык | Файл | Base Image | Размер |
+|------|------|------------|--------|
+| **Go** | `Dockerfile.go` | `gcr.io/distroless/static-debian12:nonroot` | ~2MB |
+| **Go** (простой) | `Dockerfile.go-simple` | То же, без приватных зависимостей | ~2MB |
+| **Python** | `Dockerfile.python` | `python:3.12-slim` | ~150MB |
+| **Node.js** | `Dockerfile.nodejs` | `gcr.io/distroless/nodejs22-debian12:nonroot` | ~180MB |
+| **Node.js** (native) | `Dockerfile.nodejs-native` | `node:22-alpine` | ~180MB |
+| **PHP** | `Dockerfile.php` | `php:8.2-fpm-alpine` + nginx | ~150MB |
+| **Angular/React** | `Dockerfile.angular` | `nginx:alpine` | ~40MB |
+
+### Distroless Images
+
+Go и Node.js сервисы используют [Google Distroless](https://github.com/GoogleContainerTools/distroless):
+- **Нет shell** — нельзя exec в контейнер (безопаснее)
+- **Нет package manager** — меньше attack surface
+- **Runs as nonroot** — UID 65532 по умолчанию
+- **Включает ca-certificates** — TLS работает из коробки
+
+## Шаг 3: Структура репозитория
 
 ```
 my-service/
@@ -39,16 +60,16 @@ my-service/
 │   └── ...
 ├── .cicd/
 │   ├── default.yaml     # Базовые настройки k8app
-│   └── dev.yaml         # Переопределения для dev окружения
+│   └── dev.yaml         # Переопределения для dev
 ├── .gitlab-ci.yml
 ├── Dockerfile
 ├── go.mod
 └── go.sum
 ```
 
-### .cicd/default.yaml
+## Шаг 4: Конфигурация k8app
 
-Базовая конфигурация для k8app chart:
+### .cicd/default.yaml
 
 ```yaml
 appName: my-service
@@ -76,12 +97,13 @@ service:
       internalPort: 9090
       protocol: TCP
 
+# Для gRPC используйте tcpSocket
 livenessProbe:
   enabled: true
   mode: tcpSocket
   tcpSocket:
     port: 8081
-  initialDelaySeconds: 5
+  initialDelaySeconds: 10
   periodSeconds: 10
 
 readinessProbe:
@@ -89,7 +111,7 @@ readinessProbe:
   mode: tcpSocket
   tcpSocket:
     port: 8081
-  initialDelaySeconds: 3
+  initialDelaySeconds: 5
   periodSeconds: 5
 
 args:
@@ -104,7 +126,8 @@ serviceMonitor:
 
 # Секреты из Vault
 secrets:
-  MY_SECRET: "/gitops-poc-dzha/my-service/dev/config"
+  DATABASE_URL: "/gitops-poc-dzha/my-service/dev/config"
+  API_KEY: "/gitops-poc-dzha/my-service/dev/config"
 
 secretsProvider:
   provider: "vault"
@@ -116,8 +139,6 @@ secretsProvider:
 ```
 
 ### .cicd/dev.yaml
-
-Переопределения для dev окружения:
 
 ```yaml
 environment: dev
@@ -146,7 +167,58 @@ annotations:
   argocd.argoproj.io/sync-wave: "0"
 ```
 
-## Шаг 3: GitLab CI/CD
+## Шаг 5: Dockerfile (Go с Distroless)
+
+### Без приватных зависимостей
+
+```dockerfile
+FROM golang:1.23-alpine AS builder
+WORKDIR /app
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o /server ./cmd/server
+
+# Distroless (~2MB, secure by default)
+FROM gcr.io/distroless/static-debian12:nonroot
+COPY --from=builder /server /server
+ENTRYPOINT ["/server"]
+```
+
+### С приватными GitLab зависимостями
+
+```dockerfile
+FROM golang:1.23-alpine AS builder
+WORKDIR /app
+
+RUN apk add --no-cache git ca-certificates
+
+# Аутентификация для приватных репозиториев
+# Токен должен иметь scope read_api!
+ARG GITLAB_TOKEN
+RUN if [ -n "$GITLAB_TOKEN" ]; then \
+    echo "machine gitlab.com login gitlab-ci-token password ${GITLAB_TOKEN}" > ~/.netrc && \
+    chmod 600 ~/.netrc; \
+    fi
+
+ENV GOPRIVATE=gitlab.com/gitops-poc-dzha/*
+ENV GONOSUMDB=gitlab.com/gitops-poc-dzha/*
+ENV GONOPROXY=gitlab.com/gitops-poc-dzha/*
+
+SHELL ["/bin/ash", "-c"]
+
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o /server ./cmd/server
+
+# Distroless (~2MB, secure by default)
+FROM gcr.io/distroless/static-debian12:nonroot
+COPY --from=builder /server /server
+ENTRYPOINT ["/server"]
+```
+
+## Шаг 6: GitLab CI/CD
 
 ### .gitlab-ci.yml
 
@@ -155,8 +227,6 @@ variables:
   SERVICE_NAME: "my-service"
   REGISTRY: ${CI_REGISTRY}
   IMAGE_NAME: ${CI_REGISTRY_IMAGE}
-  HELM_CHART: "k8app/app"
-  HELM_REPO: "https://d7561985.github.io/k8app"
   GITOPS_MODE: "pull"
   ARGOCD_OPTS: "--grpc-web"
   RELEASE_TIMEOUT: "300"
@@ -166,7 +236,6 @@ stages:
   - update-manifests
   - release
 
-# Build Docker image
 build:
   stage: build
   image: docker:24
@@ -177,7 +246,8 @@ build:
   before_script:
     - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
   script:
-    - docker build -t ${IMAGE_NAME}:${CI_COMMIT_SHORT_SHA} .
+    # Для приватных Go зависимостей добавьте --build-arg GITLAB_TOKEN=${CI_PUSH_TOKEN}
+    - docker build --build-arg GITLAB_TOKEN=${CI_PUSH_TOKEN} -t ${IMAGE_NAME}:${CI_COMMIT_SHORT_SHA} .
     - docker push ${IMAGE_NAME}:${CI_COMMIT_SHORT_SHA}
     - |
       if [ "$CI_COMMIT_BRANCH" == "$CI_DEFAULT_BRANCH" ]; then
@@ -187,7 +257,6 @@ build:
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
 
-# Update .cicd/dev.yaml with new image tag
 update:dev:
   stage: update-manifests
   image: alpine:3.19
@@ -208,7 +277,6 @@ update:dev:
   rules:
     - if: $GITOPS_MODE == "pull" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
 
-# Wait for ArgoCD sync
 release:dev:
   stage: release
   image: alpine:3.19
@@ -228,78 +296,7 @@ release:dev:
     - if: $GITOPS_MODE == "pull" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
 ```
 
-## Шаг 4: Dockerfile
-
-### Без приватных зависимостей
-
-```dockerfile
-FROM golang:1.22-alpine AS builder
-WORKDIR /app
-COPY go.mod go.sum ./
-RUN go mod download
-COPY . .
-RUN CGO_ENABLED=0 go build -o /server ./cmd/server
-
-FROM alpine:3.19
-RUN apk add --no-cache ca-certificates
-COPY --from=builder /server /server
-ENTRYPOINT ["/server"]
-```
-
-### С приватными GitLab зависимостями
-
-Если сервис использует приватные Go модули из GitLab (например, сгенерированный gRPC код):
-
-```dockerfile
-FROM golang:1.22-alpine AS builder
-
-WORKDIR /app
-
-# Install git for private dependencies
-RUN apk add --no-cache git ca-certificates
-
-# Configure authentication for private GitLab repos
-# Token must have read_api scope (not just read_repository)
-# See: https://docs.gitlab.com/ee/user/project/use_project_as_go_package.html
-ARG GITLAB_TOKEN
-RUN if [ -n "$GITLAB_TOKEN" ]; then \
-    echo "machine gitlab.com login gitlab-ci-token password ${GITLAB_TOKEN}" > ~/.netrc && \
-    chmod 600 ~/.netrc; \
-    fi
-
-# Set GOPRIVATE to skip proxy and checksum for private repos
-ENV GOPRIVATE=gitlab.com/gitops-poc-dzha/*
-ENV GONOSUMDB=gitlab.com/gitops-poc-dzha/*
-ENV GONOPROXY=gitlab.com/gitops-poc-dzha/*
-
-# Use ash shell for proper .netrc support
-SHELL ["/bin/ash", "-c"]
-
-# Copy go mod files and download dependencies
-COPY go.mod go.sum ./
-RUN go mod download
-
-# Copy source and build
-COPY . .
-RUN CGO_ENABLED=0 go build -ldflags="-w -s" -o /server ./cmd/server
-
-# Final image
-FROM alpine:3.19
-RUN apk add --no-cache ca-certificates
-COPY --from=builder /server /server
-ENTRYPOINT ["/server"]
-```
-
-**Важно для CI/CD:**
-- В `.gitlab-ci.yml` передавайте токен через `--build-arg`:
-  ```yaml
-  script:
-    - docker build --build-arg GITLAB_TOKEN=${CI_PUSH_TOKEN} -t ${IMAGE_NAME}:${TAG} .
-  ```
-- `CI_PUSH_TOKEN` должен быть Personal Access Token с scope `read_api`
-- Переменная настраивается на уровне группы `gitops-poc-dzha`
-
-## Шаг 5: Создание секретов в Vault
+## Шаг 7: Создание секретов в Vault
 
 ```bash
 # Подключение к Vault
@@ -311,26 +308,63 @@ vault kv put secret/gitops-poc-dzha/my-service/dev/config \
   API_KEY="your-api-key"
 ```
 
-## Шаг 6: Добавление маршрутов (опционально)
+## Dockerfile шаблоны для других языков
 
-Если сервис должен быть доступен извне, добавьте HTTPRoute в api-gateway:
+### Python (FastAPI/Flask)
 
-```yaml
-# В конфигурации api-gateway
-routes:
-  my-service:
-    matches:
-      - path:
-          type: PathPrefix
-          value: /api/my-service
-    backendRefs:
-      - name: my-service
-        port: 8081
+```dockerfile
+FROM python:3.12-slim AS builder
+WORKDIR /app
+RUN apt-get update && apt-get install -y --no-install-recommends gcc python3-dev && rm -rf /var/lib/apt/lists/*
+COPY requirements.txt .
+RUN pip install --no-cache-dir --user -r requirements.txt
+
+FROM python:3.12-slim
+WORKDIR /app
+COPY --from=builder /root/.local /root/.local
+ENV PATH=/root/.local/bin:$PATH
+COPY . .
+RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
+USER appuser
+EXPOSE 8080
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]
+```
+
+### Node.js (Distroless)
+
+```dockerfile
+FROM node:22-alpine AS builder
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
+COPY . .
+RUN npm prune --production
+
+FROM gcr.io/distroless/nodejs22-debian12:nonroot
+WORKDIR /app
+COPY --from=builder /app .
+EXPOSE 8080
+CMD ["index.js"]
+```
+
+### Angular/React (nginx)
+
+```dockerfile
+FROM node:22-alpine AS builder
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
+COPY . .
+RUN npm run build
+
+FROM nginx:alpine
+COPY --from=builder /app/dist/my-app /usr/share/nginx/html
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]
 ```
 
 ## gRPC сервисы
-
-Для gRPC сервисов дополнительно нужно:
 
 ### 1. Создать Proto репозиторий
 
@@ -392,8 +426,6 @@ variables:
   PROTO_GEN_LANGUAGES: "go"  # go,nodejs,php,python,angular
 ```
 
-CI автоматически сгенерирует код и опубликует в `api/gen/my-service/go`.
-
 ### 5. Использование сгенерированного кода
 
 ```go
@@ -406,10 +438,10 @@ import (
 
 - [ ] Добавлен в platform-bootstrap/values.yaml
 - [ ] Создан репозиторий с кодом
+- [ ] Выбран подходящий Dockerfile (distroless для Go/Node.js)
 - [ ] Создан .cicd/default.yaml
 - [ ] Создан .cicd/dev.yaml
 - [ ] Создан .gitlab-ci.yml
-- [ ] Создан Dockerfile
 - [ ] Созданы секреты в Vault
 - [ ] (gRPC) Создан proto репозиторий
 - [ ] (gRPC) Дождались генерации кода

@@ -70,6 +70,14 @@ services:
     syncWave: "0"
 
   # ---------------------------------------------------------------------------
+  # User Service - Authentication and user management
+  # ---------------------------------------------------------------------------
+  user-service:
+    syncWave: "0"
+    repoURL: https://gitlab.com/gitops-poc-dzha/user-service.git
+    path: .cicd
+
+  # ---------------------------------------------------------------------------
   # Sentry Demo Services (monorepo)
   # ---------------------------------------------------------------------------
   # These services come from a single monorepo with custom paths

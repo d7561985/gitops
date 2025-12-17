@@ -1,92 +1,96 @@
-# Proto Service Template
+# Proto Service Template (Zero-Config)
 
-This is a template for creating a new proto/gRPC service definition repository.
+Create a new proto/gRPC service with just 2 files!
 
 ## Quick Start
 
-### 1. Copy this template
+### 1. Create your service directory
 
 ```bash
-cp -r templates/proto-service api/proto/my-service
-cd api/proto/my-service
+mkdir -p my-service/proto/myservice/v1
+cd my-service
 ```
 
-### 2. Update configuration files
-
-**buf.yaml** - Change the module name:
-```yaml
-name: buf.build/gitops-poc-dzha/my-service  # <-- Change this
-```
-
-**buf.gen.yaml** - Change the Go package prefix:
-```yaml
-managed:
-  override:
-    - file_option: go_package_prefix
-      value: gitlab.com/gitops-poc-dzha/api/gen/my-service/go  # <-- Change this
-```
-
-### 3. Create your proto files
-
-Replace the example proto files in `proto/example/v1/` with your own:
+### 2. Add CI configuration
 
 ```bash
-rm -rf proto/example
-mkdir -p proto/myservice/v1
+cp /path/to/templates/proto-service/.gitlab-ci.yml .
+# Or just create it manually (it's only 3 lines!)
 ```
 
-Create your proto file following the patterns in `proto/example/v1/example.proto`.
-
-### 4. Validate locally (optional)
+### 3. Create your proto file
 
 ```bash
-# Install buf: https://buf.build/docs/installation
-buf lint
-buf format --diff
+cat > proto/myservice/v1/service.proto << 'EOF'
+syntax = "proto3";
+
+package myservice.v1;
+
+service MyService {
+  rpc GetItem(GetItemRequest) returns (GetItemResponse);
+  rpc CreateItem(CreateItemRequest) returns (CreateItemResponse);
+}
+
+message GetItemRequest {
+  string id = 1;
+}
+
+message GetItemResponse {
+  string id = 1;
+  string name = 2;
+}
+
+message CreateItemRequest {
+  string name = 1;
+}
+
+message CreateItemResponse {
+  string id = 1;
+}
+EOF
 ```
 
-### 5. Push to GitLab
+### 4. Push to GitLab
 
 ```bash
-rm -rf .git  # Remove template git history
 git init
 git add .
-git commit -m "Initial proto definitions for my-service"
+git commit -m "Initial proto definitions"
 git remote add origin https://gitlab.com/gitops-poc-dzha/api/proto/my-service.git
 git push -u origin main
 ```
 
-## What Happens Next
+**That's it!** No `buf.yaml` or `buf.gen.yaml` needed.
 
-The CI pipeline will automatically:
+## What Happens Automatically
 
-1. **Lint** - Validate proto file quality
-2. **Breaking** - Check for breaking changes
-3. **Generate** - Create code for Go, Node.js, PHP, Python, Angular
-4. **Publish** - Push to `api/gen/my-service` repository
+The CI pipeline will:
+
+1. **Generate** `buf.yaml` from `$CI_PROJECT_NAME`
+2. **Generate** `buf.gen.yaml` with all language plugins
+3. **Lint** - Validate proto file quality
+4. **Breaking** - Check for breaking changes (on MR/dev)
+5. **Generate** - Create code for Go, Node.js, PHP, Python, Angular
+6. **Publish** - Push to `api/gen/{service}/{language}/`
 
 ## Directory Structure
 
 ```
 my-service/
-├── buf.yaml           # Buf module configuration
-├── buf.gen.yaml       # Code generation configuration
-├── .gitlab-ci.yml     # CI/CD pipeline
-├── README.md          # This file
+├── .gitlab-ci.yml     # CI/CD pipeline (copy from template)
 └── proto/
     └── myservice/     # Your service domain
         └── v1/        # API version
-            ├── myservice.proto    # Service definitions
-            └── types.proto        # Shared types (optional)
+            └── service.proto
 ```
 
 ## Versioning
 
-| Branch | Version Format | Example |
-|--------|----------------|---------|
-| dev | v0.0.0-{sha} | v0.0.0-abc1234 |
-| main | v0.0.0-{sha} | v0.0.0-def5678 |
-| tag | v{X}.{Y}.{Z} | v1.2.3 |
+| Trigger | Version Format | Example |
+|---------|----------------|---------|
+| Push to dev | `v0.0.0-{sha}` | `v0.0.0-abc1234` |
+| Push to main | `v0.0.0-{sha}` | `v0.0.0-def5678` |
+| Git tag | `v{X}.{Y}.{Z}` | `v1.2.3` |
 
 ### Creating a Release
 
@@ -101,11 +105,8 @@ git push origin v1.0.0
 
 ```protobuf
 syntax = "proto3";
-
 package myservice.v1;
-
-option go_package = "gitlab.com/gitops-poc-dzha/api/gen/my-service/go/myservice/v1;myservicev1";
-option php_namespace = "GitopsPocDzha\\MyService\\Myservice\\V1";
+// go_package is auto-managed by buf, no need to specify!
 ```
 
 ### Service Naming
@@ -121,26 +122,10 @@ service UserService {
 }
 ```
 
-### Field Numbering
-
-- Use sequential field numbers
-- Reserve deleted fields to prevent reuse
-- Never reuse field numbers
-
-```protobuf
-message User {
-  string id = 1;
-  string email = 2;
-  // Field 3 was removed
-  reserved 3;
-  string name = 4;
-}
-```
-
 ## Using Generated Code
 
 After the pipeline runs, code will be available at:
-`gitlab.com/gitops-poc-dzha/api/gen/my-service`
+`gitlab.com/gitops-poc-dzha/api/gen/{service}/{language}`
 
 ### Go
 ```bash
@@ -149,25 +134,31 @@ go get gitlab.com/gitops-poc-dzha/api/gen/my-service/go@v1.0.0
 
 ### Node.js
 ```bash
-npm install git+https://gitlab.com/gitops-poc-dzha/api/gen/my-service.git#v1.0.0
-```
-
-### PHP
-```json
-{
-  "repositories": [{"type": "vcs", "url": "https://gitlab.com/gitops-poc-dzha/api/gen/my-service.git"}],
-  "require": {"gitops-poc-dzha/my-service": "1.0.0"}
-}
+npm install @gitops-poc-dzha/my-service@1.0.0
 ```
 
 ### Python
 ```bash
-pip install git+https://gitlab.com/gitops-poc-dzha/api/gen/my-service.git@v1.0.0#subdirectory=python
+pip install gitops-poc-dzha-my-service==1.0.0
 ```
 
-### Angular (gRPC-Web)
+### PHP
 ```bash
-npm install git+https://gitlab.com/gitops-poc-dzha/api/gen/my-service.git#v1.0.0
+composer require gitops-poc-dzha/my-service:1.0.0
+```
+
+## Customization (Optional)
+
+Override defaults in your `.gitlab-ci.yml`:
+
+```yaml
+include:
+  - project: 'gitops-poc-dzha/api/ci'
+    file: '/templates/proto-gen/template.yml'
+
+variables:
+  PROTO_GEN_LANGUAGES: "go,nodejs"  # Only these languages
+  BUF_VERSION: "1.48.0"             # Specific Buf version
 ```
 
 ## Documentation

@@ -7,7 +7,7 @@ branch: main
 # Image - CI updates these values
 image:
   repository: registry.gitlab.com/gitops-poc-dzha/api-gateway
-  tag: 5f2982bd
+  tag: 77aede6d
   pullPolicy: IfNotPresent
 # Replicas
 replicas: 1

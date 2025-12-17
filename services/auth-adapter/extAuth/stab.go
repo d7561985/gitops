@@ -3,11 +3,18 @@ package extAuth
 import (
 	"context"
 	"errors"
+	"os"
 
 	"google.golang.org/grpc"
 )
 
-func NewAuthSessionServiceClient(*grpc.ClientConn) AuthSessionServiceClient {
+// NewAuthSessionServiceClient creates an AuthSessionServiceClient
+// If USE_USER_SERVICE=true, uses real gRPC client to user-service
+// Otherwise, uses stub with hardcoded demo tokens
+func NewAuthSessionServiceClient(conn *grpc.ClientConn) AuthSessionServiceClient {
+	if os.Getenv("USE_USER_SERVICE") == "true" {
+		return NewGRPCAuthSessionServiceClient(conn)
+	}
 	return &stab{}
 }
 

@@ -1,0 +1,51 @@
+# =============================================================================
+# Angular Frontend Dockerfile (Nginx)
+# =============================================================================
+# Final image: nginx:alpine (~40MB)
+# Use for: Angular, React, Vue, static frontends
+#
+# Note: Multi-stage build - Node.js builds, Nginx serves
+#
+# Usage: Copy to your repo as 'Dockerfile'
+# Requires: nginx.conf for SPA routing
+# =============================================================================
+
+FROM node:22-alpine AS builder
+
+# Build arguments for environment configuration
+ARG API_URL
+ARG APP_VERSION
+
+WORKDIR /app
+
+# Copy package files first for better caching
+COPY package*.json ./
+
+# Install dependencies
+RUN npm ci --prefer-offline --no-audit
+
+# Copy source code
+COPY . .
+
+# Set environment variables for build
+ENV API_URL=${API_URL}
+ENV APP_VERSION=${APP_VERSION}
+
+# Build the application
+RUN npm run build
+
+# =============================================================================
+# Production stage (Nginx)
+# =============================================================================
+FROM nginx:alpine
+
+# Copy built application
+# Adjust path based on your Angular outputPath (angular.json)
+COPY --from=builder /app/dist/{{SERVICE_NAME}} /usr/share/nginx/html
+
+# Copy nginx config for SPA routing
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+
+EXPOSE 80
+
+CMD ["nginx", "-g", "daemon off;"]

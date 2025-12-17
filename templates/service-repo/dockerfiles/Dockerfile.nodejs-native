@@ -1,0 +1,44 @@
+# =============================================================================
+# Node.js Service Dockerfile (Alpine) - With Native Modules
+# =============================================================================
+# Final image: node:22-alpine (~180MB)
+# Use for: Services requiring native modules (bcrypt, sharp, etc.)
+#
+# Note: If no native modules needed, prefer Dockerfile.nodejs (distroless)
+#
+# Usage: Copy to your repo as 'Dockerfile'
+# =============================================================================
+
+FROM node:22-alpine AS builder
+
+WORKDIR /app
+
+# Install build dependencies for native modules
+RUN apk add --no-cache python3 make g++
+
+# Copy package files
+COPY package*.json ./
+
+# Install dependencies
+RUN npm ci --omit=dev
+
+# Copy application code
+COPY . .
+
+# =============================================================================
+# Final image
+# =============================================================================
+FROM node:22-alpine
+
+WORKDIR /app
+
+# Copy from builder
+COPY --from=builder /app .
+
+# Non-root user
+RUN adduser -D -u 1000 appuser && chown -R appuser:appuser /app
+USER appuser
+
+EXPOSE 8080
+
+CMD ["node", "index.js"]

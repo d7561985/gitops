@@ -11,6 +11,9 @@
 - [Риски и митигации](#риски-и-митигации)
 - [Что копировать из POC](#что-копировать-из-poc)
 
+**Связанные документы:**
+- [Access Management & RACI Matrix](./access-management.md) — управление доступами, роли, политики
+
 ---
 
 ## Текущее состояние POC
@@ -217,9 +220,9 @@ secretsProvider:
 |-----|----------|
 | 4.1 | Создать GitLab sub-groups: `api/proto/`, `api/gen/` |
 | 4.2 | Настроить CI_PUSH_TOKEN + GEN_GROUP_ID |
-| 4.3 | Скопировать `templates/proto-service/` |
-| 4.4 | Написать `.proto` файлы |
-| 4.5 | Push → автогенерация для 5 языков |
+| 4.3 | Скопировать `.gitlab-ci.yml` из `templates/proto-service/` (Zero-Config!) |
+| 4.4 | Написать `.proto` файлы в `proto/` директорию |
+| 4.5 | Push → автогенерация для 5 языков (buf.yaml генерируется автоматически) |
 
 **Versioning:**
 

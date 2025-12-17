@@ -30,8 +30,8 @@ RUN go mod download
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o /app/auth-adapter .
 
-# Final image
-FROM alpine:3.19
-RUN apk add --no-cache ca-certificates
+# Final distroless image (2MB vs 7MB alpine)
+# Includes ca-certificates, no shell, runs as nonroot user
+FROM gcr.io/distroless/static-debian12:nonroot
 COPY --from=builder /app/auth-adapter /app/auth-adapter
-CMD ["/app/auth-adapter"]
+ENTRYPOINT ["/app/auth-adapter"]

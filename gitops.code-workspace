@@ -7,7 +7,8 @@
     { "path": "services/web-grpc", "name": "web-grpc" },
     { "path": "services/web-http", "name": "web-http" },
     { "path": "gitops-config", "name": "gitops-config" },
-    { "path": "services/sentry-demo", "name": "sentry-demo" }
+    { "path": "services/sentry-demo", "name": "sentry-demo" },
+    { "path": "services/user-service", "name": "user-service" }
   ],
   "settings": {
     "git.autoRepositoryDetection": true,

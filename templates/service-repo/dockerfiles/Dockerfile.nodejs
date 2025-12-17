@@ -1,0 +1,48 @@
+# =============================================================================
+# Node.js Service Dockerfile (Distroless)
+# =============================================================================
+# Final image: gcr.io/distroless/nodejs22-debian12:nonroot (~180MB)
+# Use for: Express, NestJS, Fastify, general Node.js services
+#
+# Note: If you need native modules (node-gyp), use node:22-alpine instead
+#
+# Usage: Copy to your repo as 'Dockerfile'
+# =============================================================================
+
+FROM node:22-alpine AS builder
+
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+
+# Install ALL dependencies (including devDependencies for build)
+RUN npm ci
+
+# Copy source code
+COPY . .
+
+# Build if needed (TypeScript, etc.)
+# RUN npm run build
+
+# Prune dev dependencies for production
+RUN npm prune --production
+
+# =============================================================================
+# Final distroless image
+# =============================================================================
+# - ~180MB (vs ~1GB full node image)
+# - No shell, no package manager
+# - Runs as nonroot user
+FROM gcr.io/distroless/nodejs22-debian12:nonroot
+
+WORKDIR /app
+
+# Copy node_modules and built application
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app .
+
+EXPOSE 8080
+
+# Distroless nodejs has entrypoint set to "node"
+CMD ["index.js"]

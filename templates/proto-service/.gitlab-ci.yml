@@ -1,13 +1,16 @@
-# Proto Service CI/CD Pipeline
+# Proto Service CI/CD Pipeline (Zero-Config)
 #
-# Uses the proto-gen component for code generation and publishing.
-# See: https://gitlab.com/gitops-poc-dzha/api/ci
+# Just copy this file to your proto service repository.
+# Everything else is auto-generated from $CI_PROJECT_NAME.
 #
 # Required CI/CD Variables (set at api group level):
-#   CI_PUSH_TOKEN - Personal Access Token (glpat-...) with api, write_repository scopes
-#   GEN_GROUP_ID  - GitLab Group ID for api/gen
+#   CI_PUSH_TOKEN - Personal Access Token with api, write_repository scopes
 
 include:
-  - component: gitlab.com/gitops-poc-dzha/api/ci/proto-gen@1.0.0
-    inputs:
-      languages: [go, nodejs, php, python, angular]
+  - project: 'gitops-poc-dzha/api/ci'
+    file: '/templates/proto-gen/template.yml'
+
+# Optional: Override defaults
+# variables:
+#   PROTO_GEN_LANGUAGES: "go,nodejs"  # Generate only specific languages
+#   BUF_VERSION: "1.48.0"             # Use different Buf version

@@ -49,6 +49,11 @@ clusters:
       path: "/health"
       interval_seconds: 10
 
+  # User Service - Authentication and user management
+  - name: user-service
+    addr: "user-service-sv:8081"
+    type: "grpc"
+
 apis:
   # gRPC-Web тестирование
   - name: FakeService
@@ -142,3 +147,29 @@ apis:
         auth: {policy: no-need}
       - name: demo
         auth: {policy: no-need}
+
+  # User Service - Authentication API
+  # Routes: /api/auth/* → user-service user.v1.UserService/*
+  # Public endpoints (no auth required)
+  - name: auth
+    cluster: user-service
+    auth: {policy: no-need}
+    methods:
+      - name: register
+        auth: {policy: no-need}
+      - name: login
+        auth: {policy: no-need}
+      - name: refresh
+        auth: {policy: no-need}
+      - name: logout
+        auth: {policy: required}
+
+  # User Service - User Profile API
+  # Routes: /api/user/* → user-service user.v1.UserService/*
+  # Protected endpoints (auth required)
+  - name: user
+    cluster: user-service
+    auth: {policy: required}
+    methods:
+      - name: profile
+        auth: {policy: required}

@@ -1,60 +1,60 @@
-# Default values for {{SERVICE_NAME}}
-# This file contains base configuration shared across all environments
+# =============================================================================
+# {{SERVICE_NAME}} - Default Values (k8app chart v3.8.0+)
+# =============================================================================
+# Base configuration shared across all environments
+# Docs: https://github.com/d7561985/k8app
 #
-# Usage with k8app chart:
-#   helm upgrade --install {{SERVICE_NAME}} k8app/app \
-#     -f .cicd/default.yaml \
-#     -f .cicd/dev.yaml
+# Replace: {{SERVICE_NAME}} with your service name
+# =============================================================================
 
-# Application metadata
-fullnameOverride: "{{SERVICE_NAME}}"
+appName: {{SERVICE_NAME}}
+version: "1.0.0"
 
-# Container image
+# Service Account (use default, k8app doesn't create SA)
+serviceAccountName: default
+
+# =============================================================================
+# Image Configuration
+# =============================================================================
 image:
-  repository: "registry.gitlab.com/gitops-poc-dzha-dzha/{{SERVICE_NAME}}"
-  tag: "latest"
-  pullPolicy: IfNotPresent
+  repository: {{SERVICE_NAME}}
+  tag: local
+  pullPolicy: Never  # IfNotPresent for GitLab Registry
 
-# Image Pull Secrets - universal format (k8app v3.4.0+)
-# Run: ./scripts/setup-registry-secret.sh to create the secret
 imagePullSecrets:
   - name: regsecret
 
-# Secrets from Vault (k8app v3.4.0+)
-# Format: ENV_VAR_NAME: "vault-path"
-# - Absolute path (starts with /): /gitops-poc-dzha/{{SERVICE_NAME}}/dev/config
-# - Relative path: config (becomes {namespace}/{{SERVICE_NAME}}/{env}/config)
-secrets: {}
-  # Example:
-  # API_KEY: "/gitops-poc-dzha/{{SERVICE_NAME}}/dev/config"
-  # DATABASE_URL: "/gitops-poc-dzha/{{SERVICE_NAME}}/dev/database"
-
-# Secrets Provider Configuration (k8app v3.4.0+)
-secretsProvider:
-  provider: "vault"
-  vault:
-    authRef: "vault-auth"  # VaultAuth resource in namespace
-    mount: "secret"
-    type: "kv-v2"
-    refreshAfter: "1h"
-
-# Container configuration
-container:
-  port: 8080
-
-# Service configuration
+# =============================================================================
+# Service Configuration
+# =============================================================================
 service:
   enabled: true
   type: ClusterIP
-  port: 80
-  targetPort: 8080
+  ports:
+    http:
+      externalPort: 8080
+      internalPort: 8080
+      protocol: TCP
+    # For gRPC services:
+    # grpc:
+    #   externalPort: 8081
+    #   internalPort: 8081
+    #   protocol: TCP
+    metrics:
+      externalPort: 9090
+      internalPort: 9090
+      protocol: TCP
 
-# Health checks
+# =============================================================================
+# Health Checks
+# =============================================================================
+# HTTP endpoints:
 livenessProbe:
   enabled: true
+  mode: httpGet
   httpGet:
-    path: /health
     port: 8080
+    path: "/health"
   initialDelaySeconds: 10
   periodSeconds: 10
   timeoutSeconds: 5
@@ -62,29 +62,80 @@ livenessProbe:
 
 readinessProbe:
   enabled: true
+  mode: httpGet
   httpGet:
-    path: /ready
     port: 8080
+    path: "/ready"
   initialDelaySeconds: 5
   periodSeconds: 5
-  timeoutSeconds: 3
+  timeoutSeconds: 5
   failureThreshold: 3
 
-# Common labels
-labels:
-  app.kubernetes.io/name: "{{SERVICE_NAME}}"
-  app.kubernetes.io/part-of: "gitops-poc-dzha-dzha"
-  app.kubernetes.io/managed-by: "helm"
+# For gRPC services use tcpSocket:
+# livenessProbe:
+#   enabled: true
+#   mode: tcpSocket
+#   tcpSocket:
+#     port: 8081
+#   initialDelaySeconds: 10
+#   periodSeconds: 10
 
-# Pod annotations
-podAnnotations: {}
+# =============================================================================
+# Command Line Arguments (optional)
+# =============================================================================
+# args:
+#   - "-port=8080"
+#   - "-metrics-port=9090"
 
-# Security context
-securityContext:
-  runAsNonRoot: true
-  runAsUser: 1000
+# =============================================================================
+# Environment via ConfigMap
+# =============================================================================
+# configmap:
+#   LOG_LEVEL: "info"
+#   DATABASE_HOST: "mongodb.infra-dev.svc.cluster.local"
 
-# Service account
-serviceAccount:
-  create: true
-  name: "{{SERVICE_NAME}}"
+# =============================================================================
+# Secrets from Vault (k8app v3.4.0+)
+# =============================================================================
+# Format: ENV_VAR_NAME: "vault-path"
+# Absolute path (starts with /): /gitops-poc-dzha/{{SERVICE_NAME}}/dev/config
+secrets: {}
+  # DATABASE_PASSWORD: "/gitops-poc-dzha/{{SERVICE_NAME}}/dev/config"
+  # API_KEY: "/gitops-poc-dzha/{{SERVICE_NAME}}/dev/config"
+
+secretsProvider:
+  provider: "vault"
+  vault:
+    authRef: "vault-auth"
+    mount: "secret"
+    type: "kv-v2"
+    refreshAfter: "1h"
+
+# =============================================================================
+# Prometheus ServiceMonitor (k8app v3.8.0+)
+# =============================================================================
+serviceMonitor:
+  enabled: true
+  port: "metrics"
+  path: "/metrics"
+  interval: 30s
+
+# =============================================================================
+# Gateway API HTTPRoute (k8app v3.6.0+)
+# =============================================================================
+# httpRoute:
+#   enabled: true
+#   parentRefs:
+#     - name: gateway
+#       namespace: poc-dev
+#       sectionName: http-app
+#   hostnames:
+#     - app.demo-poc-01.work
+#   rules:
+#     - matches:
+#         - path:
+#             type: PathPrefix
+#             value: /api/{{SERVICE_NAME}}
+#       backendRefs:
+#         - name: {{SERVICE_NAME}}-sv
+#           port: 8080

@@ -1,17 +1,14 @@
-FROM golang:1.23-alpine as builder
+FROM golang:1.23-alpine AS builder
 
 WORKDIR /build
 COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o server .
 
-ENV GOOS=linux
-ENV GOARCH=amd64
-ENV CGO_ENABLED=0
-RUN go build -o server .
-
-FROM alpine:3.19
-WORKDIR /app
-COPY --from=builder /build/server /bin/server
-ENTRYPOINT ["/bin/server"]
+# Final distroless image (2MB vs 7MB alpine)
+# Includes ca-certificates, no shell, runs as nonroot (uid 65532)
+FROM gcr.io/distroless/static-debian12:nonroot
+COPY --from=builder /build/server /server
+ENTRYPOINT ["/server"]
