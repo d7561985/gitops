@@ -256,9 +256,13 @@ echo 'GITLAB_DEPLOY_TOKEN="gldt-xxxxxxxxxxxx"' >> .env
 Скрипт создаёт:
 1. Namespace для каждого окружения: `poc-dev`, `poc-staging`, `poc-prod`
 2. Секрет `regsecret` в каждом namespace
-3. Патчит `default` ServiceAccount — все pods автоматически получают доступ к registry
 
-> **Note:** Благодаря патчу ServiceAccount, `imagePullSecrets` в values **не обязателен** — pods автоматически наследуют imagePullSecrets. В k8app v3.4.0 используется универсальный формат `imagePullSecrets: [{name: regsecret}]`.
+> **Important:** Каждый сервис должен объявить `imagePullSecrets` в своих values:
+> ```yaml
+> # .cicd/default.yaml
+> imagePullSecrets:
+>   - name: regsecret
+> ```
 
 #### Namespace схема
 
@@ -1001,14 +1005,14 @@ kubectl logs -n vault-secrets-operator-system -l app.kubernetes.io/name=vault-se
 # Проверить наличие секрета в namespace
 kubectl get secret regsecret -n poc-dev
 
-# Проверить что default SA патчирован
-kubectl get sa default -n poc-dev -o yaml | grep -A5 imagePullSecrets
-
 # Проверить конфигурацию секрета
 kubectl get secret regsecret -n poc-dev -o jsonpath='{.data.\.dockerconfigjson}' | base64 -d | jq
 
-# Если секрета нет или SA не патчирован - перезапустить
+# Если секрета нет - перезапустить
 ./scripts/setup-registry-secret.sh
+
+# Проверить что сервис объявляет imagePullSecrets
+kubectl get deployment api-gateway -n poc-dev -o yaml | grep -A3 imagePullSecrets
 
 # Проверить события pod
 kubectl describe pod -n poc-dev -l app=api-gateway
@@ -1017,7 +1021,11 @@ kubectl describe pod -n poc-dev -l app=api-gateway
 **Частые причины:**
 - Deploy Token истёк или отозван → создать новый
 - Неверный scope токена → должен быть `read_registry`
-- ServiceAccount не патчирован → перезапустить `setup-registry-secret.sh`
+- Сервис не объявляет `imagePullSecrets` → добавить в `.cicd/default.yaml`:
+  ```yaml
+  imagePullSecrets:
+    - name: regsecret
+  ```
 
 ---
 

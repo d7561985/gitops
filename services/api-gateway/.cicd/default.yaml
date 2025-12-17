@@ -107,7 +107,7 @@ extensions:
   auth-adapter:
     image:
       repository: auth-adapter
-      tag: v1.0.0
+      tag: v1.0.2
     command:
       - /app/auth-adapter
     env:

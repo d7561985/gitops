@@ -2,96 +2,33 @@
 
 ---
 
-## 1. Добавить поддержку GitLab Container Registry
+## 1. ✅ Поддержка imagePullSecrets (РЕАЛИЗОВАНО)
 
-### Проблема
+> **Статус:** Реализовано в k8app v3.4.0+
 
-Текущая реализация `imagePullSecrets` в k8app использует только два флага:
-- `deploySecretHarbor`
-- `deploySecretNexus`
-
-При этом оба используют hardcoded имя секрета `regsecret`:
-
-```yaml
-# templates/deployment.yaml
-{{- if or .Values.deploySecretHarbor .Values.deploySecretNexus }}
-  imagePullSecrets:
-  - name: regsecret
-{{- end }}
-```
-
-Это создаёт проблемы:
-1. **Семантика** — использование `deploySecretHarbor: true` для GitLab Registry вводит в заблуждение
-2. **Гибкость** — нельзя указать своё имя секрета
-3. **Документация** — непонятно какой секрет создавать
-
-### Рекомендация
-
-Добавить более универсальную поддержку imagePullSecrets:
-
-#### Вариант A: Добавить `deploySecretGitlab` (минимальные изменения)
-
-```yaml
-# values.yaml
-deploySecretHarbor: false
-deploySecretNexus: false
-deploySecretGitlab: false  # NEW
-
-# templates/deployment.yaml
-{{- if or .Values.deploySecretHarbor .Values.deploySecretNexus .Values.deploySecretGitlab }}
-  imagePullSecrets:
-  - name: regsecret
-{{- end }}
-```
-
-#### Вариант B: Универсальный `imagePullSecrets` (рекомендуется)
-
-```yaml
-# values.yaml
-imagePullSecrets: []
-# Пример:
-# imagePullSecrets:
-#   - name: gitlab-registry
-#   - name: docker-hub
-
-# templates/deployment.yaml
-{{- with .Values.imagePullSecrets }}
-  imagePullSecrets:
-    {{- toYaml . | nindent 4 }}
-{{- end }}
-```
-
-Вариант B соответствует стандартному подходу Helm чартов и даёт максимальную гибкость.
-
-### Обратная совместимость
-
-Можно поддержать оба варианта:
-
-```yaml
-# templates/deployment.yaml
-{{- if or .Values.deploySecretHarbor .Values.deploySecretNexus .Values.deploySecretGitlab }}
-  imagePullSecrets:
-  - name: regsecret
-{{- else if .Values.imagePullSecrets }}
-  imagePullSecrets:
-    {{- toYaml .Values.imagePullSecrets | nindent 4 }}
-{{- end }}
-```
-
-### Временное решение (для этого POC)
-
-Пока изменения не внесены в k8app, используем:
+k8app теперь поддерживает универсальный `imagePullSecrets`:
 
 ```yaml
 # .cicd/default.yaml
-deploySecretHarbor: true  # Семантически неверно, но работает
-
-# Секрет должен называться "regsecret":
-# kubectl create secret docker-registry regsecret \
-#   --docker-server=registry.gitlab.com \
-#   --docker-username=<deploy-token-user> \
-#   --docker-password=<deploy-token>
+imagePullSecrets:
+  - name: regsecret
 ```
+
+Legacy флаги (`deploySecretHarbor`, `deploySecretNexus`) продолжают работать для обратной совместимости.
+
+### Использование
+
+1. Создать secret в namespace:
+   ```bash
+   ./scripts/setup-registry-secret.sh
+   ```
+
+2. Добавить в values сервиса:
+   ```yaml
+   # .cicd/default.yaml
+   imagePullSecrets:
+     - name: regsecret
+   ```
 
 ---
 

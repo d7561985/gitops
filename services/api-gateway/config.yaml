@@ -148,28 +148,22 @@ apis:
       - name: demo
         auth: {policy: no-need}
 
-  # User Service - Authentication API
-  # Routes: /api/auth/* → user-service user.v1.UserService/*
-  # Public endpoints (no auth required)
-  - name: auth
+  # User Service - gRPC API
+  # Routes: /api/user.v1.UserService/* → user-service /user.v1.UserService/*
+  # Using full gRPC service name for proper routing
+  - name: user.v1.UserService
     cluster: user-service
     auth: {policy: no-need}
     methods:
-      - name: register
+      # Public endpoints (no auth required)
+      - name: Register
         auth: {policy: no-need}
-      - name: login
+      - name: Login
         auth: {policy: no-need}
-      - name: refresh
+      - name: RefreshToken
         auth: {policy: no-need}
-      - name: logout
+      # Protected endpoints (auth required)
+      - name: Logout
         auth: {policy: required}
-
-  # User Service - User Profile API
-  # Routes: /api/user/* → user-service user.v1.UserService/*
-  # Protected endpoints (auth required)
-  - name: user
-    cluster: user-service
-    auth: {policy: required}
-    methods:
-      - name: profile
+      - name: GetProfile
         auth: {policy: required}
