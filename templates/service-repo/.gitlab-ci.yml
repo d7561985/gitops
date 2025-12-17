@@ -62,6 +62,16 @@ stages:
 # ============================================
 # Build Stage
 # ============================================
+# For Go services with private modules:
+#   docker build --build-arg GITLAB_TOKEN=${CI_PUSH_TOKEN} ...
+#
+# For Angular/Node.js with private npm git dependencies (BuildKit secrets):
+#   IMPORTANT: Use CI_PUSH_TOKEN, not CI_JOB_TOKEN!
+#   CI_JOB_TOKEN doesn't have cross-project access to api/gen/* repos.
+#   echo "$CI_PUSH_TOKEN" > /tmp/gitlab_token
+#   docker build --secret id=gitlab_token,src=/tmp/gitlab_token ...
+#   rm -f /tmp/gitlab_token
+# ============================================
 
 build:
   stage: build
@@ -70,9 +80,16 @@ build:
     - docker:24-dind
   variables:
     DOCKER_TLS_CERTDIR: "/certs"
+    DOCKER_BUILDKIT: "1"
   before_script:
     - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
   script:
+    # For services with private dependencies, uncomment one of:
+    # Go: docker build --build-arg GITLAB_TOKEN=${CI_PUSH_TOKEN} -t ${IMAGE_NAME}:${CI_COMMIT_SHORT_SHA} .
+    # Angular/Node.js (use CI_PUSH_TOKEN for cross-project access):
+    #   echo "$CI_PUSH_TOKEN" > /tmp/gitlab_token
+    #   docker build --secret id=gitlab_token,src=/tmp/gitlab_token -t ${IMAGE_NAME}:${CI_COMMIT_SHORT_SHA} .
+    #   rm -f /tmp/gitlab_token
     - docker build -t ${IMAGE_NAME}:${CI_COMMIT_SHORT_SHA} .
     - docker push ${IMAGE_NAME}:${CI_COMMIT_SHORT_SHA}
     # Tag as latest for main branch

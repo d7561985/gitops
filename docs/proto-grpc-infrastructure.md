@@ -439,50 +439,126 @@ if __name__ == '__main__':
 ```bash
 npm install git+https://gitlab.com/gitops-poc-dzha/api/gen/my-service/angular.git#v1.2.3
 npm install google-protobuf grpc-web
+npm install --save-dev @types/google-protobuf
 ```
 
 **package.json example:**
 ```json
 {
   "dependencies": {
-    "@gitops-poc-dzha/my-service-web": "git+https://gitlab.com/gitops-poc-dzha/api/gen/my-service/angular.git#v1.2.3",
+    "@gitops-poc-dzha/my-service-web": "git+https://gitlab.com/gitops-poc-dzha/api/gen/my-service/angular.git#main",
     "google-protobuf": "^3.21.0",
     "grpc-web": "^1.5.0"
+  },
+  "devDependencies": {
+    "@types/google-protobuf": "^3.15.12"
   }
 }
 ```
 
-**Usage (Angular Service):**
-```typescript
-import { Injectable } from '@angular/core';
-import { Observable, from } from 'rxjs';
+**Dockerfile для Angular с приватными зависимостями:**
 
-import { MyServiceClient } from '@gitops-poc-dzha/my-service-web/myservice/v1/MyserviceServiceClientPb';
+Используйте BuildKit secrets для безопасной передачи токена:
+
+```dockerfile
+FROM node:22-alpine AS builder
+RUN apk add --no-cache git sed
+WORKDIR /app
+COPY package*.json ./
+
+# BuildKit secret - токен не попадает в слои образа
+RUN --mount=type=secret,id=gitlab_token \
+    GITLAB_TOKEN=$(cat /run/secrets/gitlab_token 2>/dev/null || echo "") && \
+    if [ -n "$GITLAB_TOKEN" ]; then \
+        git config --global url."https://gitlab-ci-token:${GITLAB_TOKEN}@gitlab.com/".insteadOf "ssh://git@gitlab.com/" && \
+        git config --global url."https://gitlab-ci-token:${GITLAB_TOKEN}@gitlab.com/".insteadOf "https://gitlab.com/" && \
+        sed -i 's|git+ssh://git@gitlab.com/|https://gitlab-ci-token:'"${GITLAB_TOKEN}"'@gitlab.com/|g' package-lock.json 2>/dev/null || true; \
+    fi && \
+    npm ci --prefer-offline --no-audit
+
+COPY . .
+RUN npm run build
+
+FROM nginx:alpine
+COPY --from=builder /app/dist/my-app /usr/share/nginx/html
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+CMD ["nginx", "-g", "daemon off;"]
+```
+
+**CI/CD (.gitlab-ci.yml):**
+```yaml
+build:frontend:
+  variables:
+    DOCKER_BUILDKIT: "1"
+  script:
+    - echo "$CI_JOB_TOKEN" > /tmp/gitlab_token
+    - docker build --secret id=gitlab_token,src=/tmp/gitlab_token -t $IMAGE .
+    - rm -f /tmp/gitlab_token
+    - docker push $IMAGE
+```
+
+**Локальная сборка:**
+```bash
+# Извлечь токен из ~/.netrc
+grep gitlab.com ~/.netrc | sed 's/.*password //' > /tmp/gitlab_token
+
+# Собрать с BuildKit
+DOCKER_BUILDKIT=1 docker build --secret id=gitlab_token,src=/tmp/gitlab_token -t my-app .
+
+# Очистить токен
+rm -f /tmp/gitlab_token
+```
+
+**Usage (Angular Service with Promise Client):**
+```typescript
+import { Injectable, signal } from '@angular/core';
+
+// Import from installed package
+import { MyServicePromiseClient } from '@gitops-poc-dzha/my-service-web/myservice/v1/myservice_grpc_web_pb';
 import { GetSomethingRequest, GetSomethingResponse } from '@gitops-poc-dzha/my-service-web/myservice/v1/myservice_pb';
 
 @Injectable({ providedIn: 'root' })
 export class MyGrpcService {
-  private client: MyServiceClient;
+  private client: MyServicePromiseClient;
+  private _loading = signal(false);
+  private _error = signal<string | null>(null);
+
+  loading = this._loading.asReadonly();
+  error = this._error.asReadonly();
 
   constructor() {
-    this.client = new MyServiceClient('https://grpc.example.com');
+    // Hostname should point to API Gateway with gRPC-Web support
+    this.client = new MyServicePromiseClient('/api');
   }
 
-  getSomething(id: string): Observable<GetSomethingResponse> {
-    const request = new GetSomethingRequest();
-    request.setId(id);
+  async getSomething(id: string): Promise<GetSomethingResponse | null> {
+    this._loading.set(true);
+    this._error.set(null);
 
-    return from(
-      new Promise<GetSomethingResponse>((resolve, reject) => {
-        this.client.getSomething(request, {}, (err, response) => {
-          if (err) {
-            reject(new Error(`gRPC error: ${err.message}`));
-          } else if (response) {
-            resolve(response);
-          }
-        });
-      })
-    );
+    try {
+      const request = new GetSomethingRequest();
+      request.setId(id);
+
+      const response = await this.client.getSomething(request, this.getMetadata());
+      return response;
+    } catch (err) {
+      this._error.set(this.extractError(err));
+      return null;
+    } finally {
+      this._loading.set(false);
+    }
+  }
+
+  private getMetadata(): { [key: string]: string } {
+    const token = localStorage.getItem('access_token');
+    return token ? { 'Authorization': `Bearer ${token}` } : {};
+  }
+
+  private extractError(err: unknown): string {
+    if (err && typeof err === 'object' && 'message' in err) {
+      return (err as { message: string }).message;
+    }
+    return 'Unknown error';
   }
 }
 ```

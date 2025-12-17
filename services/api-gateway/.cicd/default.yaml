@@ -156,14 +156,12 @@ serviceMonitor:
 # =============================================================================
 # Routes /api/* traffic from Gateway to api-gateway
 # More specific path (/api) takes precedence over frontend's (/)
+# parentRefs.namespace and hostnames → defined in env overlay
 httpRoute:
   enabled: true
   parentRefs:
     - name: gateway
-      namespace: poc-dev
       sectionName: http-app
-  hostnames:
-    - app.demo-poc-01.work
   rules:
     - matches:
         - path:

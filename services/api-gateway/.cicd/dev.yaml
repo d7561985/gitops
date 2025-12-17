@@ -36,3 +36,12 @@ extensions:
       repository: registry.gitlab.com/gitops-poc-dzha/auth-adapter
       tag: 7306e90b
       pullPolicy: IfNotPresent
+
+# HTTPRoute (environment-specific)
+httpRoute:
+  parentRefs:
+    - name: gateway
+      namespace: poc-dev
+      sectionName: http-app
+  hostnames:
+    - app.demo-poc-01.work

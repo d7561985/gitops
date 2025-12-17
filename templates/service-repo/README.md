@@ -144,6 +144,87 @@ build:
 
 > **Important:** `CI_PUSH_TOKEN` must have `read_api` scope (not just `read_repository`).
 
+## Private npm Dependencies (Angular/Node.js)
+
+If your frontend uses private GitLab npm packages (e.g., gRPC-Web stubs from `api/gen/*/angular`):
+
+### package.json
+
+```json
+{
+  "dependencies": {
+    "@gitops-poc-dzha/my-service-web": "git+https://gitlab.com/gitops-poc-dzha/api/gen/my-service/angular.git#main",
+    "google-protobuf": "^3.21.0",
+    "grpc-web": "^1.5.0"
+  },
+  "devDependencies": {
+    "@types/google-protobuf": "^3.15.12"
+  }
+}
+```
+
+### Dockerfile (BuildKit Secrets)
+
+Use `Dockerfile.angular` with BuildKit secrets for secure token handling:
+
+```dockerfile
+RUN --mount=type=secret,id=gitlab_token \
+    GITLAB_TOKEN=$(cat /run/secrets/gitlab_token 2>/dev/null || echo "") && \
+    if [ -n "$GITLAB_TOKEN" ]; then \
+        git config --global url."https://gitlab-ci-token:${GITLAB_TOKEN}@gitlab.com/".insteadOf "ssh://git@gitlab.com/" && \
+        sed -i 's|git+ssh://git@gitlab.com/|https://gitlab-ci-token:'"${GITLAB_TOKEN}"'@gitlab.com/|g' package-lock.json; \
+    fi && \
+    npm ci
+```
+
+### CI/CD
+
+```yaml
+build:frontend:
+  variables:
+    DOCKER_BUILDKIT: "1"
+  script:
+    # IMPORTANT: Use CI_PUSH_TOKEN, not CI_JOB_TOKEN (no cross-project access)
+    - echo "$CI_PUSH_TOKEN" > /tmp/gitlab_token
+    - docker build --secret id=gitlab_token,src=/tmp/gitlab_token -t ${IMAGE_NAME}:${TAG} .
+    - rm -f /tmp/gitlab_token
+```
+
+### Local Development (without Docker)
+
+First, configure git to access private GitLab repositories:
+
+```bash
+# Option 1: Configure ~/.netrc (recommended, one-time setup)
+echo "machine gitlab.com login YOUR_USERNAME password YOUR_GITLAB_TOKEN" >> ~/.netrc
+chmod 600 ~/.netrc
+
+# Option 2: Configure git URL replacement (alternative)
+git config --global url."https://oauth2:YOUR_GITLAB_TOKEN@gitlab.com/".insteadOf "https://gitlab.com/"
+```
+
+Then install dependencies:
+
+```bash
+cd your-frontend-project
+npm install
+```
+
+> **Note:** Token must have `read_api` scope to access private repositories.
+
+### Local Development (with Docker)
+
+```bash
+# Extract token from ~/.netrc
+grep gitlab.com ~/.netrc | sed 's/.*password //' > /tmp/gitlab_token
+
+# Build with BuildKit
+DOCKER_BUILDKIT=1 docker build --secret id=gitlab_token,src=/tmp/gitlab_token -t my-app .
+
+# Cleanup
+rm -f /tmp/gitlab_token
+```
+
 ## Service Registration
 
 Add your service to `gitops-config/charts/platform-bootstrap/values.yaml`:

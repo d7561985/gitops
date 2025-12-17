@@ -364,6 +364,86 @@ EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]
 ```
 
+### Angular с приватными npm зависимостями (gRPC-Web)
+
+Если frontend использует сгенерированные gRPC-Web клиенты из `api/gen/*/angular`:
+
+```dockerfile
+FROM node:22-alpine AS builder
+
+ARG API_URL
+ARG APP_VERSION
+
+# Git для приватных npm git зависимостей
+RUN apk add --no-cache git sed
+
+WORKDIR /app
+COPY package*.json ./
+
+# BuildKit secret для GitLab токена (безопасный способ)
+RUN --mount=type=secret,id=gitlab_token \
+    GITLAB_TOKEN=$(cat /run/secrets/gitlab_token 2>/dev/null || echo "") && \
+    if [ -n "$GITLAB_TOKEN" ]; then \
+        git config --global url."https://gitlab-ci-token:${GITLAB_TOKEN}@gitlab.com/".insteadOf "ssh://git@gitlab.com/" && \
+        git config --global url."https://gitlab-ci-token:${GITLAB_TOKEN}@gitlab.com/".insteadOf "https://gitlab.com/" && \
+        sed -i 's|git+ssh://git@gitlab.com/|https://gitlab-ci-token:'"${GITLAB_TOKEN}"'@gitlab.com/|g' package-lock.json 2>/dev/null || true; \
+    fi && \
+    npm ci --prefer-offline --no-audit
+
+COPY . .
+ENV API_URL=${API_URL} APP_VERSION=${APP_VERSION}
+RUN npm run build
+
+FROM nginx:alpine
+COPY --from=builder /app/dist/my-app /usr/share/nginx/html
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]
+```
+
+**CI команда сборки:**
+```yaml
+script:
+  # IMPORTANT: Use CI_PUSH_TOKEN, not CI_JOB_TOKEN (no cross-project access)
+  - echo "$CI_PUSH_TOKEN" > /tmp/gitlab_token
+  - docker build --secret id=gitlab_token,src=/tmp/gitlab_token --build-arg APP_VERSION=$CI_COMMIT_SHORT_SHA -t $IMAGE .
+  - rm -f /tmp/gitlab_token
+```
+
+**package.json пример:**
+```json
+{
+  "dependencies": {
+    "@gitops-poc-dzha/my-service-web": "git+https://gitlab.com/gitops-poc-dzha/api/gen/my-service/angular.git#main",
+    "google-protobuf": "^3.21.0",
+    "grpc-web": "^1.5.0"
+  }
+}
+```
+
+**Локальная разработка (без Docker):**
+
+Сначала настройте доступ к приватным репозиториям GitLab:
+
+```bash
+# Вариант 1: Настроить ~/.netrc (рекомендуется, один раз)
+echo "machine gitlab.com login YOUR_USERNAME password YOUR_GITLAB_TOKEN" >> ~/.netrc
+chmod 600 ~/.netrc
+
+# Вариант 2: Настроить git URL replacement
+git config --global url."https://oauth2:YOUR_GITLAB_TOKEN@gitlab.com/".insteadOf "https://gitlab.com/"
+```
+
+Затем установите зависимости:
+
+```bash
+cd your-frontend-project
+npm install
+npm start  # или npm run serve
+```
+
+> **Важно:** Токен должен иметь scope `read_api` для доступа к приватным репозиториям.
+
 ## gRPC сервисы
 
 ### 1. Создать Proto репозиторий

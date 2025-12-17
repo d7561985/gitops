@@ -8,6 +8,18 @@
 #
 # Usage: Copy to your repo as 'Dockerfile'
 # Requires: nginx.conf for SPA routing
+#
+# Private Git Dependencies:
+# If using private GitLab npm packages (e.g., gRPC-Web stubs from api/gen),
+# use BuildKit secrets to pass CI_JOB_TOKEN securely.
+#
+# Build command (CI):
+#   echo "$CI_JOB_TOKEN" > /tmp/gitlab_token
+#   docker build --secret id=gitlab_token,src=/tmp/gitlab_token ...
+#
+# Build command (local):
+#   grep gitlab.com ~/.netrc | sed 's/.*password //' > /tmp/gitlab_token
+#   DOCKER_BUILDKIT=1 docker build --secret id=gitlab_token,src=/tmp/gitlab_token ...
 # =============================================================================
 
 FROM node:22-alpine AS builder
@@ -16,13 +28,26 @@ FROM node:22-alpine AS builder
 ARG API_URL
 ARG APP_VERSION
 
+# Install git for private npm git dependencies
+RUN apk add --no-cache git sed
+
 WORKDIR /app
 
 # Copy package files first for better caching
 COPY package*.json ./
 
-# Install dependencies
-RUN npm ci --prefer-offline --no-audit
+# Install dependencies using BuildKit secret for GitLab token
+# If package.json contains git+https://gitlab.com/... dependencies,
+# the token will be used for authentication
+RUN --mount=type=secret,id=gitlab_token \
+    GITLAB_TOKEN=$(cat /run/secrets/gitlab_token 2>/dev/null || echo "") && \
+    if [ -n "$GITLAB_TOKEN" ]; then \
+        git config --global url."https://gitlab-ci-token:${GITLAB_TOKEN}@gitlab.com/".insteadOf "ssh://git@gitlab.com/" && \
+        git config --global url."https://gitlab-ci-token:${GITLAB_TOKEN}@gitlab.com/".insteadOf "git@gitlab.com:" && \
+        git config --global url."https://gitlab-ci-token:${GITLAB_TOKEN}@gitlab.com/".insteadOf "https://gitlab.com/" && \
+        sed -i 's|git+ssh://git@gitlab.com/|https://gitlab-ci-token:'"${GITLAB_TOKEN}"'@gitlab.com/|g' package-lock.json 2>/dev/null || true; \
+    fi && \
+    npm ci --prefer-offline --no-audit
 
 # Copy source code
 COPY . .
