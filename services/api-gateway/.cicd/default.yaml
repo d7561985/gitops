@@ -115,7 +115,7 @@ extensions:
       # User-service gRPC address for session validation
       AUTH_SERVICE_ADDR: "user-service-sv:8081"
       # Enable real user-service (set to "false" to use stub)
-      USE_USER_SERVICE: "true"
+      USE_USER_SERVICE: "false"
     ports:
       - name: grpc
         containerPort: 9000

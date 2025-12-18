@@ -13,6 +13,8 @@
 
 **Связанные документы:**
 - [Access Management & RACI Matrix](./access-management.md) — управление доступами, роли, политики
+- [CNI Comparison: Cilium vs Calico](./cni-comparison-cilium-vs-calico.md) — сравнительный анализ CNI решений
+- [Frontend + gRPC Protocols 2025](./frontend-grpc-protocols-2025.md) — gRPC-Web, Connect-RPC, tRPC сравнение
 
 ---
 
