@@ -431,9 +431,53 @@ if __name__ == '__main__':
     main()
 ```
 
-### Angular (gRPC-Web)
+### Web (Connect-ES v2)
 
-> **Note:** gRPC-Web requires a proxy (Envoy or grpcwebproxy) between browser and gRPC server.
+> **Recommended:** Connect Protocol работает через любой HTTP прокси (включая Cloudflare Tunnel) без проблем с trailers. См. [RFC: gRPC-Web через Cloudflare](./rfc-grpc-web-cloudflare-trailers.md).
+
+**Install:**
+```bash
+npm install @gitops-poc-dzha/my-service-web
+npm install @connectrpc/connect @connectrpc/connect-web
+```
+
+**Usage (Connect-ES v2):**
+```typescript
+import { createClient } from '@connectrpc/connect';
+import { createConnectTransport } from '@connectrpc/connect-web';
+import { MyService } from '@gitops-poc-dzha/my-service-web/myservice/v1/myservice_pb';
+
+const transport = createConnectTransport({
+  baseUrl: '/api/myservice',  // api-gateway route prefix
+});
+
+const client = createClient(MyService, transport);
+
+// Type-safe calls with full inference
+const response = await client.getSomething({ id: '123' });
+console.log(response.name);
+```
+
+**API Gateway Configuration:**
+```yaml
+# api-gateway/config.yaml
+clusters:
+  - name: my-service
+    type: "http"  # NOT grpc - Connect uses HTTP
+
+apis:
+  - name: myservice  # Short name for /api/myservice/*
+    cluster: my-service
+    methods:
+      - name: myservice.v1.MyService/GetSomething
+        auth: {policy: no-need}
+```
+
+---
+
+### Legacy: Angular (gRPC-Web)
+
+> **Deprecated:** Prefer Connect-ES v2 above. gRPC-Web has issues with Cloudflare Tunnel and requires proxy configuration.
 
 **Install:**
 ```bash

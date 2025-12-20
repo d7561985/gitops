@@ -1,8 +1,58 @@
 # RFC: gRPC-Web через Cloudflare Tunnel - Исследование и Решения
 
-**Статус**: Draft
-**Дата**: 2025-12-18
+**Статус**: ✅ IMPLEMENTED (Connect Protocol)
+**Дата**: 2025-12-18 (обновлено 2025-12-20)
 **Автор**: GitOps POC Team
+
+---
+
+## ✅ Реализованное решение
+
+**Connect Protocol успешно внедрён для user-service:**
+
+### Изменения в инфраструктуре:
+
+1. **user-service** (Go backend):
+   - Миграция с `grpc.Server` на `http.Server` + `connectrpc.com/connect`
+   - Поддерживает Connect, gRPC, gRPC-Web на одном порте
+   - Go 1.24+ (требование connect v1.19.1)
+
+2. **api-gateway** (Envoy):
+   - Cluster type: `http` (не grpc)
+   - Routing: `/api/user/*` → user-service
+   - Пример: `/api/user/user.v1.UserService/Register` → `/user.v1.UserService/Register`
+
+3. **Frontend** (Angular):
+   - `@connectrpc/connect-web` с `createConnectTransport`
+   - baseUrl: `/api/user`
+
+### Пример конфигурации:
+
+```yaml
+# api-gateway/config.yaml
+clusters:
+  - name: user-service
+    addr: "user-service-sv:8081"
+    type: "http"  # НЕ grpc!
+    health_check:
+      path: "/health"
+
+apis:
+  - name: user  # Короткое имя, НЕ user.v1.UserService
+    cluster: user-service
+    methods:
+      - name: user.v1.UserService/Register
+        auth: {policy: no-need}
+```
+
+```typescript
+// Frontend: auth.service.ts
+const transport = createConnectTransport({
+  baseUrl: '/api/user',  // Добавлен /user
+});
+```
+
+---
 
 ---
 
