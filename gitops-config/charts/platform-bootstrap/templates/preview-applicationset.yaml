@@ -1,0 +1,133 @@
+{{- /*
+Preview Environments ApplicationSet
+
+Generates ArgoCD Applications for Merge Requests with JIRA-tagged branches.
+Uses Pull Request Generator to watch GitLab MRs.
+
+Branch naming convention: PROJ-123-description
+- branchMatch filters: only branches starting with JIRA tag
+- regexFind extracts: JIRA tag for short URL (proj-123.preview.domain.com)
+
+Flow:
+  Branch PROJ-123-feature → MR opened → Application created → Preview deployed
+  MR closed/merged → Application deleted → Preview cleaned up
+
+Reference: https://argo-cd.readthedocs.io/en/latest/operator-manual/applicationset/Generators-Pull-Request/
+*/ -}}
+
+{{- if .Values.previewEnvironments.enabled }}
+{{- range $serviceName, $service := .Values.previewEnvironments.services }}
+{{- if $service.enabled }}
+{{- if $service.projectId }}
+---
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: preview-{{ $serviceName }}
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: platform-bootstrap
+    app.kubernetes.io/component: preview-environments
+spec:
+  # Go template mode for proper variable substitution
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+
+  generators:
+    - pullRequest:
+        gitlab:
+          # GitLab Project ID (numeric)
+          project: {{ $service.projectId | quote }}
+          # GitLab API URL
+          api: {{ $.Values.previewEnvironments.gitlab.api }}
+          # Token for API access
+          tokenRef:
+            secretName: {{ $.Values.previewEnvironments.gitlab.tokenRef.secretName }}
+            key: {{ $.Values.previewEnvironments.gitlab.tokenRef.key }}
+          # Filter by branch naming convention (JIRA tag)
+          # Pattern: PROJ-123-description
+          {{- if $service.branchMatch }}
+          branchMatch: {{ $service.branchMatch | quote }}
+          {{- end }}
+          # Only opened MRs
+          pullRequestState: opened
+        # How often to check for new MRs
+        requeueAfterSeconds: {{ $.Values.previewEnvironments.gitlab.requeueAfterSeconds }}
+
+  template:
+    metadata:
+      # Name: preview-frontend-proj-123 (only JIRA tag, not full branch)
+      name: 'preview-{{ $serviceName }}-{{`{{ regexFind "^[A-Za-z]+-[0-9]+" .branch | lower }}`}}'
+      namespace: argocd
+      labels:
+        app.kubernetes.io/name: preview-{{ $serviceName }}
+        app.kubernetes.io/component: preview
+        preview/service: {{ $serviceName }}
+        preview/jira-tag: '{{`{{ regexFind "^[A-Za-z]+-[0-9]+" .branch | lower }}`}}'
+        preview/mr-number: '{{`{{.number}}`}}'
+      annotations:
+        # For debugging
+        preview/branch: '{{`{{.branch}}`}}'
+        preview/author: '{{`{{.author}}`}}'
+        preview/head-sha: '{{`{{.head_short_sha}}`}}'
+      finalizers:
+        - resources-finalizer.argocd.argoproj.io
+    spec:
+      project: {{ $.Values.applicationSet.project }}
+
+      sources:
+        # k8app Helm chart
+        - repoURL: {{ $.Values.global.k8app.repoURL }}
+          chart: {{ $.Values.global.k8app.chart }}
+          targetRevision: {{ $.Values.global.k8app.version | quote }}
+          helm:
+            # Base config from service repo
+            valueFiles:
+              - $values/{{ $service.cicdPath }}/default.yaml
+            # Preview-specific overrides
+            values: |
+              # Use image from MR branch (built by CI)
+              image:
+                tag: "{{`{{.head_short_sha}}`}}"
+
+              # Preview-specific hostname (only JIRA tag: proj-123.preview.domain.com)
+              httpRoute:
+                hostnames:
+                  - "{{`{{ regexFind "^[A-Za-z]+-[0-9]+" .branch | lower }}`}}.{{ $.Values.previewEnvironments.baseDomain }}"
+                parentRefs:
+                  - name: gateway
+                    namespace: {{ $.Values.previewEnvironments.gateway.namespace }}
+                    sectionName: http-preview
+
+              # Point to dev backend (cross-namespace)
+              configmap:
+                API_URL: "http://api-gateway-sv.{{ $service.backendNamespace }}.svc.cluster.local:8080"
+
+              # Disable Vault for preview (use dev secrets)
+              vault:
+                enabled: false
+
+        # Service repository (for default.yaml)
+        - repoURL: {{ $service.repoURL }}
+          targetRevision: '{{`{{.branch}}`}}'
+          ref: values
+
+      destination:
+        server: https://kubernetes.default.svc
+        # Each preview gets its own namespace (only JIRA tag)
+        namespace: '{{ $service.namespacePrefix }}-{{`{{ regexFind "^[A-Za-z]+-[0-9]+" .branch | lower }}`}}'
+
+      syncPolicy:
+        syncOptions:
+          - CreateNamespace=true
+          - PruneLast=true
+        automated:
+          prune: true
+          selfHeal: true
+
+      # Cleanup when Application is deleted (MR closed)
+      # finalizers ensure namespace cleanup
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}

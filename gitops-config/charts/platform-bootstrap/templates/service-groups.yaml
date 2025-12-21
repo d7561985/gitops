@@ -1,0 +1,173 @@
+{{- /*
+Service Groups - Universal External Access Template
+
+Creates Gateway, HTTPRoutes, and ReferenceGrants for any service group.
+One template handles all groups - easy to add new services.
+
+Architecture:
+  CloudFlare DNS: argocd.poc.infra.demo-poc-01.work
+          ↓
+  CloudFlare Tunnel
+          ↓
+  Gateway (namespace: platform)
+    └─ listener: http-argocd
+          ↓
+  HTTPRoute (namespace: platform)
+    └─ backendRef: argocd-server.argocd  ← Cross-namespace!
+          ↓
+  ReferenceGrant (namespace: argocd)
+    allows: HTTPRoute from platform → Service in argocd
+          ↓
+  Service: argocd-server (namespace: argocd)
+*/ -}}
+
+{{- range $groupName, $group := .Values.serviceGroups }}
+{{- if $group.enabled }}
+
+{{- /* Collect enabled services */ -}}
+{{- $enabledServices := dict }}
+{{- range $svcName, $svc := $group.services }}
+{{- if $svc.enabled }}
+{{- $_ := set $enabledServices $svcName $svc }}
+{{- end }}
+{{- end }}
+
+{{- if $enabledServices }}
+
+{{- /* Build full domain for each service */ -}}
+{{- $clusterName := $group.clusterName | default "default" }}
+{{- $baseDomain := $group.baseDomain }}
+
+# =============================================================================
+# Service Group: {{ $groupName }}
+# =============================================================================
+# Base domain: {{ $baseDomain }}
+# Cluster: {{ $clusterName }}
+# Gateway namespace: {{ $group.gatewayNamespace }}
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Namespace for Gateway
+# -----------------------------------------------------------------------------
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ $group.gatewayNamespace }}
+  labels:
+    app.kubernetes.io/name: platform-bootstrap
+    app.kubernetes.io/component: service-group
+    platform-bootstrap/service-group: {{ $groupName }}
+
+# -----------------------------------------------------------------------------
+# Gateway with listeners for each service
+# -----------------------------------------------------------------------------
+{{- $allHostnames := list }}
+{{- range $svcName, $svc := $enabledServices }}
+{{- $hostname := printf "%s.%s.%s" $svc.subdomain $clusterName $baseDomain }}
+{{- $allHostnames = append $allHostnames $hostname }}
+{{- end }}
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: gateway-{{ $groupName }}
+  namespace: {{ $group.gatewayNamespace }}
+  labels:
+    app.kubernetes.io/name: platform-bootstrap
+    app.kubernetes.io/component: gateway
+    platform-bootstrap/service-group: {{ $groupName }}
+  annotations:
+    {{- if $.Values.dns.enabled }}
+    external-dns.alpha.kubernetes.io/hostname: "{{ join "," $allHostnames }}"
+    {{- if and (eq $.Values.ingress.provider "cloudflare-tunnel") $.Values.ingress.cloudflare.tunnelId }}
+    external-dns.alpha.kubernetes.io/target: "{{ $.Values.ingress.cloudflare.tunnelId }}.cfargotunnel.com"
+    {{- end }}
+    {{- end }}
+spec:
+  gatewayClassName: {{ $group.gateway.gatewayClassName | default "cilium" }}
+  listeners:
+    {{- range $svcName, $svc := $enabledServices }}
+    {{- $hostname := printf "%s.%s.%s" $svc.subdomain $clusterName $baseDomain }}
+    - name: http-{{ $svcName }}
+      protocol: {{ $group.gateway.protocol | default "HTTP" }}
+      port: {{ $group.gateway.port | default 80 }}
+      hostname: {{ $hostname | quote }}
+      allowedRoutes:
+        namespaces:
+          from: Same
+    {{- end }}
+
+# -----------------------------------------------------------------------------
+# HTTPRoutes for each service
+# -----------------------------------------------------------------------------
+{{- range $svcName, $svc := $enabledServices }}
+{{- $hostname := printf "%s.%s.%s" $svc.subdomain $clusterName $baseDomain }}
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ $groupName }}-{{ $svcName }}
+  namespace: {{ $group.gatewayNamespace }}
+  labels:
+    app.kubernetes.io/name: platform-bootstrap
+    app.kubernetes.io/component: httproute
+    platform-bootstrap/service-group: {{ $groupName }}
+    platform-bootstrap/service: {{ $svcName }}
+spec:
+  hostnames:
+    - {{ $hostname | quote }}
+  parentRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: gateway-{{ $groupName }}
+      namespace: {{ $group.gatewayNamespace }}
+      sectionName: http-{{ $svcName }}
+  rules:
+    - matches:
+        - path:
+            type: {{ $svc.pathType | default "PathPrefix" }}
+            value: {{ $svc.path | default "/" | quote }}
+      backendRefs:
+        - group: ""
+          kind: Service
+          name: {{ $svc.serviceName }}
+          namespace: {{ $svc.namespace }}
+          port: {{ $svc.servicePort }}
+          weight: 1
+{{- end }}
+
+# -----------------------------------------------------------------------------
+# ReferenceGrants - allow cross-namespace routing
+# -----------------------------------------------------------------------------
+# Each target namespace needs a ReferenceGrant to allow HTTPRoute
+# from gateway namespace to reference its Services.
+{{- $targetNamespaces := dict }}
+{{- range $svcName, $svc := $enabledServices }}
+{{- $_ := set $targetNamespaces $svc.namespace true }}
+{{- end }}
+
+{{- range $ns, $_ := $targetNamespaces }}
+---
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: allow-{{ $groupName }}-gateway
+  namespace: {{ $ns }}
+  labels:
+    app.kubernetes.io/name: platform-bootstrap
+    app.kubernetes.io/component: reference-grant
+    platform-bootstrap/service-group: {{ $groupName }}
+spec:
+  from:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      namespace: {{ $group.gatewayNamespace }}
+  to:
+    - group: ""
+      kind: Service
+{{- end }}
+
+{{- end }}
+{{- end }}
+{{- end }}

@@ -56,7 +56,7 @@ metadata:
     cert-manager.io/cluster-issuer: {{ $.Values.gateway.certManager.clusterIssuer }}
     {{- end }}
     {{- if $.Values.dns.enabled }}
-    external-dns.alpha.kubernetes.io/hostname: "{{ $env.domain }}{{ if $env.mirrors }},{{ range $i, $m := $env.mirrors }}{{ if $i }},{{ end }}{{ $m.domain }}{{ end }}{{ end }}"
+    external-dns.alpha.kubernetes.io/hostname: "{{ $env.domain }}{{ if $env.mirrors }},{{ range $i, $m := $env.mirrors }}{{ if $i }},{{ end }}{{ $m.domain }}{{ end }}{{ end }}{{ if and $.Values.previewEnvironments.enabled (eq $gatewayNamespace $.Values.previewEnvironments.gateway.namespace) }},*.{{ $.Values.previewEnvironments.baseDomain }}{{ end }}"
     {{- if and (eq $.Values.ingress.provider "cloudflare-tunnel") $.Values.ingress.cloudflare.tunnelId }}
     external-dns.alpha.kubernetes.io/target: "{{ $.Values.ingress.cloudflare.tunnelId }}.cfargotunnel.com"
     {{- else if and $.Values.ingress.haproxy $.Values.ingress.haproxy.loadBalancerIP }}
@@ -92,6 +92,19 @@ spec:
       allowedRoutes:
         namespaces:
           from: Same
+    {{- end }}
+    {{- end }}
+    {{- /* Preview environments listener (wildcard for feature branches) */ -}}
+    {{- if $.Values.previewEnvironments.enabled }}
+    {{- if eq $gatewayNamespace $.Values.previewEnvironments.gateway.namespace }}
+    - name: http-preview
+      protocol: {{ $.Values.previewEnvironments.gateway.protocol | default "HTTP" }}
+      port: {{ $.Values.previewEnvironments.gateway.port | default 80 }}
+      hostname: "*.{{ $.Values.previewEnvironments.baseDomain }}"
+      allowedRoutes:
+        namespaces:
+          # Allow routes from any namespace (preview namespaces are dynamic)
+          from: All
     {{- end }}
     {{- end }}
 

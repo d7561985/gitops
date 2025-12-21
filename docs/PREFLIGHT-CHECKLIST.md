@@ -2,6 +2,8 @@
 
 Чеклист для полного развертывания системы с нуля.
 
+> **Планирование ресурсов:** Перед началом ознакомьтесь с [capacity-planning.md](./capacity-planning.md) для оценки требований к кластеру.
+
 ## Этап 1: Внешние сервисы (ручная настройка)
 
 ### GitLab
@@ -315,3 +317,84 @@ vault kv put secret/${GITLAB_GROUP}/api-gateway/dev/config \
 - [ ] `curl https://mirror.domain.com` возвращает 200
 
 Подробнее: [domain-mirrors-guide.md](./domain-mirrors-guide.md)
+
+---
+
+## Preview Environments (Feature Branches)
+
+Автоматический деплой frontend из feature branch для тестирования.
+
+### Шаг 1: GitLab Access Token → Vault
+
+- [ ] **Создать Access Token** в GitLab
+  - URL: `https://gitlab.com/-/user_settings/personal_access_tokens`
+  - Scopes: `read_api`
+
+- [ ] **Сохранить токен в Vault**
+  ```bash
+  # Подключиться к Vault
+  kubectl port-forward svc/vault -n vault 8200:8200 &
+  export VAULT_ADDR='http://127.0.0.1:8200'
+  export VAULT_TOKEN=$(kubectl get secret vault-keys -n vault \
+    -o jsonpath='{.data.root-token}' | base64 -d)
+
+  # Сохранить токен (путь должен совпадать с previewEnvironments.vault.path)
+  vault kv put secret/gitops-poc-dzha/argocd/gitlab-preview/dev \
+    token="glpat-xxxxxxxxxxxxx"
+  ```
+
+  > **Vault path:** настраивается в `previewEnvironments.vault.path`
+  >
+  > VSO автоматически синхронизирует в K8s secret `gitlab-preview-token` в namespace `argocd`
+
+### Шаг 2: CloudFlare Advanced Certificate
+
+- [ ] **Заказать Advanced Certificate**
+  - URL: CloudFlare Dashboard → SSL/TLS → Edge Certificates
+  - Hostnames:
+    - `*.preview.demo-poc-01.work`
+  - Стоимость: $10/month
+
+- [ ] **Дождаться активации** (5-15 минут)
+
+### Шаг 3: Получить GitLab Project ID
+
+- [ ] **Найти Project ID**
+  - GitLab → sentry-demo → Settings → General → Project ID
+  - Записать: `_____________`
+
+### Шаг 4: Обновить values.yaml
+
+```yaml
+previewEnvironments:
+  enabled: true
+  baseDomain: "preview.demo-poc-01.work"
+  zoneId: "your-zone-id"
+
+  services:
+    frontend:
+      enabled: true
+      projectId: "your-project-id"
+```
+
+### Шаг 5: Применить и проверить
+
+```bash
+git add . && git commit -m "feat: enable preview environments"
+git push
+argocd app sync platform-bootstrap --grpc-web
+
+# Проверить ApplicationSet
+kubectl get applicationset preview-frontend -n argocd
+```
+
+### Критерии успеха
+
+- [ ] ApplicationSet `preview-frontend` создан
+- [ ] Gateway listener `http-preview` добавлен
+- [ ] При создании MR с веткой `PROJ-123-...` → Application появляется
+- [ ] URL `proj-123.preview.demo-poc-01.work` доступен
+
+> **Важно:** Ветка должна начинаться с JIRA тега: `PROJ-123-description`
+
+Подробнее: [preview-environments-guide.md](./preview-environments-guide.md)

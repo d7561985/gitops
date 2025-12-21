@@ -1,13 +1,15 @@
 {{- /*
 CloudFlare Tunnel ConfigMap for locally-managed mode.
-Generates ingress rules from environments and their mirrors.
+Generates ingress rules from:
+  - environments and their mirrors (application domains)
+  - serviceGroups (infrastructure domains)
 
 This ConfigMap is applied to the cloudflare namespace and used by cloudflared.
 Requires stakater/Reloader or manual rollout restart when changed.
 
 Only generated when:
   - ingress.provider: cloudflare-tunnel
-  - domainMirrors.addToTunnel: true
+  - ingress.cloudflare.enabled: true
 */ -}}
 {{- if and (eq .Values.ingress.provider "cloudflare-tunnel") .Values.ingress.cloudflare.enabled }}
 {{- if .Values.ingress.cloudflare.tunnelId }}
@@ -67,6 +69,31 @@ data:
       {{- end }}
       {{- end }}
       {{- end }}
+      {{- end }}
+      {{- /* Service Groups (infrastructure, databases, etc.) */ -}}
+      {{- range $groupName, $group := .Values.serviceGroups }}
+      {{- if $group.enabled }}
+      {{- $clusterName := $group.clusterName | default "default" }}
+      {{- $baseDomain := $group.baseDomain }}
+      {{- $gatewayService := printf "http://cilium-gateway-gateway-%s.%s.svc.cluster.local:%d" $groupName $group.gatewayNamespace ($group.gateway.port | default 80 | int) }}
+      # === Service Group: {{ $groupName }} ===
+      {{- range $svcName, $svc := $group.services }}
+      {{- if $svc.enabled }}
+      {{- $hostname := printf "%s.%s.%s" $svc.subdomain $clusterName $baseDomain }}
+      # {{ $svcName }}: {{ $hostname }}
+      - hostname: {{ $hostname }}
+        service: {{ $gatewayService }}
+      {{- end }}
+      {{- end }}
+      {{- end }}
+      {{- end }}
+      {{- /* Preview Environments (wildcard for feature branches) */ -}}
+      {{- if .Values.previewEnvironments.enabled }}
+      {{- $previewGatewayService := printf "http://cilium-gateway-gateway.%s.svc.cluster.local:%d" .Values.previewEnvironments.gateway.namespace (.Values.previewEnvironments.gateway.port | default 80 | int) }}
+      # === Preview Environments ===
+      # Wildcard for feature branch previews
+      - hostname: "*.{{ .Values.previewEnvironments.baseDomain }}"
+        service: {{ $previewGatewayService }}
       {{- end }}
       # Catch-all rule (required at the end)
       - service: http_status:404

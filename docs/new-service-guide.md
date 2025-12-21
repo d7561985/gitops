@@ -589,3 +589,37 @@ argocd app sync my-service-dev --grpc-web
 | MongoDB | mongodb.infra-dev.svc:27017 | infra-dev |
 | RabbitMQ | rabbitmq.infra-dev.svc:5672 | infra-dev |
 | Vault | vault.vault.svc:8200 | vault |
+
+## Preview Environments (Feature Branches)
+
+Для frontend сервисов доступны preview environments — автоматический деплой из feature branch для тестирования.
+
+### Как использовать
+
+1. Создать ветку с JIRA тегом: `PROJ-123-description`
+2. Push изменения, создать MR
+3. CI соберёт image, ArgoCD создаст preview
+4. URL: `proj-123.preview.demo-poc-01.work` (только JIRA тег!)
+5. При закрытии MR — preview автоматически удаляется
+
+### Пример
+
+```bash
+# Branch: PROJ-123-new-login-page
+# URL: proj-123.preview.demo-poc-01.work
+```
+
+### Требования
+
+- Ветка должна начинаться с JIRA тега: `PROJ-123-...`
+- Frontend-only (backend из dev environment)
+
+Подробнее: [preview-environments-guide.md](./preview-environments-guide.md)
+
+## См. также
+
+- [capacity-planning.md](./capacity-planning.md) — планирование ресурсов кластера
+- [preview-environments-guide.md](./preview-environments-guide.md) — preview для feature branches
+- [gitlab-ci-release-tracking.md](./gitlab-ci-release-tracking.md) — отслеживание релизов
+- [domain-mirrors-guide.md](./domain-mirrors-guide.md) — зеркала доменов
+- [service-groups-guide.md](./service-groups-guide.md) — инфраструктурные домены

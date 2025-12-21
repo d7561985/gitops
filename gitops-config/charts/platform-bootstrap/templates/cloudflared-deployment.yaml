@@ -1,0 +1,169 @@
+{{- /*
+CloudFlare Tunnel Deployment (Locally-Managed Mode)
+
+This template creates the cloudflared deployment with automatic restart
+when ConfigMap changes. The checksum annotation triggers pod recreation
+whenever the config.yaml content changes.
+
+Only generated when:
+  - ingress.provider: cloudflare-tunnel
+  - ingress.cloudflare.enabled: true
+*/ -}}
+{{- if and (eq .Values.ingress.provider "cloudflare-tunnel") .Values.ingress.cloudflare.enabled }}
+{{- if .Values.ingress.cloudflare.tunnelId }}
+
+{{- /* Build the ConfigMap content for checksum calculation */ -}}
+{{- $configContent := "" }}
+{{- $configContent = printf "tunnel: %s\n" .Values.ingress.cloudflare.tunnelId }}
+{{- $configContent = printf "%scredentials-file: /etc/cloudflared/credentials.json\n" $configContent }}
+{{- $configContent = printf "%smetrics: 0.0.0.0:2000\n" $configContent }}
+{{- $configContent = printf "%singress:\n" $configContent }}
+{{- range $envName, $env := .Values.environments }}
+{{- if $env.enabled }}
+{{- if $env.domain }}
+{{- $gatewayService := printf "http://cilium-gateway-gateway.%s-%s.svc.cluster.local:80" $.Values.global.namespacePrefix $envName }}
+{{- $configContent = printf "%s  - hostname: %s\n    service: %s\n" $configContent $env.domain $gatewayService }}
+{{- if and $.Values.domainMirrors.enabled $.Values.domainMirrors.addToTunnel $env.mirrors }}
+{{- range $mirror := $env.mirrors }}
+{{- $configContent = printf "%s  - hostname: %s\n    service: %s\n" $configContent $mirror.domain $gatewayService }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- range $groupName, $group := .Values.serviceGroups }}
+{{- if $group.enabled }}
+{{- $clusterName := $group.clusterName | default "default" }}
+{{- $baseDomain := $group.baseDomain }}
+{{- $gatewayService := printf "http://cilium-gateway-gateway-%s.%s.svc.cluster.local:%d" $groupName $group.gatewayNamespace ($group.gateway.port | default 80 | int) }}
+{{- range $svcName, $svc := $group.services }}
+{{- if $svc.enabled }}
+{{- $hostname := printf "%s.%s.%s" $svc.subdomain $clusterName $baseDomain }}
+{{- $configContent = printf "%s  - hostname: %s\n    service: %s\n" $configContent $hostname $gatewayService }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- /* Preview Environments */ -}}
+{{- if .Values.previewEnvironments.enabled }}
+{{- $previewGatewayService := printf "http://cilium-gateway-gateway.%s.svc.cluster.local:%d" .Values.previewEnvironments.gateway.namespace (.Values.previewEnvironments.gateway.port | default 80 | int) }}
+{{- $configContent = printf "%s  - hostname: *.%s\n    service: %s\n" $configContent .Values.previewEnvironments.baseDomain $previewGatewayService }}
+{{- end }}
+{{- $configContent = printf "%s  - service: http_status:404\n" $configContent }}
+
+---
+# =============================================================================
+# Namespace: cloudflare
+# =============================================================================
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ .Values.ingress.cloudflare.namespace | default "cloudflare" }}
+  labels:
+    app.kubernetes.io/name: cloudflare-tunnel
+    app.kubernetes.io/managed-by: platform-bootstrap
+
+---
+# =============================================================================
+# Deployment: cloudflared
+# =============================================================================
+# Automatic restart on ConfigMap change via checksum annotation.
+# When config.yaml changes -> checksum changes -> pods restart.
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cloudflared
+  namespace: {{ .Values.ingress.cloudflare.namespace | default "cloudflare" }}
+  labels:
+    app.kubernetes.io/name: cloudflared
+    app.kubernetes.io/component: tunnel
+    app.kubernetes.io/managed-by: platform-bootstrap
+spec:
+  replicas: {{ .Values.ingress.cloudflare.replicas | default 2 }}
+  selector:
+    matchLabels:
+      app: cloudflared
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app: cloudflared
+        app.kubernetes.io/name: cloudflared
+      annotations:
+        # =================================================================
+        # Auto-restart: checksum of ConfigMap content
+        # When values.yaml changes -> ConfigMap changes -> checksum changes
+        # -> Kubernetes sees annotation change -> triggers rolling restart
+        # =================================================================
+        checksum/config: {{ $configContent | sha256sum }}
+    spec:
+      containers:
+        - name: cloudflared
+          image: cloudflare/cloudflared:2024.12.2
+          args:
+            - tunnel
+            - --no-autoupdate
+            - --config
+            - /etc/cloudflared/config.yaml
+            - run
+          volumeMounts:
+            - name: config
+              mountPath: /etc/cloudflared/config.yaml
+              subPath: config.yaml
+              readOnly: true
+            - name: credentials
+              mountPath: /etc/cloudflared/credentials.json
+              subPath: credentials.json
+              readOnly: true
+          resources:
+            requests:
+              cpu: 10m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
+          livenessProbe:
+            httpGet:
+              path: /ready
+              port: 2000
+            failureThreshold: 3
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 2000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          securityContext:
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 65532
+            capabilities:
+              drop:
+                - ALL
+      volumes:
+        - name: config
+          configMap:
+            name: cloudflared-config
+        - name: credentials
+          secret:
+            secretName: {{ .Values.ingress.cloudflare.credentialsSecret | default "cloudflared-credentials" }}
+      # Pod anti-affinity for HA - distribute across nodes
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app: cloudflared
+                topologyKey: kubernetes.io/hostname
+
+{{- end }}
+{{- end }}

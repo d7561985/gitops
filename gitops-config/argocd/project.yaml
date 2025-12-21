@@ -31,6 +31,15 @@ spec:
       server: https://kubernetes.default.svc
     - namespace: 'external-dns'
       server: https://kubernetes.default.svc
+    - namespace: 'platform'
+      server: https://kubernetes.default.svc
+    - namespace: 'monitoring'
+      server: https://kubernetes.default.svc
+    - namespace: 'kube-system'
+      server: https://kubernetes.default.svc
+    # Preview environments (dynamic namespaces)
+    - namespace: 'preview-frontend-*'
+      server: https://kubernetes.default.svc
 
   clusterResourceWhitelist:
     - group: ''

@@ -139,6 +139,47 @@ spec:
           {{- end }}
           {{- end }}
 
+          {{- if $.Values.previewEnvironments.enabled }}
+          {{- if $.Values.previewEnvironments.vault.enabled }}
+
+          echo ""
+          echo "=== Preview Environments (ArgoCD) ==="
+
+          VAULT_PATH="{{ $.Values.previewEnvironments.vault.path }}"
+
+          # ---------------------------------------------
+          # ArgoCD policy for reading GitLab token
+          # ---------------------------------------------
+          ARGOCD_POLICY="argocd-preview-read"
+          echo "Policy: ${ARGOCD_POLICY}"
+          vault policy write ${ARGOCD_POLICY} - <<POLICY
+          # ArgoCD preview environments - read GitLab token
+          # Path: ${VAULT_PATH}
+          path "secret/data/${VAULT_PATH}" {
+            capabilities = ["read"]
+          }
+          path "secret/metadata/${VAULT_PATH}" {
+            capabilities = ["read", "list"]
+          }
+          POLICY
+
+          # ---------------------------------------------
+          # ArgoCD role for VaultAuth
+          # ---------------------------------------------
+          ARGOCD_ROLE="argocd-preview"
+          echo "Role: ${ARGOCD_ROLE}"
+          vault write auth/kubernetes/role/${ARGOCD_ROLE} \
+            bound_service_account_names=default \
+            bound_service_account_namespaces=argocd \
+            policies=${ARGOCD_POLICY} \
+            audience=vault \
+            ttl=1h
+
+          echo "  GitLab token path: secret/${VAULT_PATH}"
+
+          {{- end }}
+          {{- end }}
+
           echo ""
           echo "============================================"
           echo "  Bootstrap Complete"

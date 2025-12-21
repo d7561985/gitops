@@ -149,6 +149,20 @@ chmod +x "$ROOT_DIR/infrastructure/monitoring/setup.sh"
 "$ROOT_DIR/infrastructure/monitoring/setup.sh"
 
 # ============================================
+# Install External-DNS (optional, for domain mirrors)
+# ============================================
+
+if [ -n "$CLOUDFLARE_API_TOKEN" ]; then
+    echo_header "Installing External-DNS"
+    chmod +x "$ROOT_DIR/infrastructure/external-dns/setup.sh"
+    "$ROOT_DIR/infrastructure/external-dns/setup.sh"
+else
+    echo_header "Skipping External-DNS"
+    echo_warn "CLOUDFLARE_API_TOKEN not set. External-DNS will not be installed."
+    echo_info "To install later: CLOUDFLARE_API_TOKEN=xxx ./infrastructure/external-dns/setup.sh"
+fi
+
+# ============================================
 # Create Vault Admin Token Secret
 # ============================================
 
@@ -193,31 +207,42 @@ echo "  - Vault Secrets Operator (namespace: vault-secrets-operator-system)"
 echo "  - Registry secrets (poc-dev, poc-staging, poc-prod)"
 echo "  - ArgoCD (namespace: argocd)"
 echo "  - Prometheus + Grafana (namespace: monitoring)"
+if [ -n "$CLOUDFLARE_API_TOKEN" ]; then
+echo "  - External-DNS (namespace: external-dns)"
+fi
 echo ""
 echo "GatewayClass available:"
 kubectl get gatewayclass 2>/dev/null || echo "  (none yet - Cilium may still be initializing)"
 echo ""
 echo "Next steps:"
 echo ""
-echo "1. (Optional) Setup CloudFlare for automatic TLS:"
+echo "1. Setup CloudFlare (если не сделано):"
 echo "   export CLOUDFLARE_API_TOKEN=your-token"
-echo "   ./infrastructure/cert-manager/setup.sh"
+echo "   ./infrastructure/external-dns/setup.sh"
 echo ""
-echo "2. Add GitLab repo credentials to ArgoCD:"
+echo "2. Migrate tunnel to locally-managed (для domain mirrors):"
+echo "   ./infrastructure/cloudflare-tunnel/migrate-to-locally-managed.sh"
+echo ""
+echo "3. Add GitLab repo credentials to ArgoCD:"
 echo "   kubectl port-forward svc/argocd-server -n argocd 8080:443"
 echo "   # Get password: kubectl get secret argocd-initial-admin-secret -n argocd -o jsonpath='{.data.password}' | base64 -d"
 echo ""
-echo "3. Apply bootstrap (starts everything automatically):"
+echo "4. Apply bootstrap (starts everything automatically):"
 echo "   kubectl apply -f gitops-config/argocd/project.yaml"
 echo "   kubectl apply -f gitops-config/argocd/bootstrap-app.yaml"
 echo ""
-echo "4. Access Hubble UI (network observability):"
+echo "5. Add domain mirrors (см. docs/domain-mirrors-guide.md):"
+echo "   # Edit values.yaml:"
+echo "   environments:"
+echo "     dev:"
+echo "       mirrors:"
+echo "         - domain: mirror.example.com"
+echo "           zoneId: abc123..."
+echo ""
+echo "6. Access Hubble UI (network observability):"
 echo "   cilium hubble ui"
 echo ""
-echo "5. Access Grafana (metrics dashboards):"
+echo "7. Access Grafana (metrics dashboards):"
 echo "   kubectl port-forward svc/kube-prometheus-stack-grafana -n monitoring 3000:80"
 echo "   # URL: http://localhost:3000 (admin / admin)"
-echo ""
-echo "6. Access Prometheus (raw metrics):"
-echo "   kubectl port-forward svc/kube-prometheus-stack-prometheus -n monitoring 9090:9090"
 echo ""

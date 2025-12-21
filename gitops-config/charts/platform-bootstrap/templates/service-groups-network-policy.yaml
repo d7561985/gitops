@@ -1,0 +1,79 @@
+{{- /*
+CiliumNetworkPolicy for Service Groups IP Whitelist
+
+Creates network policies to restrict access to service group gateways
+based on source IP addresses (VPN, Office networks, etc.)
+
+When ipWhitelist is enabled:
+- Only traffic from specified CIDRs can reach the gateway
+- All other traffic is dropped
+
+Note: CloudFlare Tunnel traffic comes from cloudflared pods in the cluster,
+so the policy allows traffic from the cloudflare namespace by default.
+*/ -}}
+
+{{- range $groupName, $group := .Values.serviceGroups }}
+{{- if $group.enabled }}
+{{- if and $group.security $group.security.ipWhitelist $group.security.ipWhitelist.enabled }}
+{{- if $group.security.ipWhitelist.cidrs }}
+
+# =============================================================================
+# CiliumNetworkPolicy: IP Whitelist for {{ $groupName }}
+# =============================================================================
+# Allowed CIDRs:
+{{- range $group.security.ipWhitelist.cidrs }}
+#   - {{ . }}
+{{- end }}
+# =============================================================================
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: {{ $groupName }}-gateway-whitelist
+  namespace: {{ $group.gatewayNamespace }}
+  labels:
+    app.kubernetes.io/name: platform-bootstrap
+    app.kubernetes.io/component: network-policy
+    platform-bootstrap/service-group: {{ $groupName }}
+spec:
+  description: "IP whitelist for {{ $groupName }} service group gateway"
+  endpointSelector:
+    matchLabels:
+      # Cilium Gateway pods have these labels
+      io.cilium.gateway/owning-gateway: gateway-{{ $groupName }}
+  ingress:
+    # Allow traffic from specified CIDRs (VPN, Office, etc.)
+    - fromCIDR:
+        {{- range $group.security.ipWhitelist.cidrs }}
+        - {{ . | quote }}
+        {{- end }}
+      toPorts:
+        - ports:
+            - port: {{ $group.gateway.port | default 80 | quote }}
+              protocol: TCP
+
+    # Allow traffic from CloudFlare Tunnel (cloudflared pods)
+    # This is required when using CloudFlare Tunnel as ingress provider
+    {{- if eq $.Values.ingress.provider "cloudflare-tunnel" }}
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: {{ $.Values.ingress.cloudflare.namespace | default "cloudflare" }}
+      toPorts:
+        - ports:
+            - port: {{ $group.gateway.port | default 80 | quote }}
+              protocol: TCP
+    {{- end }}
+
+    # Allow traffic from within the cluster (for health checks, etc.)
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+      toPorts:
+        - ports:
+            - port: {{ $group.gateway.port | default 80 | quote }}
+              protocol: TCP
+
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}

@@ -1,5 +1,18 @@
 # =============================================================================
-# CloudFlare Tunnel Deployment (Locally-Managed Mode)
+# DEPRECATED - This file is no longer used!
+# =============================================================================
+# CloudFlare Tunnel is now managed by platform-bootstrap Helm chart.
+# See: gitops-config/charts/platform-bootstrap/templates/cloudflared-*.yaml
+#
+# The Helm chart provides:
+# - Automatic ConfigMap generation from values.yaml
+# - Automatic pod restart when config changes (via checksum annotation)
+# - Service Groups support for infrastructure domains
+#
+# This file is kept for reference only.
+# =============================================================================
+#
+# CloudFlare Tunnel Deployment (Locally-Managed Mode) - REFERENCE ONLY
 # =============================================================================
 # Режим locally-managed позволяет управлять ingress rules через ConfigMap
 # вместо CloudFlare Dashboard. Это даёт полный GitOps контроль.

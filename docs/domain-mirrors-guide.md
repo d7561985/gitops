@@ -507,4 +507,6 @@ kubectl rollout restart deployment/cloudflared -n cloudflare
 
 - [PREFLIGHT-CHECKLIST.md](./PREFLIGHT-CHECKLIST.md) — полный чеклист развёртывания
 - [new-service-guide.md](./new-service-guide.md) — создание нового сервиса
+- [preview-environments-guide.md](./preview-environments-guide.md) — preview для feature branches
+- [service-groups-guide.md](./service-groups-guide.md) — инфраструктурные домены
 - [gateway-api-plan.md](./gateway-api-plan.md) — архитектура Gateway API

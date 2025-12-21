@@ -11,6 +11,11 @@
 # 4. Vault secret path placeholders
 # 5. ArgoCD ApplicationSet for all services × environments
 # 6. VaultAuth resources per environment
+# 7. Gateway listeners for all domains + mirrors
+# 8. CloudFlare Tunnel ingress rules (if enabled)
+# 9. DNS records via external-dns annotations
+# 10. Service Groups - universal external access for infrastructure services
+#     (ArgoCD, Grafana, Vault, etc.) with optional IP whitelist
 
 # -----------------------------------------------------------------------------
 # Global Settings
@@ -49,16 +54,32 @@ environments:
     domain: "app.demo-poc-01.work"
     # Infrastructure namespace for MongoDB, RabbitMQ, etc.
     infraNamespace: "infra-dev"
+    # Domain mirrors - additional hostnames that route to the same services
+    # Each mirror automatically gets:
+    # - Gateway listener
+    # - DNS record (via external-dns)
+    # - Tunnel ingress rule (if ingress.provider: cloudflare-tunnel)
+    mirrors:
+      - domain: "demo-poc-02.work"
+        zoneId: "76d0dce2fd263121a17a36a188081b99"
+    # Example:
+    # mirrors:
+    #   - domain: "mirror1.example.com"
+    #     zoneId: "abc123..."  # CloudFlare Zone ID (required for DNS)
+    #   - domain: "mirror2.other.net"
+    #     zoneId: "xyz789..."
   # staging:
   #   enabled: true
   #   autoSync: true
   #   domain: "app.staging.example.com"
   #   infraNamespace: "infra-staging"
+  #   mirrors: []
   # prod:
   #   enabled: true
   #   autoSync: false  # Manual sync for production
   #   domain: "app.example.com"
   #   infraNamespace: "infra-prod"
+  #   mirrors: []
 
 # -----------------------------------------------------------------------------
 # Services Registry
@@ -195,5 +216,332 @@ gateway:
     # clusterIssuer: letsencrypt-prod
 
   # Domain Mirrors - additional hostnames that route to the same service
+  # DEPRECATED: Use environments.{env}.mirrors instead
   domainMirrors:
     enabled: false
+
+# -----------------------------------------------------------------------------
+# Ingress Provider Configuration
+# -----------------------------------------------------------------------------
+# Модульная архитектура: ingress provider независим от DNS management
+# Поддерживаемые провайдеры:
+#   - cloudflare-tunnel: CloudFlare Tunnel (текущий)
+#   - haproxy: HAProxy LoadBalancer
+#   - nginx: Nginx Ingress
+#   - external: Внешний LB (только DNS, без ingress management)
+#
+# Переключение провайдера не требует изменения DNS конфигурации!
+ingress:
+  # Провайдер для входящего трафика
+  provider: cloudflare-tunnel
+
+  # CloudFlare Tunnel settings (если provider: cloudflare-tunnel)
+  cloudflare:
+    enabled: true
+    # Tunnel ID (получить через: cloudflared tunnel info <name>)
+    tunnelId: "1172317a-8885-492f-9744-dfba842c4d88"
+    # Secret с credentials.json
+    credentialsSecret: cloudflared-credentials
+    # Количество реплик для HA
+    replicas: 2
+    # Namespace для cloudflared
+    namespace: cloudflare
+
+  # HAProxy settings (если provider: haproxy)
+  # haproxy:
+  #   enabled: false
+  #   loadBalancerIP: ""  # Статический IP для DNS A записи
+
+  # Nginx settings (если provider: nginx)
+  # nginx:
+  #   enabled: false
+  #   loadBalancerIP: ""
+
+# -----------------------------------------------------------------------------
+# DNS Management (external-dns)
+# -----------------------------------------------------------------------------
+# external-dns автоматически создаёт DNS записи на основе Gateway/HTTPRoute
+# Работает независимо от ingress provider!
+#
+# Документация: https://github.com/kubernetes-sigs/external-dns
+dns:
+  enabled: true
+  # DNS провайдер
+  provider: cloudflare
+  # CloudFlare settings
+  cloudflare:
+    # Proxied записи (оранжевое облако в CloudFlare)
+    proxied: true
+    # Secret с API token
+    secretName: cloudflare-api-credentials
+    # Namespace где установлен external-dns
+    namespace: external-dns
+
+# -----------------------------------------------------------------------------
+# Domain Mirrors Configuration
+# -----------------------------------------------------------------------------
+# Управление зеркалами доменов
+#
+# Добавление зеркала:
+# 1. Добавьте mirror в environments.{env}.mirrors
+# 2. Опционально: переопределите routes для конкретного зеркала
+# 3. ArgoCD автоматически создаст:
+#    - Gateway listener
+#    - HTTPRoute для маршрутизации
+#    - DNS запись (через external-dns)
+#    - Tunnel ingress rule (если используется)
+domainMirrors:
+  # Включить поддержку зеркал
+  enabled: true
+  # Автоматически добавлять listeners в Gateway для каждого зеркала
+  addToGateway: true
+  # Создавать DNS записи через external-dns annotations
+  createDNS: true
+  # Добавлять ingress rules в CloudFlare Tunnel ConfigMap
+  addToTunnel: true
+
+  # Маршруты по умолчанию для зеркал
+  # Копируют структуру основного приложения
+  # Можно переопределить для конкретного зеркала в mirrors[].routes
+  defaultRoutes:
+    # API Gateway - все /api запросы
+    - name: api
+      path: /api
+      pathType: PathPrefix
+      serviceName: api-gateway-sv
+      servicePort: 8080
+
+    # Frontend - все остальные запросы (catch-all)
+    - name: frontend
+      path: /
+      pathType: PathPrefix
+      serviceName: sentry-frontend-sv
+      servicePort: 4200
+
+# -----------------------------------------------------------------------------
+# Service Groups - Universal External Access
+# -----------------------------------------------------------------------------
+# Универсальный механизм публикации любых сервисов через домены.
+# Один template обрабатывает все группы - легко добавить новый сервис.
+#
+# Каждый сервис получает:
+#   - Gateway listener
+#   - HTTPRoute с cross-namespace routing
+#   - ReferenceGrant для доступа к сервису
+#   - DNS запись (через external-dns)
+#   - CloudFlare Tunnel ingress rule
+#   - (Опционально) IP whitelist через CiliumNetworkPolicy
+#
+# Формат домена: {subdomain}.{clusterName}.{baseDomain}
+# Пример: argocd.poc.infra.demo-poc-01.work
+#
+# Multi-cluster: измените clusterName для каждого кластера
+#   - poc      → argocd.poc.infra.demo-poc-01.work
+#   - prod-eu  → argocd.prod-eu.infra.demo-poc-01.work
+#
+serviceGroups:
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Infrastructure - ArgoCD, Grafana, Vault, etc.
+  # ═══════════════════════════════════════════════════════════════════════════
+  infrastructure:
+    enabled: true
+
+    # Базовый домен для группы
+    baseDomain: "infra-01.work"
+
+    # Уникальное имя кластера (часть URL)
+    clusterName: "poc"
+
+    # Namespace для Gateway этой группы
+    gatewayNamespace: "platform"
+
+    # CloudFlare Zone ID (тот же что для demo-poc-01.work)
+    # Получить: CloudFlare Dashboard → demo-poc-01.work → API section → Zone ID
+    zoneId: "cca72b9991480eb87d5e07717ddb8a4a"  # TODO: заполнить
+
+    # Gateway configuration
+    gateway:
+      gatewayClassName: cilium
+      protocol: HTTP
+      port: 80
+
+    # Security: IP whitelist (VPN/Office)
+    # Реализуется через CiliumNetworkPolicy
+    security:
+      ipWhitelist:
+        enabled: false  # Включить когда настроен VPN
+        cidrs: []
+          # - "10.8.0.0/24"     # VPN range
+          # - "192.168.1.0/24"  # Office network
+
+    # Сервисы с публичным доступом
+    services:
+      argocd:
+        enabled: true
+        subdomain: argocd             # argocd.poc.infra-01.work
+        namespace: argocd
+        serviceName: argocd-server
+        servicePort: 80
+        path: /
+        pathType: PathPrefix
+
+      grafana:
+        enabled: true
+        subdomain: grafana            # grafana.poc.infra-01.work
+        namespace: monitoring
+        serviceName: kube-prometheus-stack-grafana
+        servicePort: 80
+        path: /
+        pathType: PathPrefix
+
+      vault:
+        enabled: true
+        subdomain: vault              # vault.poc.infra-01.work
+        namespace: vault
+        serviceName: vault
+        servicePort: 8200
+        path: /
+        pathType: PathPrefix
+
+      hubble:
+        enabled: true
+        subdomain: hubble             # hubble.poc.infra-01.work
+        namespace: kube-system
+        serviceName: hubble-ui
+        servicePort: 80
+        path: /
+        pathType: PathPrefix
+
+      # Примеры дополнительных сервисов:
+      # prometheus:
+      #   enabled: false
+      #   subdomain: prometheus
+      #   namespace: monitoring
+      #   serviceName: prometheus-server
+      #   servicePort: 9090
+      #   path: /
+      #   pathType: PathPrefix
+      #
+      # alertmanager:
+      #   enabled: false
+      #   subdomain: alertmanager
+      #   namespace: monitoring
+      #   serviceName: alertmanager
+      #   servicePort: 9093
+      #   path: /
+      #   pathType: PathPrefix
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Databases - MongoDB, Redis, etc. (для admin/debug доступа)
+  # ═══════════════════════════════════════════════════════════════════════════
+  # databases:
+  #   enabled: false
+  #   baseDomain: "db.demo-poc-01.work"
+  #   clusterName: "poc"
+  #   gatewayNamespace: "platform-db"
+  #   zoneId: ""
+  #
+  #   gateway:
+  #     gatewayClassName: cilium
+  #     protocol: HTTP
+  #     port: 80
+  #
+  #   # ВАЖНО: Базы данных только через VPN!
+  #   security:
+  #     ipWhitelist:
+  #       enabled: true
+  #       cidrs:
+  #         - "10.8.0.0/24"  # Only VPN
+  #
+  #   services:
+  #     mongo-express:
+  #       enabled: false
+  #       subdomain: mongo
+  #       namespace: infra-dev
+  #       serviceName: mongo-express
+  #       servicePort: 8081
+  #       path: /
+  #       pathType: PathPrefix
+
+# -----------------------------------------------------------------------------
+# Preview Environments (Feature Branch Deployments)
+# -----------------------------------------------------------------------------
+# Автоматическое создание preview environments для Merge Requests.
+# Использует ArgoCD Pull Request Generator для отслеживания MR в GitLab.
+#
+# Как это работает:
+# 1. Разработчик создаёт ветку с JIRA тегом: PROJ-123-description
+# 2. Push, создаёт MR
+# 3. ArgoCD обнаруживает MR и создаёт Application
+# 4. Из имени ветки извлекается JIRA тег для URL
+# 5. При закрытии/merge MR - environment автоматически удаляется
+#
+# Формат ветки: {JIRA-TAG}-{description}
+# Пример ветки: PROJ-123-new-feature
+#
+# Домен: {jira-tag}.preview.{baseDomain}
+# Пример URL: proj-123.preview.demo-poc-01.work
+#
+# ВАЖНО: Frontend использует backend из dev environment!
+# Это preview только для UI, не для полного стека.
+#
+# Vault path для GitLab token:
+#   secret/{vaultPathPrefix}/argocd/gitlab-preview
+#   Ключ: token
+previewEnvironments:
+  enabled: true  # Включить когда настроен GitLab token в Vault
+
+  # Vault интеграция для GitLab токена
+  # Токен синхронизируется из Vault в K8s secret автоматически
+  vault:
+    enabled: true  # Использовать Vault для хранения GitLab token
+    # Путь в Vault (относительно mount point, без secret/data/ префикса)
+    # Полный путь: secret/data/{path} → secret/data/gitops-poc-dzha/argocd/gitlab-preview/dev
+    path: "gitops-poc-dzha/argocd/gitlab-preview/dev"
+
+  # Базовый домен для preview (wildcard DNS должен быть настроен)
+  # URL формат: {jira-tag}.{baseDomain} → proj-123.preview.demo-poc-01.work
+  baseDomain: "preview.demo-poc-01.work"
+
+  # CloudFlare Zone ID для DNS записей (для demo-poc-01.work)
+  zoneId: "4326314d3e3737ed7a7cde0081ab31af"
+
+  # GitLab connection
+  gitlab:
+    # GitLab API URL (для self-hosted или gitlab.com)
+    api: "https://gitlab.com/"
+    # Secret с GitLab access token
+    # Token нужен с правами: read_api (для чтения MR)
+    tokenRef:
+      secretName: gitlab-preview-token
+      key: token
+    # Как часто проверять новые MR (секунды)
+    requeueAfterSeconds: 60
+
+  # Сервисы для preview
+  # Каждый сервис = отдельный ApplicationSet
+  services:
+    frontend:
+      enabled: true
+      # GitLab Project ID (числовой!) - получить: Settings → General → Project ID
+      # Для sentry-demo монорепо
+      projectId: "76998085"
+      # Regex для фильтрации веток по JIRA tag
+      # Pattern: PROJ-123-description (любой JIRA тег + дефис + описание)
+      branchMatch: "^[A-Z]+-[0-9]+-.*"
+      # Путь к .cicd в репозитории
+      cicdPath: "frontend/.cicd"
+      # Репозиторий (для multi-source ArgoCD)
+      repoURL: "https://gitlab.com/gitops-poc-dzha/sentry-demo.git"
+      # Namespace prefix для preview deployments
+      namespacePrefix: "preview-frontend"
+      # Backend namespace (frontend будет обращаться к этим сервисам)
+      backendNamespace: "poc-dev"
+
+  # Gateway configuration для preview доменов
+  gateway:
+    # Namespace где создаётся Gateway для preview
+    namespace: "poc-dev"
+    gatewayClassName: cilium
+    protocol: HTTP
+    port: 80

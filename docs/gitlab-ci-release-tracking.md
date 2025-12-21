@@ -477,6 +477,21 @@ data:
 
 ---
 
+## Preview Environments
+
+Для feature branches доступен автоматический preview через ArgoCD Pull Request Generator:
+
+1. Создать ветку с JIRA тегом: `PROJ-123-description`
+2. CI собирает image
+3. ArgoCD создаёт preview environment
+4. URL: `proj-123.preview.demo-poc-01.work`
+
+> **Требование:** Ветка должна начинаться с JIRA тега (`PROJ-123-...`)
+
+Подробнее: [preview-environments-guide.md](./preview-environments-guide.md)
+
+---
+
 ## Ссылки
 
 ### Официальная документация
@@ -485,11 +500,18 @@ data:
 - [argocd app wait Command](https://argo-cd.readthedocs.io/en/latest/user-guide/commands/argocd_app_wait/) — все опции команды wait
 - [ArgoCD Notifications](https://argo-cd.readthedocs.io/en/stable/operator-manual/notifications/) — настройка webhooks
 - [GitLab External Deployment Tracking](https://docs.gitlab.com/ci/environments/external_deployment_tools/) — интеграция с GitLab Environments
+- [ArgoCD Pull Request Generator](https://argo-cd.readthedocs.io/en/latest/operator-manual/applicationset/Generators-Pull-Request/) — автоматические preview environments
 
 ### Обсуждения и примеры
 
 - [ArgoCD + GitLab Best Practices Discussion](https://github.com/argoproj/argo-cd/discussions/7475) — опыт сообщества
 - [ArgoCD + GitLab Notifications Discussion](https://github.com/argoproj/argo-cd/discussions/21158) — настройка notifications
+
+### Связанные документы
+
+- [preview-environments-guide.md](./preview-environments-guide.md) — preview для feature branches
+- [new-service-guide.md](./new-service-guide.md) — создание нового сервиса
+- [PREFLIGHT-CHECKLIST.md](./PREFLIGHT-CHECKLIST.md) — полный чеклист развёртывания
 
 ### Дополнительно
 
