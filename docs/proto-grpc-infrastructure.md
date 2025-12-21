@@ -332,7 +332,7 @@ composer config --global gitlab-token.gitlab.com ${GITLAB_TOKEN}
 {
   "repositories": [
     {
-      "type": "vcs",
+      "type": "git",
       "url": "https://gitlab.com/gitops-poc-dzha/api/gen/my-service/php.git"
     }
   ],
@@ -340,15 +340,31 @@ composer config --global gitlab-token.gitlab.com ${GITLAB_TOKEN}
     "php": ">=8.1",
     "grpc/grpc": "^1.57",
     "google/protobuf": "^4.25",
-    "gitops-poc-dzha/my-service": "1.2.3"
+    "gitops-poc-dzha/my-service": "dev-main"
+  },
+  "config": {
+    "gitlab-protocol": "https"
   }
 }
 ```
+
+> **Important:** Use `type: "git"` (not `vcs`) to prevent Composer from auto-switching to SSH.
+> See [Composer issue #11808](https://github.com/composer/composer/issues/11808).
 
 Then run:
 ```bash
 composer update
 ```
+
+**Namespace Mapping:**
+
+PHP namespace is derived from proto package declaration:
+
+| Proto package | PHP namespace | Example class |
+|---------------|---------------|---------------|
+| `myservice.v1` | `Myservice\V1` | `Myservice\V1\MyServiceClient` |
+| `wager.v1` | `Wager\V1` | `Wager\V1\GetProgressRequest` |
+| `user.v1` | `User\V1` | `User\V1\UserServiceClient` |
 
 **Usage:**
 ```php
@@ -356,8 +372,9 @@ composer update
 
 namespace App;
 
-use GitopsPocDzha\MyService\Myservice\V1\MyServiceClient;
-use GitopsPocDzha\MyService\Myservice\V1\GetSomethingRequest;
+// Namespace matches proto package (myservice.v1 -> Myservice\V1)
+use Myservice\V1\MyServiceClient;
+use Myservice\V1\GetSomethingRequest;
 use Grpc\ChannelCredentials;
 
 class GrpcClient
@@ -502,23 +519,24 @@ npm install --save-dev @types/google-protobuf
 
 **Dockerfile для Angular с приватными зависимостями:**
 
-Используйте BuildKit secrets для безопасной передачи токена:
+Используйте BuildKit secrets с `.netrc` для безопасной передачи токена:
 
 ```dockerfile
 FROM node:22-alpine AS builder
-RUN apk add --no-cache git sed
+RUN apk add --no-cache git ca-certificates
 WORKDIR /app
 COPY package*.json ./
 
-# BuildKit secret - токен не попадает в слои образа
+# Install dependencies with GitLab authentication via .netrc
+# .netrc is a standard mechanism that works with git, npm, pip, composer
 RUN --mount=type=secret,id=gitlab_token \
-    GITLAB_TOKEN=$(cat /run/secrets/gitlab_token 2>/dev/null || echo "") && \
+    GITLAB_TOKEN=$(cat /run/secrets/gitlab_token 2>/dev/null | tr -d '\n' || echo "") && \
     if [ -n "$GITLAB_TOKEN" ]; then \
-        git config --global url."https://gitlab-ci-token:${GITLAB_TOKEN}@gitlab.com/".insteadOf "ssh://git@gitlab.com/" && \
-        git config --global url."https://gitlab-ci-token:${GITLAB_TOKEN}@gitlab.com/".insteadOf "https://gitlab.com/" && \
-        sed -i 's|git+ssh://git@gitlab.com/|https://gitlab-ci-token:'"${GITLAB_TOKEN}"'@gitlab.com/|g' package-lock.json 2>/dev/null || true; \
+        echo "machine gitlab.com login gitlab-ci-token password ${GITLAB_TOKEN}" > ~/.netrc && \
+        chmod 600 ~/.netrc; \
     fi && \
-    npm ci --prefer-offline --no-audit
+    npm ci --prefer-offline --no-audit && \
+    rm -f ~/.netrc
 
 COPY . .
 RUN npm run build
@@ -686,10 +704,13 @@ syntax = "proto3";
 // Package follows: {domain}.{subdomain}.v{major}
 package myservice.v1;
 
-// Language-specific options
+// Language-specific options (only go_package is required)
 option go_package = "gitlab.com/gitops-poc-dzha/api/gen/my-service/go/myservice/v1;myservicev1";
-option php_namespace = "GitopsPocDzha\\MyService\\Myservice\\V1";
-option java_package = "com.gitopspocdzha.myservice.myservice.v1";
+
+// NOTE: php_namespace is NOT needed!
+// PHP namespace is automatically derived from package:
+//   package myservice.v1  ->  namespace Myservice\V1
+// The CI template auto-generates correct composer.json autoload.
 ```
 
 ### Versioning Guidelines
@@ -842,7 +863,11 @@ npm config set //gitlab.com/api/v4/packages/npm/:_authToken ${GITLAB_TOKEN}
 
 **Composer:**
 ```bash
+# Configure auth token
 composer config --global gitlab-token.gitlab.com ${GITLAB_TOKEN}
+
+# IMPORTANT: Use type "git" (not "vcs") in composer.json to prevent SSH auto-switch
+# See docs/DOCKER_AUTH.md for details
 ```
 
 **pip:**
