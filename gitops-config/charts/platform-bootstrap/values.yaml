@@ -496,7 +496,7 @@ previewEnvironments:
   vault:
     enabled: true  # Использовать Vault для хранения GitLab token
     # Путь в Vault (относительно mount point, без secret/data/ префикса)
-    # Полный путь: secret/data/{path} → secret/data/gitops-poc-dzha/argocd/gitlab-preview/dev
+    # Полный путь: secret/data/{path}
     path: "gitops-poc-dzha/argocd/gitlab-preview/dev"
 
   # Базовый домен для preview (wildcard DNS должен быть настроен)

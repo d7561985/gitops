@@ -44,15 +44,16 @@ spec:
           tokenRef:
             secretName: {{ $.Values.previewEnvironments.gitlab.tokenRef.secretName }}
             key: {{ $.Values.previewEnvironments.gitlab.tokenRef.key }}
-          # Filter by branch naming convention (JIRA tag)
-          # Pattern: PROJ-123-description
-          {{- if $service.branchMatch }}
-          branchMatch: {{ $service.branchMatch | quote }}
-          {{- end }}
           # Only opened MRs
           pullRequestState: opened
         # How often to check for new MRs
         requeueAfterSeconds: {{ $.Values.previewEnvironments.gitlab.requeueAfterSeconds }}
+        {{- if $service.branchMatch }}
+        # Filter by branch naming convention (JIRA tag)
+        # Pattern: PROJ-123-description
+        filters:
+          - branchMatch: {{ $service.branchMatch | quote }}
+        {{- end }}
 
   template:
     metadata:
