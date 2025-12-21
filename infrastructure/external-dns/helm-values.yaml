@@ -1,0 +1,95 @@
+# =============================================================================
+# External-DNS Helm Values
+# =============================================================================
+# Документация: https://github.com/kubernetes-sigs/external-dns
+# Gateway API: https://kubernetes-sigs.github.io/external-dns/latest/docs/tutorials/gateway-api/
+# =============================================================================
+
+# Источники для DNS записей
+# gateway-httproute - читает hostname из HTTPRoute spec.hostnames
+# gateway-grpcroute - читает hostname из GRPCRoute spec.hostnames
+# Target (куда указывает DNS) берётся из Gateway annotation:
+#   external-dns.alpha.kubernetes.io/target
+sources:
+  - gateway-httproute
+  - gateway-grpcroute
+
+# CloudFlare provider
+provider:
+  name: cloudflare
+
+# Политика синхронизации
+# sync - создаёт и удаляет записи
+# upsert-only - только создаёт/обновляет (безопаснее)
+policy: sync
+
+# Фильтр доменов (опционально)
+# domainFilters:
+#   - demo-poc-01.work
+#   - example.com
+
+# Cloudflare specific settings
+# cloudflare-proxied: ВСЕ записи будут proxied через CloudFlare (оранжевое облако)
+# Это глобальный default. Отдельные записи могут переопределить через аннотацию:
+#   external-dns.alpha.kubernetes.io/cloudflare-proxied: "false"
+extraArgs:
+  cloudflare-proxied: ""  # Пустое значение = флаг включён
+
+# Секрет с CloudFlare API Token
+env:
+  - name: CF_API_TOKEN
+    valueFrom:
+      secretKeyRef:
+        name: cloudflare-api-credentials
+        key: cloudflare_api_token
+
+# Интервал синхронизации
+interval: 1m
+
+# Логирование
+logLevel: info
+logFormat: text
+
+# Ресурсы
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 200m
+    memory: 128Mi
+
+# Service Account
+serviceAccount:
+  create: true
+  name: external-dns
+
+# RBAC
+rbac:
+  create: true
+  # Дополнительные правила для Gateway API
+  additionalPermissions:
+    - apiGroups: ["gateway.networking.k8s.io"]
+      resources: ["gateways", "httproutes", "grpcroutes", "tlsroutes", "tcproutes", "udproutes"]
+      verbs: ["get", "list", "watch"]
+
+# Metrics для Prometheus
+metrics:
+  enabled: true
+  serviceMonitor:
+    enabled: true
+    namespace: external-dns
+    labels:
+      release: kube-prometheus-stack
+
+# Pod настройки
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65534
+  fsGroup: 65534
+
+securityContext:
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL

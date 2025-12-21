@@ -39,24 +39,68 @@
     - `ARGOCD_SERVER` = `argocd.your-domain.com` (позже)
     - `ARGOCD_AUTH_TOKEN` = (позже, после создания)
 
-### CloudFlare (опционально)
+### CloudFlare
 
-- [ ] **Создать API Token** для cert-manager
+- [ ] **Создать API Token** для external-dns и cert-manager
   - URL: `https://dash.cloudflare.com/profile/api-tokens`
-  - Template: "Edit zone DNS"
-  - Permissions: Zone/DNS/Edit, Zone/Zone/Read
+  - Template: "Custom token"
+  - Permissions:
+    - `Zone:Zone:Read` (все зоны или конкретные)
+    - `Zone:DNS:Edit` (все зоны или конкретные)
+    - `Account:Cloudflare Tunnel:Edit` (если используете tunnel)
   - Сохранить в `.env` как `CLOUDFLARE_API_TOKEN`
 
-- [ ] **Создать Tunnel** для локального доступа
-  - URL: `https://one.dash.cloudflare.com/`
-  - Networks → Tunnels → Create tunnel
-  - Connector: Cloudflared
-  - Скопировать token (начинается с `eyJ...`)
-  - Сохранить в `.env` как `CLOUDFLARE_TUNNEL_TOKEN`
+- [ ] **Создать Tunnel** (для locally-managed mode)
+  - Вариант A: Через CLI (рекомендуется)
+    ```bash
+    cloudflared tunnel login
+    cloudflared tunnel create gitops-poc
+    # Сохранить credentials: ~/.cloudflared/<tunnel-id>.json
+    ```
+  - Вариант B: Через Dashboard
+    - URL: `https://one.dash.cloudflare.com/`
+    - Networks → Tunnels → Create tunnel
+  - Сохранить Tunnel ID в `.env` как `CLOUDFLARE_TUNNEL_ID`
 
-- [ ] **Настроить Public Hostnames** в Tunnel
-  - `app.your-domain.com` → `http://cilium-gateway-gateway.poc-dev.svc:80`
-  - `argocd.your-domain.com` → `http://argocd-server.argocd.svc:80`
+- [ ] **Получить Zone ID** для каждого домена с зеркалами
+  - URL: `https://dash.cloudflare.com/` → выбрать домен → Overview (справа)
+  - Или: `cloudflare zone list` (если установлен cloudflare-cli)
+
+### External-DNS (автоматическое управление DNS)
+
+- [ ] **Установить external-dns**
+  ```bash
+  # Токен загружается автоматически из .env
+  ./infrastructure/external-dns/setup.sh
+  ```
+
+- [ ] **Проверить работу**
+  ```bash
+  kubectl logs -f deployment/external-dns -n external-dns
+  ```
+
+### CloudFlare Tunnel (locally-managed)
+
+**Вариант A: Новая установка (с нуля)**
+```bash
+# Создаёт tunnel, credentials secret, деплоит cloudflared
+./infrastructure/cloudflare-tunnel/setup.sh
+
+# Скрипт выведет tunnelId — добавьте в values.yaml
+```
+
+**Вариант B: Миграция с remotely-managed**
+```bash
+# Если уже есть tunnel с настройками в Dashboard
+./infrastructure/cloudflare-tunnel/migrate-to-locally-managed.sh
+```
+
+- [ ] **Добавить Tunnel ID в values.yaml**
+  ```yaml
+  ingress:
+    cloudflare:
+      tunnelId: "your-tunnel-uuid"  # скрипт покажет это значение
+  ```
 
 ---
 
@@ -227,3 +271,47 @@ vault kv put secret/${GITLAB_GROUP}/api-gateway/dev/config \
   API_KEY="real-value" \
   DB_PASSWORD="real-password"
 ```
+
+---
+
+## Добавление Domain Mirrors
+
+### Быстрый старт
+
+1. **Получить Zone ID** для домена зеркала:
+   ```bash
+   curl -X GET "https://api.cloudflare.com/client/v4/zones" \
+     -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" | jq '.result[] | {name, id}'
+   ```
+
+2. **Добавить зеркало** в `values.yaml`:
+   ```yaml
+   environments:
+     dev:
+       mirrors:
+         - domain: "mirror.example.com"
+           zoneId: "your-zone-id"
+   ```
+
+3. **Commit и sync**:
+   ```bash
+   git add . && git commit -m "feat: add mirror domain"
+   git push
+   argocd app sync platform-bootstrap --grpc-web
+   ```
+
+4. **Проверить**:
+   ```bash
+   kubectl get httproutes -n poc-dev | grep mirror
+   kubectl logs deployment/external-dns -n external-dns | grep mirror
+   curl -I https://mirror.example.com
+   ```
+
+### Критерии успеха
+
+- [ ] Gateway listener `http-mirror-N` создан
+- [ ] HTTPRoute `mirror-N-api` и `mirror-N-frontend` созданы
+- [ ] DNS запись появилась в CloudFlare
+- [ ] `curl https://mirror.domain.com` возвращает 200
+
+Подробнее: [domain-mirrors-guide.md](./domain-mirrors-guide.md)

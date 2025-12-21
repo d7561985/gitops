@@ -27,6 +27,10 @@ spec:
       server: https://kubernetes.default.svc
     - namespace: 'infra-dev'
       server: https://kubernetes.default.svc
+    - namespace: 'cloudflare'
+      server: https://kubernetes.default.svc
+    - namespace: 'external-dns'
+      server: https://kubernetes.default.svc
 
   clusterResourceWhitelist:
     - group: ''

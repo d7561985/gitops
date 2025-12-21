@@ -1,0 +1,74 @@
+{{- /*
+CloudFlare Tunnel ConfigMap for locally-managed mode.
+Generates ingress rules from environments and their mirrors.
+
+This ConfigMap is applied to the cloudflare namespace and used by cloudflared.
+Requires stakater/Reloader or manual rollout restart when changed.
+
+Only generated when:
+  - ingress.provider: cloudflare-tunnel
+  - domainMirrors.addToTunnel: true
+*/ -}}
+{{- if and (eq .Values.ingress.provider "cloudflare-tunnel") .Values.ingress.cloudflare.enabled }}
+{{- if .Values.ingress.cloudflare.tunnelId }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cloudflared-config
+  namespace: {{ .Values.ingress.cloudflare.namespace | default "cloudflare" }}
+  labels:
+    app.kubernetes.io/name: platform-bootstrap
+    app.kubernetes.io/component: cloudflare-tunnel
+  annotations:
+    # Annotation for stakater/Reloader to restart cloudflared on config change
+    reloader.stakater.com/auto: "true"
+data:
+  config.yaml: |
+    # ==========================================================================
+    # CloudFlare Tunnel Configuration (Locally-Managed)
+    # ==========================================================================
+    # Этот файл генерируется автоматически из platform-bootstrap Helm chart.
+    # Не редактируйте вручную - изменения будут перезаписаны!
+    #
+    # Добавление нового домена:
+    # 1. Добавьте mirror в environments.{env}.mirrors в values.yaml
+    # 2. ArgoCD синхронизирует изменения
+    # 3. ConfigMap обновится автоматически
+    # 4. cloudflared перезапустится (если установлен Reloader)
+    # ==========================================================================
+
+    # Tunnel ID
+    tunnel: {{ .Values.ingress.cloudflare.tunnelId }}
+
+    # Credentials file path (mounted from secret)
+    credentials-file: /etc/cloudflared/credentials.json
+
+    # Metrics endpoint
+    metrics: 0.0.0.0:2000
+
+    # Ingress rules
+    ingress:
+      {{- range $envName, $env := .Values.environments }}
+      {{- if $env.enabled }}
+      {{- if $env.domain }}
+      {{- $gatewayService := printf "http://cilium-gateway-gateway.%s-%s.svc.cluster.local:80" $.Values.global.namespacePrefix $envName }}
+      # === Environment: {{ $envName }} ===
+      # Main domain
+      - hostname: {{ $env.domain }}
+        service: {{ $gatewayService }}
+      {{- /* Mirror domains */ -}}
+      {{- if and $.Values.domainMirrors.enabled $.Values.domainMirrors.addToTunnel $env.mirrors }}
+      {{- range $idx, $mirror := $env.mirrors }}
+      # Mirror {{ $idx }}: {{ $mirror.domain }}
+      - hostname: {{ $mirror.domain }}
+        service: {{ $gatewayService }}
+      {{- end }}
+      {{- end }}
+      {{- end }}
+      {{- end }}
+      {{- end }}
+      # Catch-all rule (required at the end)
+      - service: http_status:404
+{{- end }}
+{{- end }}

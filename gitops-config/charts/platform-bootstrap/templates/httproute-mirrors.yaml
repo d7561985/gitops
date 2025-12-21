@@ -1,0 +1,85 @@
+{{- /*
+HTTPRoute resources for domain mirrors.
+
+Создаёт HTTPRoute для каждого зеркала, копируя маршруты основного домена.
+Зеркала маршрутизируют трафик на те же backend-сервисы.
+
+Важно: Этот template НЕ зависит от k8app/app chart!
+Он создаёт параллельные HTTPRoute которые ссылаются на уже существующие Service.
+
+Архитектура:
+  ┌─────────────────────────────────────┐
+  │ k8app HTTPRoute (основной домен)    │──┐
+  │ hostname: app.demo-poc-01.work      │  │
+  │ /api → api-gateway-sv               │  │
+  └─────────────────────────────────────┘  │
+                                           ├──► api-gateway-sv
+  ┌─────────────────────────────────────┐  │    sentry-frontend-sv
+  │ Mirror HTTPRoute (этот template)    │  │
+  │ hostname: mirror.example.com        │──┘
+  │ /api → api-gateway-sv               │
+  └─────────────────────────────────────┘
+*/ -}}
+
+{{- if .Values.domainMirrors.enabled }}
+{{- range $envName, $env := .Values.environments }}
+{{- if $env.enabled }}
+{{- if $env.mirrors }}
+
+{{- $gatewayNamespace := printf "%s-%s" $.Values.global.namespacePrefix $envName }}
+
+{{- /* Iterate over each mirror */ -}}
+{{- range $mirrorIdx, $mirror := $env.mirrors }}
+
+{{- /* Get routes configuration - use defaults if not specified */ -}}
+{{- $routes := $mirror.routes | default $.Values.domainMirrors.defaultRoutes }}
+
+{{- /* Create HTTPRoute for each route in the mirror */ -}}
+{{- range $routeIdx, $route := $routes }}
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: mirror-{{ $mirrorIdx }}-{{ $route.name | default (printf "route-%d" $routeIdx) }}
+  namespace: {{ $gatewayNamespace }}
+  labels:
+    app.kubernetes.io/name: platform-bootstrap
+    app.kubernetes.io/component: mirror-route
+    environment: {{ $envName }}
+    mirror-domain: {{ $mirror.domain | replace "." "-" }}
+  annotations:
+    platform-bootstrap/mirror-of: {{ $env.domain }}
+    platform-bootstrap/mirror-index: "{{ $mirrorIdx }}"
+    {{- /* external-dns annotations for DNS management */ -}}
+    {{- if $.Values.dns.enabled }}
+    external-dns.alpha.kubernetes.io/hostname: {{ $mirror.domain }}
+    {{- if $.Values.dns.cloudflare.proxied }}
+    external-dns.alpha.kubernetes.io/cloudflare-proxied: "true"
+    {{- end }}
+    {{- end }}
+spec:
+  hostnames:
+    - {{ $mirror.domain | quote }}
+  parentRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: gateway
+      namespace: {{ $gatewayNamespace }}
+      sectionName: http-mirror-{{ $mirrorIdx }}
+  rules:
+    - matches:
+        - path:
+            type: {{ $route.pathType | default "PathPrefix" }}
+            value: {{ $route.path | quote }}
+      backendRefs:
+        - group: ""
+          kind: Service
+          name: {{ $route.serviceName }}
+          port: {{ $route.servicePort }}
+          weight: 1
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}

@@ -1,141 +1,164 @@
 #!/bin/bash
-set -e
+# =============================================================================
+# CloudFlare Tunnel Setup
+# =============================================================================
+# Создаёт tunnel и деплоит cloudflared в Kubernetes.
+# Ingress rules управляются через ConfigMap (GitOps).
+#
+# Если у вас уже есть tunnel в remotely-managed режиме (настроен через Dashboard),
+# используйте migrate-to-locally-managed.sh для миграции.
+# =============================================================================
+
+set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
-# Colors
+# Цвета
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
+CYAN='\033[0;36m'
 NC='\033[0m'
 
-echo_info() { echo -e "${GREEN}[INFO]${NC} $1"; }
-echo_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
-echo_error() { echo -e "${RED}[ERROR]${NC} $1"; }
-echo_header() { echo -e "\n${BLUE}=== $1 ===${NC}"; }
+log_info() { echo -e "${GREEN}[INFO]${NC} $1"; }
+log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
+log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
+log_step() { echo -e "${CYAN}[STEP]${NC} $1"; }
 
-# Load .env file if exists
-if [ -f "$ROOT_DIR/.env" ]; then
-    echo_info "Loading configuration from .env..."
-    set -a
-    source "$ROOT_DIR/.env"
-    set +a
-fi
+NAMESPACE="cloudflare"
+TUNNEL_NAME="${1:-gitops-platform}"
 
 echo "========================================"
-echo "  CloudFlare Tunnel (cloudflared)"
+echo "  CloudFlare Tunnel (Locally-Managed)"
 echo "========================================"
 echo ""
-echo "CloudFlare Tunnel allows exposing local services to the internet"
-echo "without opening firewall ports or having a public IP."
-echo ""
-echo "Architecture:"
-echo "  Internet → CloudFlare Edge → Tunnel → cilium-gateway-gateway.{ns}.svc → Services"
+echo "Этот скрипт создаёт новый tunnel в locally-managed режиме."
+echo "Ingress rules будут управляться через Kubernetes ConfigMap."
 echo ""
 
-# Check for tunnel token
-CLOUDFLARE_TUNNEL_TOKEN="${CLOUDFLARE_TUNNEL_TOKEN:-}"
+# -----------------------------------------------------------------------------
+# Шаг 1: Проверка cloudflared CLI
+# -----------------------------------------------------------------------------
+log_step "1/6: Проверка cloudflared CLI"
 
-if [ -z "$CLOUDFLARE_TUNNEL_TOKEN" ]; then
-    echo_header "Setup Instructions"
+if ! command -v cloudflared &> /dev/null; then
+    log_error "cloudflared CLI не найден"
     echo ""
-    echo "To create a CloudFlare Tunnel:"
+    echo "Установите:"
+    echo "  macOS:  brew install cloudflared"
+    echo "  Linux:  https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/"
     echo ""
-    echo "1. Go to CloudFlare Zero Trust Dashboard:"
-    echo "   https://one.dash.cloudflare.com/"
-    echo ""
-    echo "2. Navigate to: Networks -> Tunnels -> Create a tunnel"
-    echo ""
-    echo "3. Choose 'Cloudflared' connector"
-    echo ""
-    echo "4. Name your tunnel (e.g., 'gitops-platform')"
-    echo ""
-    echo "5. Select 'Docker' as environment (we'll use the token)"
-    echo ""
-    echo "6. Copy the tunnel token (starts with 'eyJ...')"
-    echo ""
-    echo "7. Add to .env:"
-    echo "   CLOUDFLARE_TUNNEL_TOKEN=eyJhIjo..."
-    echo ""
-    echo "8. Re-run this script to deploy cloudflared"
-    echo ""
-    echo "9. Configure Public Hostnames in CloudFlare Dashboard (see below)"
-    echo ""
-    exit 0
+    exit 1
+fi
+log_info "cloudflared: $(cloudflared --version)"
+
+# -----------------------------------------------------------------------------
+# Шаг 2: Авторизация в CloudFlare
+# -----------------------------------------------------------------------------
+log_step "2/6: Авторизация в CloudFlare"
+
+if [ ! -f ~/.cloudflared/cert.pem ]; then
+    log_info "Требуется авторизация. Откроется браузер..."
+    cloudflared tunnel login
+else
+    log_info "Уже авторизован (cert.pem найден)"
 fi
 
-echo_info "CloudFlare Tunnel token found"
+# -----------------------------------------------------------------------------
+# Шаг 3: Создание tunnel
+# -----------------------------------------------------------------------------
+log_step "3/6: Создание tunnel '$TUNNEL_NAME'"
 
-# Create namespace
-NAMESPACE="${CLOUDFLARE_TUNNEL_NAMESPACE:-cloudflare}"
-echo_info "Creating namespace: $NAMESPACE"
+# Проверяем существует ли уже
+if cloudflared tunnel list | grep -q "$TUNNEL_NAME"; then
+    log_warn "Tunnel '$TUNNEL_NAME' уже существует"
+    TUNNEL_ID=$(cloudflared tunnel list | grep "$TUNNEL_NAME" | awk '{print $1}')
+else
+    cloudflared tunnel create "$TUNNEL_NAME"
+    TUNNEL_ID=$(cloudflared tunnel list | grep "$TUNNEL_NAME" | awk '{print $1}')
+    log_info "Tunnel создан с ID: $TUNNEL_ID"
+fi
+
+CREDENTIALS_FILE="$HOME/.cloudflared/${TUNNEL_ID}.json"
+
+if [ ! -f "$CREDENTIALS_FILE" ]; then
+    log_error "Credentials file не найден: $CREDENTIALS_FILE"
+    exit 1
+fi
+log_info "Credentials: $CREDENTIALS_FILE"
+
+# -----------------------------------------------------------------------------
+# Шаг 4: Создание Kubernetes ресурсов
+# -----------------------------------------------------------------------------
+log_step "4/6: Создание Kubernetes namespace и secrets"
+
+# Namespace
 kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
 
-# Create secret with tunnel token
-echo_info "Creating tunnel token secret..."
-kubectl create secret generic cloudflare-tunnel-token \
+# Secret с credentials.json
+kubectl create secret generic cloudflared-credentials \
     --namespace "$NAMESPACE" \
-    --from-literal=token="$CLOUDFLARE_TUNNEL_TOKEN" \
+    --from-file=credentials.json="$CREDENTIALS_FILE" \
     --dry-run=client -o yaml | kubectl apply -f -
 
-# Deploy cloudflared
-echo_info "Deploying cloudflared..."
+log_info "Secret 'cloudflared-credentials' создан"
+
+# -----------------------------------------------------------------------------
+# Шаг 5: Вывод tunnelId для values.yaml
+# -----------------------------------------------------------------------------
+log_step "5/6: Конфигурация"
+
+echo ""
+echo "╔═══════════════════════════════════════════════════════════════════════════╗"
+echo "║  ВАЖНО: Добавьте tunnelId в values.yaml                                   ║"
+echo "╠═══════════════════════════════════════════════════════════════════════════╣"
+echo "║                                                                           ║"
+echo "║  # gitops-config/charts/platform-bootstrap/values.yaml                    ║"
+echo "║  ingress:                                                                 ║"
+echo "║    provider: cloudflare-tunnel                                            ║"
+echo "║    cloudflare:                                                            ║"
+echo "║      enabled: true                                                        ║"
+printf "║      tunnelId: \"%-54s\" ║\n" "$TUNNEL_ID"
+echo "║                                                                           ║"
+echo "╚═══════════════════════════════════════════════════════════════════════════╝"
+echo ""
+
+# Сохраним в файл для удобства
+echo "$TUNNEL_ID" > "$SCRIPT_DIR/.tunnel-id"
+log_info "Tunnel ID сохранён в: $SCRIPT_DIR/.tunnel-id"
+
+# -----------------------------------------------------------------------------
+# Шаг 6: Деплой cloudflared
+# -----------------------------------------------------------------------------
+log_step "6/6: Деплой cloudflared"
+
 kubectl apply -f "$SCRIPT_DIR/deployment.yaml"
 
-# Wait for deployment
-echo_info "Waiting for cloudflared to be ready..."
+echo ""
+log_info "Ожидание запуска cloudflared..."
 kubectl wait --for=condition=Available deployment/cloudflared \
     -n "$NAMESPACE" --timeout=120s || true
 
 echo ""
 echo "========================================"
-echo_info "CloudFlare Tunnel deployed!"
+echo -e "${GREEN}✓ CloudFlare Tunnel готов!${NC}"
 echo "========================================"
 echo ""
-echo "Useful commands:"
-echo "  kubectl logs -n $NAMESPACE -l app=cloudflared -f    # View logs"
-echo "  kubectl get pods -n $NAMESPACE                      # Check status"
+echo "Следующие шаги:"
 echo ""
-echo_header "Configure Public Hostnames"
+echo "  1. Добавьте tunnelId в values.yaml (см. выше)"
 echo ""
-echo "Go to CloudFlare Dashboard:"
-echo "  https://one.dash.cloudflare.com/ -> Networks -> Tunnels -> Your tunnel -> Public Hostname"
+echo "  2. Commit и push:"
+echo "     cd gitops-config"
+echo "     git add . && git commit -m 'feat: add cloudflare tunnel id'"
+echo "     git push"
 echo ""
-echo "Add a Public Hostname for EACH environment:"
+echo "  3. Синхронизируйте ArgoCD:"
+echo "     argocd app sync platform-bootstrap --grpc-web"
 echo ""
-echo "┌─────────────────────────────────────────────────────────────────────────────┐"
-echo "│ Environment │ Public Hostname            │ Service (Type: HTTP)             │"
-echo "├─────────────────────────────────────────────────────────────────────────────┤"
-echo "│ dev         │ app.demo-poc-01.work       │ cilium-gateway-gateway.poc-dev   │"
-echo "│ staging     │ app.staging.example.com    │ cilium-gateway-gateway.poc-staging│"
-echo "│ prod        │ app.example.com            │ cilium-gateway-gateway.poc-prod  │"
-echo "└─────────────────────────────────────────────────────────────────────────────┘"
+echo "  4. Проверьте статус:"
+echo "     kubectl logs -n $NAMESPACE -l app=cloudflared -f"
 echo ""
-echo "Service URL format:"
-echo "  HTTP://cilium-gateway-gateway.{namespacePrefix}-{env}.svc.cluster.local:80"
-echo ""
-echo "Note: Cilium creates LoadBalancer service 'cilium-gateway-{gateway-name}'"
-echo "      Gateway name is 'gateway', so service is 'cilium-gateway-gateway'"
-echo ""
-echo "Routing within each environment:"
-echo "  /api/*  → api-gateway (port 8080)"
-echo "  /*      → frontend (port 4200)"
-echo ""
-echo_header "Adding New Environment"
-echo ""
-echo "When enabling a new environment (e.g., staging):"
-echo ""
-echo "1. Add to platform-bootstrap values.yaml:"
-echo "   environments:"
-echo "     staging:"
-echo "       enabled: true"
-echo "       domain: \"app.staging.example.com\""
-echo ""
-echo "2. Add Public Hostname in CloudFlare Dashboard:"
-echo "   Hostname: app.staging.example.com"
-echo "   Service: HTTP://cilium-gateway-gateway.poc-staging.svc.cluster.local:80"
-echo ""
-echo "3. ArgoCD will sync and create Gateway automatically"
+echo "Tunnel ID: $TUNNEL_ID"
 echo ""

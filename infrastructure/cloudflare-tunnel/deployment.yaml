@@ -1,3 +1,58 @@
+# =============================================================================
+# CloudFlare Tunnel Deployment (Locally-Managed Mode)
+# =============================================================================
+# Режим locally-managed позволяет управлять ingress rules через ConfigMap
+# вместо CloudFlare Dashboard. Это даёт полный GitOps контроль.
+#
+# Документация:
+# - https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/configure-tunnels/local-management/
+#
+# Миграция с remotely-managed:
+# 1. Получить tunnel credentials: cloudflared tunnel token <TUNNEL_NAME> --cred-file credentials.json
+# 2. Создать secret с credentials.json
+# 3. Применить этот deployment вместо старого
+# =============================================================================
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cloudflare
+  labels:
+    app.kubernetes.io/managed-by: gitops
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cloudflared-config
+  namespace: cloudflare
+  labels:
+    app: cloudflared
+data:
+  # Конфигурация будет перезаписана через Helm template
+  # Это placeholder для ручного тестирования
+  config.yaml: |
+    # Tunnel ID (из credentials.json или dashboard)
+    tunnel: 1172317a-8885-492f-9744-dfba842c4d88
+
+    # Путь к credentials
+    credentials-file: /etc/cloudflared/credentials.json
+
+    # Метрики
+    metrics: 0.0.0.0:2000
+
+    # Ingress rules - управляются через GitOps
+    ingress:
+      # Основной домен
+      - hostname: app.demo-poc-01.work
+        service: http://cilium-gateway-gateway.poc-dev.svc.cluster.local:80
+
+      # Зеркала добавляются сюда автоматически через Helm
+      # - hostname: mirror1.example.com
+      #   service: http://cilium-gateway-gateway.poc-dev.svc.cluster.local:80
+
+      # Catch-all (обязательно в конце)
+      - service: http_status:404
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -10,35 +65,47 @@ spec:
   selector:
     matchLabels:
       app: cloudflared
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
   template:
     metadata:
       labels:
         app: cloudflared
+      annotations:
+        # Автоматический restart при изменении ConfigMap
+        # Требует stakater/Reloader или ручного rollout restart
+        checksum/config: "PLACEHOLDER"
     spec:
       containers:
         - name: cloudflared
-          image: cloudflare/cloudflared:latest
+          image: cloudflare/cloudflared:2024.12.2
           args:
             - tunnel
             - --no-autoupdate
-            - --metrics
-            - 0.0.0.0:2000
+            - --config
+            - /etc/cloudflared/config.yaml
             - run
-            - --token
-            - $(TUNNEL_TOKEN)
-          env:
-            - name: TUNNEL_TOKEN
-              valueFrom:
-                secretKeyRef:
-                  name: cloudflare-tunnel-token
-                  key: token
+          volumeMounts:
+            # ConfigMap с config.yaml
+            - name: config
+              mountPath: /etc/cloudflared/config.yaml
+              subPath: config.yaml
+              readOnly: true
+            # Secret с credentials.json
+            - name: credentials
+              mountPath: /etc/cloudflared/credentials.json
+              subPath: credentials.json
+              readOnly: true
           resources:
             requests:
               cpu: 10m
               memory: 64Mi
             limits:
-              cpu: 100m
-              memory: 128Mi
+              cpu: 200m
+              memory: 256Mi
           livenessProbe:
             httpGet:
               path: /ready
@@ -52,3 +119,27 @@ spec:
               port: 2000
             initialDelaySeconds: 5
             periodSeconds: 5
+          securityContext:
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 65532
+            capabilities:
+              drop:
+                - ALL
+      volumes:
+        - name: config
+          configMap:
+            name: cloudflared-config
+        - name: credentials
+          secret:
+            secretName: cloudflared-credentials
+      # Распределение по нодам для HA
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app: cloudflared
+                topologyKey: kubernetes.io/hostname

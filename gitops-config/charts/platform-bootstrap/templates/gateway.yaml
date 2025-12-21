@@ -3,13 +3,18 @@
 Gateway resources for each enabled environment.
 Creates:
   - Gateway resource with environment-specific domain
+  - Additional listeners for domain mirrors
   - Certificate for HTTPS listener (via cert-manager, if enabled)
 
 Each environment gets its own Gateway in its namespace with unique hostname.
-CloudFlare Tunnel routes traffic to the correct Gateway based on hostname.
+CloudFlare Tunnel / external-dns routes traffic based on hostname.
 
 Cilium creates a LoadBalancer service: cilium-gateway-{gateway-name}
 Example: cilium-gateway-gateway in poc-dev namespace
+
+Domain Mirrors:
+  Define mirrors in environments.{env}.mirrors - each mirror automatically gets
+  a Gateway listener and DNS record via external-dns.
 */ -}}
 
 {{- range $envName, $env := .Values.environments }}
@@ -18,6 +23,14 @@ Example: cilium-gateway-gateway in poc-dev namespace
 
 {{- $gatewayNamespace := printf "%s-%s" $.Values.global.namespacePrefix $envName }}
 {{- $listenerName := $.Values.gateway.listener.name | default "http-app" }}
+
+{{- /* Collect all hostnames for external-dns target annotation */ -}}
+{{- $allHostnames := list $env.domain }}
+{{- if and $.Values.domainMirrors.enabled $env.mirrors }}
+{{- range $mirror := $env.mirrors }}
+{{- $allHostnames = append $allHostnames $mirror.domain }}
+{{- end }}
+{{- end }}
 
 {{- /* Gateway resource */ -}}
 ---
@@ -30,13 +43,31 @@ metadata:
     app.kubernetes.io/name: platform-bootstrap
     app.kubernetes.io/component: gateway
     environment: {{ $envName }}
+  {{- $hasAnnotations := false }}
+  {{- if $.Values.gateway.certManager.enabled }}
+  {{- $hasAnnotations = true }}
+  {{- end }}
+  {{- if $.Values.dns.enabled }}
+  {{- $hasAnnotations = true }}
+  {{- end }}
+  {{- if $hasAnnotations }}
   annotations:
     {{- if $.Values.gateway.certManager.enabled }}
     cert-manager.io/cluster-issuer: {{ $.Values.gateway.certManager.clusterIssuer }}
     {{- end }}
+    {{- if $.Values.dns.enabled }}
+    external-dns.alpha.kubernetes.io/hostname: "{{ $env.domain }}{{ if $env.mirrors }},{{ range $i, $m := $env.mirrors }}{{ if $i }},{{ end }}{{ $m.domain }}{{ end }}{{ end }}"
+    {{- if and (eq $.Values.ingress.provider "cloudflare-tunnel") $.Values.ingress.cloudflare.tunnelId }}
+    external-dns.alpha.kubernetes.io/target: "{{ $.Values.ingress.cloudflare.tunnelId }}.cfargotunnel.com"
+    {{- else if and $.Values.ingress.haproxy $.Values.ingress.haproxy.loadBalancerIP }}
+    external-dns.alpha.kubernetes.io/target: "{{ $.Values.ingress.haproxy.loadBalancerIP }}"
+    {{- end }}
+    {{- end }}
+  {{- end }}
 spec:
   gatewayClassName: {{ $.Values.gateway.gatewayClassName }}
   listeners:
+    # Main domain listener
     - name: {{ $listenerName }}
       protocol: {{ $.Values.gateway.listener.protocol | default "HTTP" }}
       port: {{ $.Values.gateway.listener.port | default 80 }}
@@ -51,6 +82,18 @@ spec:
       allowedRoutes:
         namespaces:
           from: Same
+    {{- if and $.Values.domainMirrors.enabled $.Values.domainMirrors.addToGateway $env.mirrors }}
+    {{- /* Mirror domain listeners */ -}}
+    {{- range $idx, $mirror := $env.mirrors }}
+    - name: http-mirror-{{ $idx }}
+      protocol: {{ $.Values.gateway.listener.protocol | default "HTTP" }}
+      port: {{ $.Values.gateway.listener.port | default 80 }}
+      hostname: {{ $mirror.domain | quote }}
+      allowedRoutes:
+        namespaces:
+          from: Same
+    {{- end }}
+    {{- end }}
 
 {{- /* Certificate for HTTPS listener (if cert-manager enabled) */ -}}
 {{- if $.Values.gateway.certManager.enabled }}
