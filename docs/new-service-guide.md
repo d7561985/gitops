@@ -424,19 +424,21 @@ FROM node:22-alpine AS builder
 ARG API_URL
 ARG APP_VERSION
 
-RUN apk add --no-cache git sed
+RUN apk add --no-cache git ca-certificates
 
 WORKDIR /app
 COPY package*.json ./
 
-# BuildKit secret для GitLab токена
+# Install dependencies with GitLab authentication via .netrc
+# .netrc is a standard mechanism that works with git, npm, pip, composer
 RUN --mount=type=secret,id=gitlab_token \
-    GITLAB_TOKEN=$(cat /run/secrets/gitlab_token 2>/dev/null || echo "") && \
+    GITLAB_TOKEN=$(cat /run/secrets/gitlab_token 2>/dev/null | tr -d '\n' || echo "") && \
     if [ -n "$GITLAB_TOKEN" ]; then \
-        git config --global url."https://gitlab-ci-token:${GITLAB_TOKEN}@gitlab.com/".insteadOf "https://gitlab.com/" && \
-        sed -i 's|git+ssh://git@gitlab.com/|https://gitlab-ci-token:'"${GITLAB_TOKEN}"'@gitlab.com/|g' package-lock.json 2>/dev/null || true; \
+        echo "machine gitlab.com login gitlab-ci-token password ${GITLAB_TOKEN}" > ~/.netrc && \
+        chmod 600 ~/.netrc; \
     fi && \
-    npm ci --prefer-offline --no-audit
+    npm ci --prefer-offline --no-audit && \
+    rm -f ~/.netrc
 
 COPY . .
 ENV API_URL=${API_URL} APP_VERSION=${APP_VERSION}

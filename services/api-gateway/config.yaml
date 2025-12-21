@@ -49,10 +49,13 @@ clusters:
       path: "/health"
       interval_seconds: 10
 
-  # User Service - Authentication and user management
+  # User Service - Authentication and user management (Connect protocol)
   - name: user-service
     addr: "user-service-sv:8081"
-    type: "grpc"
+    type: "http"
+    health_check:
+      path: "/health"
+      interval_seconds: 10
 
 apis:
   # gRPC-Web тестирование
@@ -148,22 +151,75 @@ apis:
       - name: demo
         auth: {policy: no-need}
 
-  # User Service - gRPC API
-  # Routes: /api/user.v1.UserService/* → user-service /user.v1.UserService/*
-  # Using full gRPC service name for proper routing
-  - name: user.v1.UserService
+  # User Service - Connect protocol API
+  # Routes: /api/user/* → user-service /*
+  # Frontend calls: /api/user/user.v1.UserService/Register
+  # Rewritten to: /user.v1.UserService/Register
+  - name: user
     cluster: user-service
     auth: {policy: no-need}
     methods:
       # Public endpoints (no auth required)
-      - name: Register
+      - name: user.v1.UserService/Register
         auth: {policy: no-need}
-      - name: Login
+      - name: user.v1.UserService/Login
         auth: {policy: no-need}
-      - name: RefreshToken
+      - name: user.v1.UserService/RefreshToken
         auth: {policy: no-need}
       # Protected endpoints (auth required)
-      - name: Logout
+      - name: user.v1.UserService/Logout
         auth: {policy: required}
-      - name: GetProfile
+      - name: user.v1.UserService/GetProfile
         auth: {policy: required}
+
+  # =============================================================================
+  # Connect Protocol APIs (HTTP POST + JSON)
+  # =============================================================================
+
+  # Game Engine - Connect Protocol
+  # Routes: /api/gameconnect/game.v1.GameEngineService/* → game-engine /game.v1.GameEngineService/*
+  - name: gameconnect
+    cluster: sentry-game-engine
+    auth: {policy: no-need}
+    methods:
+      - name: game.v1.GameEngineService/Calculate
+        auth: {policy: no-need}
+      - name: game.v1.GameEngineService/TrackBusinessMetrics
+        auth: {policy: no-need}
+
+  # Payment Service - Connect Protocol
+  # Routes: /api/paymentconnect/payment.v1.PaymentService/* → payment-service /payment.v1.PaymentService/*
+  - name: paymentconnect
+    cluster: sentry-payment
+    auth: {policy: no-need}
+    methods:
+      - name: payment.v1.PaymentService/Process
+        auth: {policy: no-need}
+      - name: payment.v1.PaymentService/TrackFinancialMetrics
+        auth: {policy: no-need}
+
+  # Wager Service - Connect Protocol
+  # Routes: /api/wagerconnect/wager.v1.WagerService/* → wager-service /wager.v1.WagerService/*
+  - name: wagerconnect
+    cluster: sentry-wager
+    auth: {policy: no-need}
+    methods:
+      - name: wager.v1.WagerService/Validate
+        auth: {policy: no-need}
+      - name: wager.v1.WagerService/Place
+        auth: {policy: no-need}
+      - name: wager.v1.WagerService/GetHistory
+        auth: {policy: no-need}
+
+  # Bonus Service - Connect Protocol
+  # Routes: /api/bonusconnect/wager.v1.BonusService/* → wager-service /wager.v1.BonusService/*
+  - name: bonusconnect
+    cluster: sentry-wager
+    auth: {policy: no-need}
+    methods:
+      - name: wager.v1.BonusService/Claim
+        auth: {policy: no-need}
+      - name: wager.v1.BonusService/GetProgress
+        auth: {policy: no-need}
+      - name: wager.v1.BonusService/Convert
+        auth: {policy: no-need}
