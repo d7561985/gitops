@@ -77,7 +77,7 @@
 | 0.5 | ArgoCD + GitLab Agent | K8s, GitLab |
 | 0.6 | kube-prometheus-stack + Grafana | K8s |
 
-**Скрипты из POC:** `infrastructure/*/setup.sh`
+**Скрипты из POC:** `shared/infrastructure/*/setup.sh`
 
 ---
 
@@ -98,7 +98,7 @@
 
 | Шаг | Действие |
 |-----|----------|
-| 1.1 | Скопировать `gitops-config/` в свой GitLab |
+| 1.1 | Скопировать `infra/poc/gitops-config/` в свой GitLab |
 | 1.2 | Настроить `values.yaml` под свою организацию |
 | 1.3 | Добавить сервисы в `services:` секцию |
 | 1.4 | Включить environments (dev/staging/prod) |
@@ -128,8 +128,8 @@ BEFORE (ad-hoc):                    AFTER (unified):
 
 | Шаг | Действие | Источник |
 |-----|----------|----------|
-| 2.1 | Скопировать `.cicd/` директорию | `templates/service-repo/.cicd/` |
-| 2.2 | Скопировать `.gitlab-ci.yml` | `templates/service-repo/.gitlab-ci.yml` |
+| 2.1 | Скопировать `.cicd/` директорию | `shared/templates/service-repo/.cicd/` |
+| 2.2 | Скопировать `.gitlab-ci.yml` | `shared/templates/service-repo/.gitlab-ci.yml` |
 | 2.3 | Настроить `default.yaml` (ports, env vars, secrets) | — |
 | 2.4 | Настроить `dev.yaml` (image repository) | — |
 | 2.5 | Добавить сервис в `platform/core.yaml` | — |
@@ -222,7 +222,7 @@ secretsProvider:
 |-----|----------|
 | 4.1 | Создать GitLab sub-groups: `api/proto/`, `api/gen/` |
 | 4.2 | Настроить CI_PUSH_TOKEN + GEN_GROUP_ID |
-| 4.3 | Скопировать `.gitlab-ci.yml` из `templates/proto-service/` (Zero-Config!) |
+| 4.3 | Скопировать `.gitlab-ci.yml` из `shared/templates/proto-service/` (Zero-Config!) |
 | 4.4 | Написать `.proto` файлы в `proto/` директорию |
 | 4.5 | Push → автогенерация для 5 языков (buf.yaml генерируется автоматически) |
 
@@ -314,7 +314,7 @@ metrics:
 | **Vault unavailable** | Graceful degradation, fallback к K8s Secrets |
 | **ArgoCD sync delays** | Webhook вместо polling (3 min → instant) |
 | **Proto breaking changes** | CI проверяет `buf breaking`, блокирует merge |
-| **Multi-cluster** | Отдельный `gitops-config` per cluster |
+| **Multi-cluster** | Отдельный `infra/{brand}/gitops-config` per cluster |
 
 ---
 
@@ -322,23 +322,24 @@ metrics:
 
 ```
 gitops/
-├── gitops-config/              # → Весь репозиторий в GitLab
-│   ├── charts/platform-core/  # Single source of truth
-│   └── argocd/                      # App of Apps
+├── infra/poc/gitops-config/    # → В GitLab: infra/{brand}/gitops-config
+│   ├── charts/platform-core/   # Single source of truth
+│   └── argocd/                 # App of Apps
 │
-├── templates/
-│   ├── service-repo/           # → Шаблон для каждого сервиса
-│   │   ├── .cicd/
-│   │   └── .gitlab-ci.yml
+├── shared/
+│   ├── templates/
+│   │   ├── service-repo/       # → Шаблон для каждого сервиса
+│   │   │   ├── .cicd/
+│   │   │   └── .gitlab-ci.yml
+│   │   │
+│   │   └── proto-service/      # → Шаблон для proto сервисов
+│   │       ├── buf.yaml
+│   │       ├── buf.gen.yaml
+│   │       └── proto/
 │   │
-│   └── proto-service/          # → Шаблон для proto сервисов
-│       ├── buf.yaml
-│       ├── buf.gen.yaml
-│       └── proto/
-│
-├── infrastructure/             # → Setup scripts (adapt to your env)
-│   ├── */setup.sh
-│   └── monitoring/dashboards/
+│   └── infrastructure/         # → Setup scripts (adapt to your env)
+│       ├── */setup.sh
+│       └── monitoring/dashboards/
 │
 ├── docs/                       # → Документация
 │   ├── PREFLIGHT-CHECKLIST.md

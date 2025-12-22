@@ -102,7 +102,7 @@ Envoy автоматически предоставляет ~200+ метрик �
 
 ### 3.1 Компоненты kube-prometheus-stack
 
-**Конфигурация**: `infrastructure/monitoring/helm-values.yaml`
+**Конфигурация**: `shared/infrastructure/monitoring/helm-values.yaml`
 
 | Компонент | Статус | Назначение |
 |-----------|--------|------------|
@@ -114,7 +114,7 @@ Envoy автоматически предоставляет ~200+ метрик �
 
 ### 3.2 Cilium/Hubble Observability
 
-**Конфигурация**: `infrastructure/cilium/helm-values.yaml:38-78`
+**Конфигурация**: `shared/infrastructure/cilium/helm-values.yaml:38-78`
 
 ```yaml
 hubble:
@@ -284,10 +284,10 @@ hubble:
 
 ```bash
 # Скрипт установки
-./infrastructure/monitoring/dashboards/install-dashboards.sh
+./shared/infrastructure/monitoring/dashboards/install-dashboards.sh
 
 # JSON файлы дашбордов
-infrastructure/monitoring/dashboards/json/
+shared/infrastructure/monitoring/dashboards/json/
 ├── service-golden-signals.json      # Custom: HTTP + gRPC Golden Signals
 ├── redis-exporter.json              # ID: 14091
 ├── rabbitmq-overview-official.json  # Official RabbitMQ Team
@@ -393,7 +393,7 @@ var (
 Обновлённый дашборд `service-golden-signals.json` поддерживает оба подхода:
 
 ```
-infrastructure/monitoring/dashboards/json/service-golden-signals.json
+shared/infrastructure/monitoring/dashboards/json/service-golden-signals.json
 ```
 
 Дашборд автоматически агрегирует:

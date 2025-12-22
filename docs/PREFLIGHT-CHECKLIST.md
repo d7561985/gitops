@@ -12,13 +12,18 @@
   - URL: `https://gitlab.com/groups/new`
   - Имя: значение `GITLAB_GROUP` из `.env`
 
-- [ ] **Создать репозитории** в группе:
-  - [ ] `gitops-config` — инфраструктура и ArgoCD
-  - [ ] `api-gateway` — Envoy proxy
-  - [ ] `auth-adapter` — gRPC auth service
-  - [ ] `web-grpc` — gRPC backend
-  - [ ] `web-http` — HTTP backend
-  - [ ] `health-demo` — Health check service
+- [ ] **Создать subgroups и репозитории:**
+  - [ ] `services/` — subgroup для сервисов
+    - [ ] `api-gateway` — Envoy proxy
+    - [ ] `auth-adapter` — gRPC auth service
+    - [ ] `web-grpc` — gRPC backend
+    - [ ] `web-http` — HTTP backend
+    - [ ] `health-demo` — Health check service
+  - [ ] `shared/` — subgroup для shared tooling
+    - [ ] `infrastructure` — setup scripts
+    - [ ] `templates` — CI templates
+  - [ ] `infra/poc/` — subgroup для brand config
+    - [ ] `gitops-config` — ArgoCD config
 
 - [ ] **Создать Personal Access Token** (для CI push)
   - URL: `https://gitlab.com/-/user_settings/personal_access_tokens`
@@ -73,7 +78,7 @@
 - [ ] **Установить external-dns**
   ```bash
   # Токен загружается автоматически из .env
-  ./infrastructure/external-dns/setup.sh
+  ./shared/infrastructure/external-dns/setup.sh
   ```
 
 - [ ] **Проверить работу**
@@ -86,7 +91,7 @@
 **Вариант A: Новая установка (с нуля)**
 ```bash
 # Создаёт tunnel, credentials secret, деплоит cloudflared
-./infrastructure/cloudflare-tunnel/setup.sh
+./shared/infrastructure/cloudflare-tunnel/setup.sh
 
 # Скрипт выведет tunnelId — добавьте в values.yaml
 ```
@@ -94,7 +99,7 @@
 **Вариант B: Миграция с remotely-managed**
 ```bash
 # Если уже есть tunnel с настройками в Dashboard
-./infrastructure/cloudflare-tunnel/migrate-to-locally-managed.sh
+./shared/infrastructure/cloudflare-tunnel/migrate-to-locally-managed.sh
 ```
 
 - [ ] **Добавить Tunnel ID в values.yaml**
@@ -150,10 +155,10 @@ vim .env
 ```bash
 # Ключи сохраняются автоматически в:
 # 1. K8s secret: kubectl get secret vault-keys -n vault
-# 2. Файл: infrastructure/vault/.vault-keys (в .gitignore)
+# 2. Файл: shared/infrastructure/vault/.vault-keys (в .gitignore)
 
 # При рестарте кластера выполнить:
-./infrastructure/vault/unseal.sh
+./shared/infrastructure/vault/unseal.sh
 ```
 
 ### Получить ArgoCD пароль
@@ -204,9 +209,9 @@ argocd account generate-token --account ci-readonly
 ./scripts/setup-registry-secret.sh
 
 # Запушить gitops-config в GitLab
-cd gitops-config
+cd infra/poc/gitops-config
 git init
-git remote add origin git@gitlab.com:${GITLAB_GROUP}/gitops-config.git
+git remote add origin git@gitlab.com:${GITLAB_GROUP}/infra/poc/gitops-config.git
 git add .
 git commit -m "Initial commit"
 git push -u origin main
@@ -239,7 +244,7 @@ make proxy-all  # или make proxy-argocd
 
 1. **Unseal Vault:**
    ```bash
-   ./infrastructure/vault/unseal.sh
+   ./shared/infrastructure/vault/unseal.sh
    ```
 
 2. **Проверить ArgoCD:**
@@ -255,7 +260,7 @@ make proxy-all  # или make proxy-argocd
 # Удалить PVC и переинициализировать
 helm uninstall vault -n vault
 kubectl delete pvc data-vault-0 -n vault
-./infrastructure/vault/setup.sh
+./shared/infrastructure/vault/setup.sh
 
 # Пересинхронизировать platform-core
 argocd app sync platform-core --grpc-web

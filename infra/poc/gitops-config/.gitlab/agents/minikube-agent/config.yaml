@@ -10,12 +10,12 @@ ci_access:
 
   # Or explicitly list projects:
   # projects:
-  #   - id: gitops-poc-dzha/gitops-config
-  #   - id: gitops-poc-dzha/api-gateway
-  #   - id: gitops-poc-dzha/auth-adapter
-  #   - id: gitops-poc-dzha/web-grpc
-  #   - id: gitops-poc-dzha/web-http
-  #   - id: gitops-poc-dzha/health-demo
+  #   - id: gitops-poc-dzha/infra/poc/gitops-config
+  #   - id: gitops-poc-dzha/services/api-gateway
+  #   - id: gitops-poc-dzha/services/auth-adapter
+  #   - id: gitops-poc-dzha/services/web-grpc
+  #   - id: gitops-poc-dzha/services/web-http
+  #   - id: gitops-poc-dzha/services/health-demo
 
 # Observability (optional - enable for debugging)
 # observability:

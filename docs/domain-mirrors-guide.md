@@ -256,7 +256,7 @@ CLOUDFLARE_API_TOKEN="your-cloudflare-api-token"
 
 ```bash
 # Токен загружается автоматически из .env
-./infrastructure/external-dns/setup.sh
+./shared/infrastructure/external-dns/setup.sh
 
 # Проверить что работает
 kubectl logs -f deployment/external-dns -n external-dns
@@ -302,7 +302,7 @@ environments:
 ### Шаг 4: Commit и push
 
 ```bash
-cd gitops-config
+cd infra/poc/gitops-config
 git add .
 git commit -m "feat: add mirror.example.com domain"
 git push
@@ -418,7 +418,7 @@ DNS записи создаются как A запись на IP.
 
 ```bash
 # Создаёт tunnel, secret с credentials, деплоит cloudflared
-./infrastructure/cloudflare-tunnel/setup.sh
+./shared/infrastructure/cloudflare-tunnel/setup.sh
 
 # Скрипт выведет tunnelId — добавьте в values.yaml:
 # ingress.cloudflare.tunnelId: "ваш-tunnel-id"
@@ -428,7 +428,7 @@ DNS записи создаются как A запись на IP.
 
 Если уже есть tunnel с настройками в Dashboard:
 ```bash
-./infrastructure/cloudflare-tunnel/migrate-to-locally-managed.sh
+./shared/infrastructure/cloudflare-tunnel/migrate-to-locally-managed.sh
 ```
 
 После миграции удалите hostnames из Dashboard:

@@ -36,7 +36,7 @@ echo ""
 echo_info "Step 1: Checking ArgoCD..."
 if ! kubectl get namespace argocd &> /dev/null; then
     echo_error "ArgoCD is not installed. Run:"
-    echo "  ./infrastructure/argocd/setup.sh"
+    echo "  ./shared/infrastructure/argocd/setup.sh"
     exit 1
 fi
 

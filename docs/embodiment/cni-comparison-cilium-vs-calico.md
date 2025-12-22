@@ -65,7 +65,7 @@
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
-**Конфигурация** (`infrastructure/cilium/helm-values.yaml`):
+**Конфигурация** (`shared/infrastructure/cilium/helm-values.yaml`):
 - IPAM mode: kubernetes
 - kube-proxy replacement: enabled
 - Hubble metrics: DNS, TCP, flow, HTTP с labelsContext

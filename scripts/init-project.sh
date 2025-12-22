@@ -234,7 +234,7 @@ done
 
 echo_header "Updating templates"
 
-TEMPLATE_DIR="$ROOT_DIR/templates/service-repo"
+TEMPLATE_DIR="$ROOT_DIR/shared/templates/service-repo"
 if [ -d "$TEMPLATE_DIR" ]; then
     for FILE in "$TEMPLATE_DIR"/.gitlab-ci.yml "$TEMPLATE_DIR"/.cicd/*.yaml "$TEMPLATE_DIR"/vault-secret.yaml; do
         if [ -f "$FILE" ]; then

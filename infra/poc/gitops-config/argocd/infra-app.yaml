@@ -1,8 +1,5 @@
 # Infrastructure Application
 # Deploys MongoDB, Redis, RabbitMQ to infra-dev namespace
-#
-# TODO: Move to separate GitLab repo: gitlab.com/gitops-poc-dzha/infra
-# Then change source.repoURL and source.path accordingly
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:

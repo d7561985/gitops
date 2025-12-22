@@ -29,7 +29,7 @@ services:
 
 ## Шаг 2: Выбор Dockerfile
 
-Выберите подходящий Dockerfile из `templates/service-repo/dockerfiles/`:
+Выберите подходящий Dockerfile из `shared/templates/service-repo/dockerfiles/`:
 
 | Язык | Файл | Base Image | Размер |
 |------|------|------------|--------|
