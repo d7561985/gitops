@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  wager-service:
+    build: .
+    container_name: wager-service
+    ports:
+      - "8004:8004"
+    environment:
+      - APP_ENV=dev
+      - APP_SECRET=8b2c3f4a5d6e7f8a9b0c1d2e3f4a5b6c
+      - MONGODB_URL=mongodb://mongodb:27017
+      - MONGODB_DB=sentry_demo
+      - USER_SERVICE_URL=http://user-service:8002
+      - PAYMENT_SERVICE_URL=http://payment-service:3001
+      - SENTRY_DSN=${SENTRY_DSN}
+    networks:
+      - sentry-demo
+    depends_on:
+      - mongodb
+    restart: unless-stopped
+    volumes:
+      - ./var:/var/www/html/var
+
+  mongodb:
+    image: mongo:7.0
+    container_name: wager-service-mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - sentry-demo
+    restart: unless-stopped
+
+networks:
+  sentry-demo:
+    external: true
+
+volumes:
+  mongodb_data:

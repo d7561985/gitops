@@ -1,0 +1,16 @@
+# Dev environment overrides for wager-service
+
+image:
+  repository: registry.gitlab.com/gitops-poc-dzha/sentry-demo/wager-service
+  tag: 6ffd4813
+replicas: 1
+# Environment-specific configmap values
+configmap:
+  # Infrastructure (cross-namespace = FQDN)
+  MONGODB_URL: "mongodb://root:rootpassword@mongodb.infra-dev.svc:27017/wager?authSource=admin"
+  # Environment indicator
+  SENTRY_ENVIRONMENT: "dev"
+# Vault (environment-specific)
+vault:
+  role: sentry-wager-dev
+  path: gitops-poc-dzha/sentry-wager/dev/config

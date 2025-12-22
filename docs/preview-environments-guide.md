@@ -148,7 +148,7 @@ curl -s "https://api.cloudflare.com/client/v4/zones" \
 > **Note:** CloudFlare Universal SSL автоматически покрывает `*.demo-poc-01.work` — дополнительный сертификат не требуется!
 
 ```yaml
-# gitops-config/platform/preview.yaml
+# infra/poc/gitops-config/platform/preview.yaml
 
 previewEnvironments:
   enabled: true

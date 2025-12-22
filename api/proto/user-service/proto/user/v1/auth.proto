@@ -1,0 +1,38 @@
+syntax = "proto3";
+
+package user.v1;
+
+option go_package = "gitlab.com/gitops-poc-dzha/api/gen/user-service/go/user/v1;userv1";
+
+// AuthSessionService - service for session validation
+// Called by auth-adapter (Envoy ext_authz) to validate JWT tokens
+service AuthSessionService {
+  // ValidateSession validates a JWT token and returns user information
+  rpc ValidateSession(ValidateSessionRequest) returns (ValidateSessionResponse);
+}
+
+message ValidateSessionRequest {
+  // JWT access token to validate
+  string session_token = 1;
+}
+
+message ValidateSessionResponse {
+  // User ID (MongoDB ObjectID as string)
+  string user_id = 1;
+  // Session ID (unique per login, used for logout)
+  string session_id = 2;
+  // User roles with permissions
+  repeated Role roles = 3;
+}
+
+message Role {
+  // Role name: CLIENT, ADMIN, etc.
+  string name = 1;
+  // Permissions granted by this role
+  repeated Permission permissions = 2;
+}
+
+message Permission {
+  // Permission name: read, write, admin, etc.
+  string name = 1;
+}

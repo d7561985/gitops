@@ -1,0 +1,63 @@
+syntax = "proto3";
+
+package game.v1;
+
+option go_package = "gitlab.com/gitops-poc-dzha/api/gen/game-engine/go/game/v1;gamev1";
+
+// GameEngineService - Slot machine game calculation engine
+// Handles game result calculations and business metrics tracking
+service GameEngineService {
+  // Calculate processes a slot machine spin and returns the result
+  rpc Calculate(CalculateRequest) returns (CalculateResponse);
+
+  // TrackBusinessMetrics triggers business metric scenarios for demo purposes
+  rpc TrackBusinessMetrics(TrackBusinessMetricsRequest) returns (TrackBusinessMetricsResponse);
+}
+
+// CalculateRequest - slot machine spin request
+message CalculateRequest {
+  // User ID placing the bet
+  string user_id = 1;
+  // Bet amount
+  double bet = 2;
+  // Enable CPU-intensive calculation (for performance demo)
+  bool cpu_intensive = 3;
+}
+
+// CalculateResponse - slot machine spin result
+message CalculateResponse {
+  // Whether the spin was a win
+  bool win = 1;
+  // Payout amount (0 if loss)
+  double payout = 2;
+  // Slot symbols (e.g., ["🍒", "🍒", "🍒"])
+  repeated string symbols = 3;
+  // User's new balance after the spin
+  double new_balance = 4;
+  // Wagering progress (if wager-service integration enabled)
+  WageringProgress wagering_progress = 5;
+}
+
+// WageringProgress - bonus wagering progress info
+message WageringProgress {
+  // Current wagering progress percentage (0-100)
+  double progress_percent = 1;
+  // Remaining wagering amount
+  double remaining = 2;
+  // Whether bonus can be converted to real money
+  bool can_convert = 3;
+}
+
+// TrackBusinessMetricsRequest - trigger business metric scenarios
+message TrackBusinessMetricsRequest {
+  // Scenario type: "normal", "rtp_anomaly", "session_surge", "win_rate_manipulation"
+  string scenario = 1;
+}
+
+// TrackBusinessMetricsResponse - business metrics result
+message TrackBusinessMetricsResponse {
+  // Status message
+  string status = 1;
+  // Additional data depending on scenario
+  map<string, double> metrics = 2;
+}

@@ -1,0 +1,84 @@
+# k8app configuration for sentry-frontend
+# Angular frontend serving static files via nginx
+
+appName: sentry-frontend
+version: "1.0.0"
+
+serviceAccountName: default
+
+image:
+  repository: registry.gitlab.com/gitops-poc-dzha/sentry-demo/frontend
+  tag: latest
+  pullPolicy: Always
+
+imagePullSecrets:
+  - name: regsecret
+
+# Service configuration (k8app format)
+service:
+  enabled: true
+  type: ClusterIP
+  ports:
+    http:
+      externalPort: 4200
+      internalPort: 4200
+      protocol: TCP
+
+# Health checks
+livenessProbe:
+  enabled: true
+  mode: httpGet
+  httpGet:
+    port: 4200
+    path: "/healthz"
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  enabled: true
+  mode: httpGet
+  httpGet:
+    port: 4200
+    path: "/healthz"
+  initialDelaySeconds: 5
+  periodSeconds: 5
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+resources:
+  limits:
+    cpu: 200m
+    memory: 128Mi
+  requests:
+    cpu: 50m
+    memory: 64Mi
+
+# Environment via configmap
+configmap:
+  API_URL: "http://api-gateway-sv:8080"
+
+# Vault secrets integration (role/path in env overlay)
+vault:
+  enabled: true
+
+# =============================================================================
+# Gateway API HTTPRoute (k8app v3.6.0+)
+# =============================================================================
+# Routes traffic from Gateway to this service
+# Frontend serves all paths except /api/* (which goes to api-gateway)
+# parentRefs.namespace and hostnames → defined in env overlay
+httpRoute:
+  enabled: true
+  parentRefs:
+    - name: gateway
+      sectionName: http-app
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: sentry-frontend-sv
+          port: 4200

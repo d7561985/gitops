@@ -91,16 +91,16 @@ minikube addons enable metrics-server 2>/dev/null || true
 # ============================================
 
 echo_header "Installing Gateway API CRDs"
-chmod +x "$ROOT_DIR/infrastructure/gateway-api/setup.sh"
-"$ROOT_DIR/infrastructure/gateway-api/setup.sh"
+chmod +x "$ROOT_DIR/shared/infrastructure/gateway-api/setup.sh"
+"$ROOT_DIR/shared/infrastructure/gateway-api/setup.sh"
 
 # ============================================
 # Install Cilium CNI with Gateway API
 # ============================================
 
 echo_header "Installing Cilium CNI"
-chmod +x "$ROOT_DIR/infrastructure/cilium/setup.sh"
-"$ROOT_DIR/infrastructure/cilium/setup.sh"
+chmod +x "$ROOT_DIR/shared/infrastructure/cilium/setup.sh"
+"$ROOT_DIR/shared/infrastructure/cilium/setup.sh"
 
 # Wait for networking to stabilize
 echo_info "Waiting for cluster networking to stabilize..."
@@ -111,16 +111,16 @@ sleep 10
 # ============================================
 
 echo_header "Installing cert-manager"
-chmod +x "$ROOT_DIR/infrastructure/cert-manager/setup.sh"
-"$ROOT_DIR/infrastructure/cert-manager/setup.sh"
+chmod +x "$ROOT_DIR/shared/infrastructure/cert-manager/setup.sh"
+"$ROOT_DIR/shared/infrastructure/cert-manager/setup.sh"
 
 # ============================================
 # Install Vault + VSO
 # ============================================
 
 echo_header "Installing Vault + VSO"
-chmod +x "$ROOT_DIR/infrastructure/vault/setup.sh"
-"$ROOT_DIR/infrastructure/vault/setup.sh"
+chmod +x "$ROOT_DIR/shared/infrastructure/vault/setup.sh"
+"$ROOT_DIR/shared/infrastructure/vault/setup.sh"
 
 # ============================================
 # Setup Registry Secrets (BEFORE ArgoCD)
@@ -137,16 +137,16 @@ chmod +x "$SCRIPT_DIR/setup-registry-secret.sh"
 # ============================================
 
 echo_header "Installing ArgoCD"
-chmod +x "$ROOT_DIR/infrastructure/argocd/setup.sh"
-"$ROOT_DIR/infrastructure/argocd/setup.sh"
+chmod +x "$ROOT_DIR/shared/infrastructure/argocd/setup.sh"
+"$ROOT_DIR/shared/infrastructure/argocd/setup.sh"
 
 # ============================================
 # Install Monitoring (Prometheus + Grafana)
 # ============================================
 
 echo_header "Installing Monitoring Stack"
-chmod +x "$ROOT_DIR/infrastructure/monitoring/setup.sh"
-"$ROOT_DIR/infrastructure/monitoring/setup.sh"
+chmod +x "$ROOT_DIR/shared/infrastructure/monitoring/setup.sh"
+"$ROOT_DIR/shared/infrastructure/monitoring/setup.sh"
 
 # ============================================
 # Install External-DNS (optional, for domain mirrors)
@@ -154,12 +154,12 @@ chmod +x "$ROOT_DIR/infrastructure/monitoring/setup.sh"
 
 if [ -n "$CLOUDFLARE_API_TOKEN" ]; then
     echo_header "Installing External-DNS"
-    chmod +x "$ROOT_DIR/infrastructure/external-dns/setup.sh"
-    "$ROOT_DIR/infrastructure/external-dns/setup.sh"
+    chmod +x "$ROOT_DIR/shared/infrastructure/external-dns/setup.sh"
+    "$ROOT_DIR/shared/infrastructure/external-dns/setup.sh"
 else
     echo_header "Skipping External-DNS"
     echo_warn "CLOUDFLARE_API_TOKEN not set. External-DNS will not be installed."
-    echo_info "To install later: CLOUDFLARE_API_TOKEN=xxx ./infrastructure/external-dns/setup.sh"
+    echo_info "To install later: CLOUDFLARE_API_TOKEN=xxx ./shared/infrastructure/external-dns/setup.sh"
 fi
 
 # ============================================
@@ -172,8 +172,8 @@ echo_header "Creating Vault admin token secret"
 VAULT_TOKEN=$(kubectl get secret vault-keys -n vault -o jsonpath='{.data.root-token}' 2>/dev/null | base64 -d || echo "")
 
 # Fallback to local file
-if [ -z "$VAULT_TOKEN" ] && [ -f "$ROOT_DIR/infrastructure/vault/.vault-keys" ]; then
-    source "$ROOT_DIR/infrastructure/vault/.vault-keys"
+if [ -z "$VAULT_TOKEN" ] && [ -f "$ROOT_DIR/shared/infrastructure/vault/.vault-keys" ]; then
+    source "$ROOT_DIR/shared/infrastructure/vault/.vault-keys"
     VAULT_TOKEN="$VAULT_ROOT_TOKEN"
 fi
 
@@ -218,18 +218,18 @@ echo "Next steps:"
 echo ""
 echo "1. Setup CloudFlare (если не сделано):"
 echo "   export CLOUDFLARE_API_TOKEN=your-token"
-echo "   ./infrastructure/external-dns/setup.sh"
+echo "   ./shared/infrastructure/external-dns/setup.sh"
 echo ""
 echo "2. Migrate tunnel to locally-managed (для domain mirrors):"
-echo "   ./infrastructure/cloudflare-tunnel/migrate-to-locally-managed.sh"
+echo "   ./shared/infrastructure/cloudflare-tunnel/migrate-to-locally-managed.sh"
 echo ""
 echo "3. Add GitLab repo credentials to ArgoCD:"
 echo "   kubectl port-forward svc/argocd-server -n argocd 8080:443"
 echo "   # Get password: kubectl get secret argocd-initial-admin-secret -n argocd -o jsonpath='{.data.password}' | base64 -d"
 echo ""
 echo "4. Apply bootstrap (starts everything automatically):"
-echo "   kubectl apply -f gitops-config/argocd/project.yaml"
-echo "   kubectl apply -f gitops-config/argocd/bootstrap-app.yaml"
+echo "   kubectl apply -f infra/poc/gitops-config/argocd/project.yaml"
+echo "   kubectl apply -f infra/poc/gitops-config/argocd/bootstrap-app.yaml"
 echo ""
 echo "5. Add domain mirrors (см. docs/domain-mirrors-guide.md):"
 echo "   # Edit values.yaml:"

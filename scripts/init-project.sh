@@ -34,7 +34,7 @@ GITLAB_GROUP="${GITLAB_GROUP:-gitops-poc}"
 GITLAB_HOST="${GITLAB_HOST:-gitlab.com}"
 PROJECT_PREFIX="${PROJECT_PREFIX:-}"
 DOCKER_REGISTRY="${DOCKER_REGISTRY:-registry.gitlab.com/${GITLAB_GROUP}}"
-KUBE_CONTEXT="${KUBE_CONTEXT:-${GITLAB_GROUP}/gitops-config:minikube-agent}"
+KUBE_CONTEXT="${KUBE_CONTEXT:-${GITLAB_GROUP}/infra/poc/gitops-config:minikube-agent}"
 VAULT_PATH_PREFIX="${VAULT_PATH_PREFIX:-gitops-poc}"
 SERVICES="${SERVICES:-api-gateway auth-adapter web-grpc web-http health-demo}"
 ENVIRONMENTS="${ENVIRONMENTS:-dev staging prod}"
@@ -65,7 +65,10 @@ fi
 echo_header "Updating ApplicationSet"
 
 # Update applicationset.yaml
-APPSET_FILE="$ROOT_DIR/gitops-config/argocd/applicationset.yaml"
+# Brand configuration (default: poc)
+BRAND="${BRAND:-poc}"
+GITOPS_CONFIG_DIR="$ROOT_DIR/infra/$BRAND/gitops-config"
+APPSET_FILE="$GITOPS_CONFIG_DIR/argocd/applicationset.yaml"
 
 # Build services list for ApplicationSet
 SERVICES_YAML=""
@@ -156,7 +159,7 @@ echo_info "Updated: $APPSET_FILE"
 echo_header "Updating ArgoCD Project"
 
 # Update project.yaml
-PROJECT_FILE="$ROOT_DIR/gitops-config/argocd/project.yaml"
+PROJECT_FILE="$GITOPS_CONFIG_DIR/argocd/project.yaml"
 
 cat > "$PROJECT_FILE" << EOF
 # ArgoCD Project for ${GITLAB_GROUP}
@@ -206,7 +209,7 @@ for SERVICE in $SERVICES; do
     # Update .gitlab-ci.yml
     CI_FILE="$SERVICE_DIR/.gitlab-ci.yml"
     if [ -f "$CI_FILE" ]; then
-        sed -i.bak "s|gitops-poc/gitops-config|${GITLAB_GROUP}/gitops-config|g" "$CI_FILE"
+        sed -i.bak "s|gitops-poc/gitops-config|${GITLAB_GROUP}/infra/${BRAND}/gitops-config|g" "$CI_FILE"
         sed -i.bak "s|registry.gitlab.com/gitops-poc|registry.gitlab.com/${GITLAB_GROUP}|g" "$CI_FILE"
         rm -f "${CI_FILE}.bak"
         echo_info "Updated: $CI_FILE"
@@ -264,7 +267,7 @@ echo "2. Create repositories:"
 for SERVICE in $SERVICES; do
     echo "   - ${GITLAB_GROUP}/${SERVICE}"
 done
-echo "   - ${GITLAB_GROUP}/gitops-config"
+echo "   - ${GITLAB_GROUP}/infra/${BRAND}/gitops-config"
 echo ""
 echo "3. Copy service files to their repos:"
 for SERVICE in $SERVICES; do

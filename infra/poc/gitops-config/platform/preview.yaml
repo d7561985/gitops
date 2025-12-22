@@ -1,0 +1,51 @@
+# =============================================================================
+# Preview Environments Configuration
+# =============================================================================
+# Chart-specific values for preview-environments.
+# Combined with base.yaml by ArgoCD multi-source.
+# =============================================================================
+
+previewEnvironments:
+  enabled: true
+
+  # Vault integration
+  vault:
+    enabled: true
+    path: "gitops-poc-dzha/argocd/gitlab-preview/dev"
+
+  # Preview domain format: {jira-tag}.demo-poc-01.work
+  # Uses *.demo-poc-01.work wildcard (covered by CloudFlare Universal SSL)
+  baseDomain: "demo-poc-01.work"
+  zoneId: "4326314d3e3737ed7a7cde0081ab31af"
+
+  # GitLab connection
+  gitlab:
+    api: "https://gitlab.com/"
+    tokenRef:
+      secretName: gitlab-preview-token
+      key: token
+    requeueAfterSeconds: 60
+
+  # Shared namespace mode - deploy all previews to existing namespace
+  # Benefits: secrets already exist, no namespace sprawl
+  sharedNamespace: true
+
+  # Services to enable preview for
+  services:
+    frontend:
+      enabled: true
+      projectId: "76998085"
+      branchMatch: "^[A-Z]+-[0-9]+-.*"
+      cicdPath: "frontend/.cicd"
+      repoURL: "https://gitlab.com/gitops-poc-dzha/services/sentry-demo.git"
+      # Deploy to existing namespace (secrets already there)
+      namespace: "poc-dev"
+      # Base app name - will be suffixed with JIRA tag (e.g., sentry-frontend-jira-0001)
+      appNameBase: "sentry-frontend"
+
+  # Gateway configuration
+  gateway:
+    namespace: "poc-dev"
+    gatewayClassName: cilium
+    protocol: HTTP
+    port: 80

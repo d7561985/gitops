@@ -1,0 +1,18 @@
+# Dev environment overrides for sentry-frontend
+
+image:
+  repository: registry.gitlab.com/gitops-poc-dzha/sentry-demo/frontend
+  tag: 1eb031e1
+replicaCount: 1
+# Vault (environment-specific)
+vault:
+  role: sentry-frontend-dev
+  path: gitops-poc-dzha/sentry-frontend/dev/config
+# HTTPRoute (environment-specific)
+httpRoute:
+  parentRefs:
+    - name: gateway
+      namespace: poc-dev
+      sectionName: http-app
+  hostnames:
+    - app.demo-poc-01.work

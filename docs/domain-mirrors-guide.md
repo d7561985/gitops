@@ -288,7 +288,7 @@ curl -s "https://api.cloudflare.com/client/v4/zones" \
 ### Шаг 3: Добавить зеркало в values.yaml
 
 ```yaml
-# gitops-config/platform/core.yaml
+# infra/poc/gitops-config/platform/core.yaml
 
 environments:
   dev:

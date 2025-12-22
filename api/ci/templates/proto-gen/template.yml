@@ -1,0 +1,497 @@
+# Proto Generation CI/CD Template - Zero Config Edition
+#
+# Usage (only 3 lines needed in your repo!):
+#
+#   include:
+#     - project: 'gitops-poc-dzha/api/ci'
+#       file: '/templates/proto-gen/template.yml'
+#
+# Your repo structure:
+#   proto/
+#     └── your/v1/service.proto
+#   .gitlab-ci.yml  (the 3 lines above)
+#
+# That's it! No buf.yaml or buf.gen.yaml needed.
+# Everything is generated automatically from CI_PROJECT_NAME.
+
+variables:
+  SERVICE_NAME: ${CI_PROJECT_NAME}
+  GEN_GROUP_PATH: "gitops-poc-dzha/api/gen"
+  BUF_VERSION: "1.47.2"
+  DEFAULT_BRANCH: "main"
+  PROTO_GEN_LANGUAGES: "go,nodejs,php,python,web,kotlin,swift"
+  # Organization prefix for generated packages
+  ORG_PREFIX: "gitops-poc-dzha"
+
+stages:
+  - setup
+  - lint
+  - breaking
+  - generate
+  - publish
+
+# ============================================
+# Setup: Generate buf.yaml and buf.gen.yaml
+# ============================================
+.generate-buf-config: &generate-buf-config
+  - |
+    echo "Generating buf.yaml for ${SERVICE_NAME}..."
+    cat > buf.yaml << EOF
+    version: v2
+    modules:
+      - path: proto
+        name: buf.build/${ORG_PREFIX}/${SERVICE_NAME}
+    lint:
+      use:
+        - STANDARD
+      except:
+        - PACKAGE_VERSION_SUFFIX
+        - COMMENT_FIELD
+        - COMMENT_MESSAGE
+        - COMMENT_RPC
+        - COMMENT_SERVICE
+        - COMMENT_ENUM
+        - COMMENT_ENUM_VALUE
+      enum_zero_value_suffix: _UNSPECIFIED
+      rpc_allow_same_request_response: false
+      rpc_allow_google_protobuf_empty_requests: true
+      rpc_allow_google_protobuf_empty_responses: true
+      service_suffix: Service
+    breaking:
+      use:
+        - FILE
+      except:
+        - EXTENSION_MESSAGE_NO_DELETE
+        - FIELD_SAME_DEFAULT
+    EOF
+
+    echo "Generating buf.gen.yaml for ${SERVICE_NAME}..."
+    cat > buf.gen.yaml << EOF
+    version: v2
+    managed:
+      enabled: true
+      override:
+        - file_option: go_package_prefix
+          value: gitlab.com/${GEN_GROUP_PATH}/${SERVICE_NAME}/go
+    plugins:
+      # ============================================
+      # Go (protobuf + gRPC + Connect)
+      # ============================================
+      - remote: buf.build/protocolbuffers/go
+        out: gen/go
+        opt:
+          - paths=source_relative
+      - remote: buf.build/grpc/go
+        out: gen/go
+        opt:
+          - paths=source_relative
+          - require_unimplemented_servers=false
+      - remote: buf.build/connectrpc/go
+        out: gen/go
+        opt:
+          - paths=source_relative
+
+      # ============================================
+      # Node.js/TypeScript (gRPC)
+      # ============================================
+      - remote: buf.build/community/timostamm-protobuf-ts
+        out: gen/nodejs
+        opt:
+          - long_type_string
+          - generate_dependencies
+          - output_typescript
+          - server_grpc1
+          - client_grpc1
+
+      # ============================================
+      # Python (protobuf + gRPC + Connect)
+      # Note: connect-python is alpha but functional
+      # ============================================
+      - remote: buf.build/protocolbuffers/python
+        out: gen/python
+      - remote: buf.build/grpc/python
+        out: gen/python
+      - remote: buf.build/protocolbuffers/pyi
+        out: gen/python
+      - remote: buf.build/connectrpc/python
+        out: gen/python
+
+      # ============================================
+      # PHP (protobuf + gRPC only, Connect not supported)
+      # ============================================
+      - remote: buf.build/protocolbuffers/php
+        out: gen/php
+      - remote: buf.build/grpc/php
+        out: gen/php
+
+      # ============================================
+      # Web (Connect-ES v2 for browsers)
+      # Uses @bufbuild/protobuf@2.10+ + @connectrpc/connect@2.1+
+      # ============================================
+      - remote: buf.build/bufbuild/es:v2.10.2
+        out: gen/web
+        opt:
+          - target=ts
+
+      # ============================================
+      # Kotlin (protobuf + Connect)
+      # ============================================
+      - remote: buf.build/protocolbuffers/java
+        out: gen/kotlin
+      - remote: buf.build/connectrpc/kotlin
+        out: gen/kotlin
+
+      # ============================================
+      # Swift (protobuf + Connect)
+      # ============================================
+      - remote: buf.build/apple/swift
+        out: gen/swift
+        opt:
+          - Visibility=Public
+      - remote: buf.build/connectrpc/swift
+        out: gen/swift
+        opt:
+          - Visibility=Public
+    EOF
+
+    echo "Generated configs:"
+    echo "--- buf.yaml ---"
+    cat buf.yaml
+    echo ""
+    echo "--- buf.gen.yaml ---"
+    cat buf.gen.yaml
+
+proto-lint:
+  stage: lint
+  image: alpine:3.19
+  before_script:
+    - apk add --no-cache curl
+    - curl -sSL "https://github.com/bufbuild/buf/releases/download/v${BUF_VERSION}/buf-Linux-x86_64" -o /usr/local/bin/buf
+    - chmod +x /usr/local/bin/buf
+    - *generate-buf-config
+  script:
+    - echo "Running Buf lint on ${SERVICE_NAME}..."
+    - buf lint
+    - echo "Checking formatting..."
+    - buf format --diff --exit-code || echo "Warning - formatting issues found"
+    - echo "Lint passed!"
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "dev"
+    - if: $CI_COMMIT_BRANCH == $DEFAULT_BRANCH
+    - if: $CI_COMMIT_TAG
+
+proto-breaking:
+  stage: breaking
+  image: alpine:3.19
+  before_script:
+    - apk add --no-cache curl git
+    - curl -sSL "https://github.com/bufbuild/buf/releases/download/v${BUF_VERSION}/buf-Linux-x86_64" -o /usr/local/bin/buf
+    - chmod +x /usr/local/bin/buf
+    - *generate-buf-config
+  script:
+    - echo "Checking for breaking changes against ${DEFAULT_BRANCH}..."
+    - |
+      if git rev-parse --verify origin/${DEFAULT_BRANCH} > /dev/null 2>&1; then
+        buf breaking --against ".git#branch=${DEFAULT_BRANCH}"
+        echo "No breaking changes detected!"
+      else
+        echo "No ${DEFAULT_BRANCH} branch found, skipping breaking change check"
+      fi
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "dev"
+  allow_failure: false
+
+proto-generate:
+  stage: generate
+  image: alpine:3.19
+  before_script:
+    - apk add --no-cache curl git
+    - curl -sSL "https://github.com/bufbuild/buf/releases/download/v${BUF_VERSION}/buf-Linux-x86_64" -o /usr/local/bin/buf
+    - chmod +x /usr/local/bin/buf
+    - *generate-buf-config
+  script:
+    - echo "Generating code for ${SERVICE_NAME}..."
+    - rm -rf gen/
+    - buf dep update
+    - buf generate
+    - echo "Generated code structure:"
+    - find gen/ -type f | head -50 || echo "No files generated"
+  artifacts:
+    paths:
+      - gen/
+    expire_in: 1 hour
+  rules:
+    - if: $CI_COMMIT_BRANCH == "dev"
+    - if: $CI_COMMIT_BRANCH == $DEFAULT_BRANCH
+    - if: $CI_COMMIT_TAG
+
+proto-publish:
+  stage: publish
+  image: alpine:3.19
+  needs:
+    - job: proto-generate
+      artifacts: true
+  before_script:
+    - apk add --no-cache git curl jq nodejs npm
+    - git config --global user.email "ci@gitlab.com"
+    - git config --global user.name "GitLab CI Proto Generator"
+    - git config --global init.defaultBranch main
+  script:
+    - |
+      if [ -n "${CI_COMMIT_TAG}" ]; then
+        VERSION="${CI_COMMIT_TAG}"
+        IS_RELEASE="true"
+        echo "Release version: ${VERSION}"
+      elif [ "${CI_COMMIT_BRANCH}" = "${DEFAULT_BRANCH}" ]; then
+        VERSION="v0.0.0+${CI_COMMIT_SHORT_SHA}"
+        IS_RELEASE="false"
+        echo "Main branch snapshot: ${VERSION}"
+      else
+        VERSION="v0.0.0+${CI_COMMIT_SHORT_SHA}"
+        IS_RELEASE="false"
+        echo "Dev version: ${VERSION}"
+      fi
+
+      # Get parent group ID dynamically (no need for GEN_GROUP_ID variable!)
+      echo "Getting parent group ID for ${GEN_GROUP_PATH}..."
+      PARENT_GROUP_ID=$(curl -s --header "PRIVATE-TOKEN: ${CI_PUSH_TOKEN}" \
+        "https://${CI_SERVER_HOST}/api/v4/groups/${GEN_GROUP_PATH//\//%2F}" \
+        | jq -r '.id // empty')
+
+      if [ -z "${PARENT_GROUP_ID}" ] || [ "${PARENT_GROUP_ID}" = "null" ]; then
+        echo "ERROR: Parent group ${GEN_GROUP_PATH} not found. Please create it first."
+        exit 1
+      fi
+      echo "Parent group ID: ${PARENT_GROUP_ID}"
+
+      echo "Checking if sub-group exists: ${GEN_GROUP_PATH}/${SERVICE_NAME}..."
+      SERVICE_GROUP_ID=$(curl -s --header "PRIVATE-TOKEN: ${CI_PUSH_TOKEN}" \
+        "https://${CI_SERVER_HOST}/api/v4/groups/${GEN_GROUP_PATH//\//%2F}%2F${SERVICE_NAME}" \
+        | jq -r '.id // empty')
+
+      if [ -z "${SERVICE_GROUP_ID}" ] || [ "${SERVICE_GROUP_ID}" = "null" ]; then
+        echo "Creating sub-group: ${GEN_GROUP_PATH}/${SERVICE_NAME}"
+        CREATE_RESPONSE=$(curl -s --header "PRIVATE-TOKEN: ${CI_PUSH_TOKEN}" \
+          -X POST "https://${CI_SERVER_HOST}/api/v4/groups" \
+          -d "name=${SERVICE_NAME}" \
+          -d "path=${SERVICE_NAME}" \
+          -d "parent_id=${PARENT_GROUP_ID}" \
+          -d "visibility=private" \
+          -d "description=Generated gRPC/proto code for ${SERVICE_NAME}")
+        SERVICE_GROUP_ID=$(echo "${CREATE_RESPONSE}" | jq -r '.id // empty')
+        if [ -z "${SERVICE_GROUP_ID}" ] || [ "${SERVICE_GROUP_ID}" = "null" ]; then
+          echo "Create response: ${CREATE_RESPONSE}"
+          # Retry fetch in case of race condition
+          sleep 2
+          SERVICE_GROUP_ID=$(curl -s --header "PRIVATE-TOKEN: ${CI_PUSH_TOKEN}" \
+            "https://${CI_SERVER_HOST}/api/v4/groups/${GEN_GROUP_PATH//\//%2F}%2F${SERVICE_NAME}" \
+            | jq -r '.id // empty')
+        fi
+      else
+        echo "Sub-group already exists (ID: ${SERVICE_GROUP_ID})"
+      fi
+
+      if [ -z "${SERVICE_GROUP_ID}" ] || [ "${SERVICE_GROUP_ID}" = "null" ]; then
+        echo "ERROR: Cannot create or find service group. Check CI_PUSH_TOKEN permissions."
+        exit 1
+      fi
+
+      publish_lang_repo() {
+        LANG=$1
+        LANG_DIR="${CI_PROJECT_DIR}/gen/${LANG}"
+
+        # nodejs-connect uses web generated code (same protobuf, different runtime)
+        if [ "${LANG}" = "nodejs-connect" ]; then
+          LANG_DIR="${CI_PROJECT_DIR}/gen/web"
+        fi
+
+        if [ ! -d "${LANG_DIR}" ]; then
+          echo "Skipping ${LANG} - no generated code"
+          return 0
+        fi
+
+        echo ""
+        echo "=========================================="
+        echo "Publishing ${LANG}..."
+        echo "=========================================="
+
+        REPO_PATH="${GEN_GROUP_PATH}/${SERVICE_NAME}/${LANG}"
+        REPO_URL="https://oauth2:${CI_PUSH_TOKEN}@${CI_SERVER_HOST}/${REPO_PATH}.git"
+
+        REPO_ID=$(curl -s --header "PRIVATE-TOKEN: ${CI_PUSH_TOKEN}" \
+          "https://${CI_SERVER_HOST}/api/v4/projects/${REPO_PATH//\//%2F}" \
+          | jq -r '.id // empty')
+
+        if [ -z "${REPO_ID}" ]; then
+          echo "Creating repository: ${REPO_PATH}"
+          curl -s --header "PRIVATE-TOKEN: ${CI_PUSH_TOKEN}" \
+            -X POST "https://${CI_SERVER_HOST}/api/v4/projects" \
+            -d "name=${LANG}" \
+            -d "namespace_id=${SERVICE_GROUP_ID}" \
+            -d "visibility=private" \
+            -d "description=Generated ${LANG} gRPC code for ${SERVICE_NAME}" \
+            -d "initialize_with_readme=false" | jq -r '.id'
+          sleep 2
+        else
+          echo "Repository exists (ID: ${REPO_ID})"
+        fi
+
+        WORK_DIR="/tmp/gen-${LANG}"
+        rm -rf "${WORK_DIR}"
+        mkdir -p "${WORK_DIR}"
+        cd "${WORK_DIR}"
+
+        if git clone --depth 1 "${REPO_URL}" . 2>/dev/null; then
+          echo "Cloned existing repo"
+        else
+          echo "Initializing new repo"
+          git init
+          git remote add origin "${REPO_URL}"
+        fi
+
+        rm -rf ./*
+        cp -r "${LANG_DIR}"/* ./
+
+        SERVICE_PASCAL=$(echo "${SERVICE_NAME}" | sed 's/-/ /g' | awk '{for(i=1;i<=NF;i++) $i=toupper(substr($i,1,1)) tolower(substr($i,2))}1' | sed 's/ //g')
+
+        case "${LANG}" in
+          go)
+            printf 'module gitlab.com/%s\n\ngo 1.24\n\nrequire (\n\tconnectrpc.com/connect v1.19.1\n\tgoogle.golang.org/grpc v1.68.1\n\tgoogle.golang.org/protobuf v1.35.2\n)\n\nrequire (\n\tgolang.org/x/net v0.32.0 // indirect\n\tgolang.org/x/sys v0.28.0 // indirect\n\tgolang.org/x/text v0.21.0 // indirect\n\tgoogle.golang.org/genproto/googleapis/rpc v0.0.0-20241209162323-e6fa225c2576 // indirect\n)\n' "${REPO_PATH}" > go.mod
+            ;;
+          nodejs)
+            printf '{\n  "name": "@%s/%s",\n  "version": "%s",\n  "description": "gRPC client/server stubs for %s",\n  "main": "index.js",\n  "types": "index.d.ts",\n  "dependencies": {\n    "@grpc/grpc-js": "^1.10.0",\n    "@protobuf-ts/runtime": "^2.9.4",\n    "@protobuf-ts/runtime-rpc": "^2.9.4"\n  },\n  "peerDependencies": {\n    "typescript": ">=4.5.0"\n  }\n}\n' "${ORG_PREFIX}" "${SERVICE_NAME}" "${VERSION#v}" "${SERVICE_NAME}" > package.json
+            ;;
+          nodejs-connect)
+            # Connect-ES v2 for Node.js backend (server-side)
+            # Uses same generated code as 'web' but with @connectrpc/connect-node
+            # Note: LANG_DIR is already set to gen/web by the special case above
+            printf '{\n  "name": "@%s/%s-nodejs",\n  "version": "%s",\n  "description": "Connect-ES server for %s (Node.js)",\n  "type": "module",\n  "main": "index.js",\n  "types": "index.d.ts",\n  "exports": {\n    ".": {\n      "import": "./index.js",\n      "types": "./index.d.ts"\n    },\n    "./*": {\n      "import": "./*",\n      "types": "./*"\n    }\n  },\n  "dependencies": {\n    "@bufbuild/protobuf": "^2.10.0",\n    "@connectrpc/connect": "^2.1.0",\n    "@connectrpc/connect-node": "^2.1.0",\n    "@connectrpc/connect-express": "^2.1.0"\n  },\n  "peerDependencies": {\n    "typescript": ">=5.0.0"\n  }\n}\n' "${ORG_PREFIX}" "${SERVICE_NAME}" "${VERSION#v}" "${SERVICE_NAME}" > package.json
+
+            # Create tsconfig.json for compilation
+            printf '{\n  "compilerOptions": {\n    "target": "ES2020",\n    "module": "ESNext",\n    "moduleResolution": "bundler",\n    "declaration": true,\n    "declarationMap": true,\n    "sourceMap": true,\n    "strict": true,\n    "esModuleInterop": true,\n    "skipLibCheck": true,\n    "outDir": "."\n  },\n  "include": ["**/*.ts"],\n  "exclude": ["node_modules"]\n}\n' > tsconfig.json
+
+            # Generate index.ts that re-exports all generated modules
+            echo "// Auto-generated index file for Connect-ES v2 (Node.js server)" > index.ts
+            echo "// Re-exports all protobuf messages and service descriptors" >> index.ts
+            echo "" >> index.ts
+            find . -name "*_pb.ts" -type f | while read -r pbfile; do
+              relpath="${pbfile#./}"
+              relpath="${relpath%.ts}"
+              echo "export * from './${relpath}.js';" >> index.ts
+            done
+
+            # Compile TypeScript to JavaScript
+            # Save original package.json (npm install modifies it)
+            cp package.json package.json.orig
+            echo "Installing dependencies and compiling TypeScript..."
+            npm install
+            npm install --save-dev typescript
+            npx tsc
+            echo "TypeScript compilation complete"
+
+            # Remove .ts source files (keep .js and .d.ts only)
+            find . -name "*.ts" ! -name "*.d.ts" -type f -delete
+            echo "Removed .ts source files (keeping .js and .d.ts)"
+
+            # Restore original package.json and remove build artifacts
+            mv package.json.orig package.json
+            rm -rf node_modules tsconfig.json package-lock.json
+            ;;
+          php)
+            # PHP autoload must match the namespace generated by protoc
+            # Proto package "wager.v1" -> PHP namespace "Wager\V1" -> files in "Wager/V1/"
+            # We extract the root namespace from generated files
+            PHP_NS=$(find . -name "*.php" -type f -exec grep -h "^namespace" {} \; 2>/dev/null | head -1 | sed 's/namespace \([^\\;]*\).*/\1/' | tr -d ' ')
+            if [ -z "${PHP_NS}" ]; then
+              echo "Warning: Could not detect PHP namespace from generated files, using PascalCase service name"
+              PHP_NS="${SERVICE_PASCAL}"
+            fi
+            echo "Detected PHP namespace: ${PHP_NS}"
+            printf '{\n  "name": "%s/%s",\n  "description": "gRPC client/server stubs for %s",\n  "version": "%s",\n  "type": "library",\n  "license": "proprietary",\n  "require": {\n    "php": ">=8.1",\n    "grpc/grpc": "^1.57",\n    "google/protobuf": "^4.25"\n  },\n  "autoload": {\n    "psr-4": {\n      "%s\\\\": "%s/"\n    }\n  }\n}\n' "${ORG_PREFIX}" "${SERVICE_NAME}" "${SERVICE_NAME}" "${VERSION#v}" "${PHP_NS}" "${PHP_NS}" > composer.json
+            ;;
+          python)
+            printf '[build-system]\nrequires = ["setuptools>=61.0", "wheel"]\nbuild-backend = "setuptools.build_meta"\n\n[project]\nname = "%s-%s"\nversion = "%s"\ndescription = "gRPC client/server stubs for %s"\nrequires-python = ">=3.9"\ndependencies = [\n    "grpcio>=1.62.0",\n    "protobuf>=4.25.0",\n]\n\n[tool.setuptools.packages.find]\nwhere = ["."]\n' "${ORG_PREFIX}" "${SERVICE_NAME}" "${VERSION#v}" "${SERVICE_NAME}" > pyproject.toml
+            find . -type d -exec touch {}/__init__.py \;
+            ;;
+          web)
+            # Connect-ES v2: Modern TypeScript gRPC-Web client
+            # In v2, protoc-gen-es generates everything in *_pb.ts (no _connect.ts)
+            # Replaces deprecated google-protobuf + grpc-web (80% smaller bundles)
+            printf '{\n  "name": "@%s/%s-web",\n  "version": "%s",\n  "description": "Connect-ES gRPC-Web client for %s (browser/Node.js)",\n  "type": "module",\n  "main": "index.js",\n  "types": "index.d.ts",\n  "exports": {\n    ".": {\n      "import": "./index.js",\n      "types": "./index.d.ts"\n    },\n    "./*": {\n      "import": "./*",\n      "types": "./*"\n    }\n  },\n  "dependencies": {\n    "@bufbuild/protobuf": "^2.10.0",\n    "@connectrpc/connect": "^2.1.0",\n    "@connectrpc/connect-web": "^2.1.0"\n  },\n  "peerDependencies": {\n    "typescript": ">=5.0.0"\n  }\n}\n' "${ORG_PREFIX}" "${SERVICE_NAME}" "${VERSION#v}" "${SERVICE_NAME}" > package.json
+
+            # Create tsconfig.json for compilation
+            printf '{\n  "compilerOptions": {\n    "target": "ES2020",\n    "module": "ESNext",\n    "moduleResolution": "bundler",\n    "declaration": true,\n    "declarationMap": true,\n    "sourceMap": true,\n    "strict": true,\n    "esModuleInterop": true,\n    "skipLibCheck": true,\n    "outDir": "."\n  },\n  "include": ["**/*.ts"],\n  "exclude": ["node_modules"]\n}\n' > tsconfig.json
+
+            # Generate index.ts that re-exports all generated modules
+            echo "// Auto-generated index file for Connect-ES v2" > index.ts
+            echo "// Re-exports all protobuf messages and service descriptors from *_pb.ts" >> index.ts
+            echo "" >> index.ts
+            # In Connect-ES v2, everything is in *_pb.ts files (no separate _connect.ts)
+            find . -name "*_pb.ts" -type f | while read -r pbfile; do
+              relpath="${pbfile#./}"
+              relpath="${relpath%.ts}"
+              echo "export * from './${relpath}.js';" >> index.ts
+            done
+
+            # Compile TypeScript to JavaScript
+            echo "Installing dependencies and compiling TypeScript..."
+            npm install --save-dev typescript @bufbuild/protobuf@^2.10.0
+            npx tsc
+            echo "TypeScript compilation complete"
+
+            # Remove .ts source files (keep .js and .d.ts only)
+            # This is critical - bundlers like webpack may pick .ts over .js
+            find . -name "*.ts" ! -name "*.d.ts" -type f -delete
+            echo "Removed .ts source files (keeping .js and .d.ts)"
+
+            # Remove build artifacts (not needed at runtime)
+            rm -rf node_modules tsconfig.json package-lock.json
+            ;;
+          kotlin)
+            # Kotlin Connect client - Gradle/Maven compatible
+            printf 'plugins {\n    kotlin("jvm") version "1.9.22"\n}\n\nrepositories {\n    mavenCentral()\n}\n\ndependencies {\n    api("com.connectrpc:connect-kotlin:0.7.1")\n    api("com.google.protobuf:protobuf-kotlin:4.28.3")\n    implementation("com.squareup.okhttp3:okhttp:4.12.0")\n}\n' > build.gradle.kts
+            ;;
+          swift)
+            # Swift Package Manager manifest
+            SERVICE_SWIFT=$(echo "${SERVICE_NAME}" | sed 's/-//g')
+            printf '// swift-tools-version:5.9\nimport PackageDescription\n\nlet package = Package(\n    name: "%s",\n    platforms: [.iOS(.v14), .macOS(.v12)],\n    products: [\n        .library(name: "%s", targets: ["%s"])\n    ],\n    dependencies: [\n        .package(url: "https://github.com/connectrpc/connect-swift", from: "1.0.0"),\n        .package(url: "https://github.com/apple/swift-protobuf", from: "1.28.0")\n    ],\n    targets: [\n        .target(\n            name: "%s",\n            dependencies: [\n                .product(name: "Connect", package: "connect-swift"),\n                .product(name: "SwiftProtobuf", package: "swift-protobuf")\n            ],\n            path: "."\n        )\n    ]\n)\n' "${SERVICE_SWIFT}" "${SERVICE_SWIFT}" "${SERVICE_SWIFT}" "${SERVICE_SWIFT}" > Package.swift
+            ;;
+        esac
+
+        printf '# %s - %s\n\nGenerated gRPC/protobuf code for %s.\n\n| Info | Value |\n|------|-------|\n| **Version** | %s |\n| **Source** | [proto/%s](https://%s/%s/api/proto/%s) |\n| **Commit** | %s |\n' "${SERVICE_NAME}" "${LANG}" "${SERVICE_NAME}" "${VERSION}" "${SERVICE_NAME}" "${CI_SERVER_HOST}" "${ORG_PREFIX}" "${SERVICE_NAME}" "${CI_COMMIT_SHORT_SHA}" > README.md
+
+        git add -A
+        if git diff --cached --quiet; then
+          echo "No changes to commit for ${LANG}"
+        else
+          git commit -m "chore: generate ${VERSION} from ${CI_COMMIT_SHORT_SHA} [skip ci]"
+          git push -u origin HEAD:main || git push --force origin HEAD:main
+
+          if [ "${IS_RELEASE}" = "true" ]; then
+            git tag -a "${VERSION}" -m "Release ${VERSION}"
+            git push origin "${VERSION}"
+            echo "Created tag ${VERSION} for ${LANG}"
+          fi
+        fi
+
+        echo "Published ${LANG} to ${REPO_PATH}"
+      }
+
+      echo "${PROTO_GEN_LANGUAGES}" | tr ',' '\n' | while read -r lang; do
+        lang=$(echo "$lang" | tr -d '[:space:]')
+        if [ -n "$lang" ]; then
+          publish_lang_repo "${lang}"
+        fi
+      done
+
+      echo ""
+      echo "=========================================="
+      echo "All languages published for ${SERVICE_NAME} ${VERSION}"
+      echo "=========================================="
+
+  rules:
+    - if: $CI_COMMIT_BRANCH == "dev"
+    - if: $CI_COMMIT_BRANCH == $DEFAULT_BRANCH
+    - if: $CI_COMMIT_TAG

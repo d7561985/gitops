@@ -1,0 +1,105 @@
+syntax = "proto3";
+
+package user.v1;
+
+option go_package = "gitlab.com/gitops-poc-dzha/api/gen/user-service/go/user/v1;userv1";
+
+// UserService - public API for user registration and authentication
+// Called by frontend through API Gateway
+service UserService {
+  // Register creates a new user account
+  rpc Register(RegisterRequest) returns (RegisterResponse);
+
+  // Login authenticates user and returns tokens
+  rpc Login(LoginRequest) returns (LoginResponse);
+
+  // Logout invalidates the current session
+  // Requires authorization (user_id from header)
+  rpc Logout(LogoutRequest) returns (LogoutResponse);
+
+  // RefreshToken exchanges refresh token for new access token
+  rpc RefreshToken(RefreshTokenRequest) returns (RefreshTokenResponse);
+
+  // GetProfile returns current user profile
+  // Requires authorization (user_id from header)
+  rpc GetProfile(GetProfileRequest) returns (GetProfileResponse);
+}
+
+// Registration
+
+message RegisterRequest {
+  // User email (unique, used for login)
+  string email = 1;
+  // Password (will be hashed with bcrypt)
+  string password = 2;
+  // Display username
+  string username = 3;
+}
+
+message RegisterResponse {
+  // Created user ID
+  string user_id = 1;
+  // JWT access token (short-lived, ~15 min)
+  string access_token = 2;
+  // Refresh token (long-lived, ~7 days, stored in MongoDB)
+  string refresh_token = 3;
+}
+
+// Login
+
+message LoginRequest {
+  // User email
+  string email = 1;
+  // Password (plain text, will be verified against hash)
+  string password = 2;
+}
+
+message LoginResponse {
+  // User ID
+  string user_id = 1;
+  // JWT access token
+  string access_token = 2;
+  // Refresh token
+  string refresh_token = 3;
+}
+
+// Logout
+
+message LogoutRequest {
+  // Empty - user_id comes from auth header set by auth-adapter
+}
+
+message LogoutResponse {
+  // Empty on success
+}
+
+// Token Refresh
+
+message RefreshTokenRequest {
+  // Refresh token to exchange
+  string refresh_token = 1;
+}
+
+message RefreshTokenResponse {
+  // New JWT access token
+  string access_token = 1;
+  // New refresh token (rotation for security)
+  string refresh_token = 2;
+}
+
+// Profile
+
+message GetProfileRequest {
+  // Empty - user_id comes from auth header set by auth-adapter
+}
+
+message GetProfileResponse {
+  // User ID
+  string user_id = 1;
+  // User email
+  string email = 2;
+  // Display username
+  string username = 3;
+  // User roles
+  repeated string roles = 4;
+}

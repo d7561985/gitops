@@ -1,0 +1,128 @@
+syntax = "proto3";
+
+package wager.v1;
+
+option go_package = "gitlab.com/gitops-poc-dzha/api/gen/wager-service/go/wager/v1;wagerv1";
+
+// WagerService - Wager validation and placement
+// Handles bet validation, placement, and history tracking
+service WagerService {
+  // Validate checks if a wager can be placed
+  rpc Validate(ValidateRequest) returns (ValidateResponse);
+
+  // Place records a completed wager with its result
+  rpc Place(PlaceRequest) returns (PlaceResponse);
+
+  // GetHistory returns wager history for a user
+  rpc GetHistory(GetHistoryRequest) returns (GetHistoryResponse);
+}
+
+// ValidateRequest - wager validation request
+message ValidateRequest {
+  // User ID placing the wager
+  string user_id = 1;
+  // Wager amount
+  double amount = 2;
+  // Game identifier (e.g., "slot-machine")
+  string game_id = 3;
+}
+
+// ValidateResponse - wager validation result
+message ValidateResponse {
+  // Whether the wager is valid
+  bool valid = 1;
+  // Validation token (used in Place request)
+  string validation_token = 2;
+  // Amount from bonus balance used
+  double bonus_used = 3;
+  // Amount from real balance used
+  double real_used = 4;
+  // User ID (echoed back)
+  string user_id = 5;
+  // Total amount validated
+  double amount = 6;
+  // Game ID (echoed back)
+  string game_id = 7;
+}
+
+// PlaceRequest - place a validated wager
+message PlaceRequest {
+  // Validation data from ValidateResponse
+  ValidationData validation_data = 1;
+  // Game result: "win" or "lose"
+  string game_result = 2;
+  // Payout amount (0 for loss)
+  double payout = 3;
+}
+
+// ValidationData - data from validation step
+message ValidationData {
+  string user_id = 1;
+  double amount = 2;
+  string game_id = 3;
+  double bonus_used = 4;
+  double real_used = 5;
+  string validation_token = 6;
+}
+
+// PlaceResponse - wager placement result
+message PlaceResponse {
+  // Unique wager ID
+  string wager_id = 1;
+  // Current wagering progress
+  WageringProgress wagering_progress = 2;
+  // Whether wager was successfully placed
+  bool success = 3;
+}
+
+// WageringProgress - bonus wagering progress
+message WageringProgress {
+  // Current progress percentage (0-100)
+  double progress_percent = 1;
+  // Remaining wagering amount
+  double remaining = 2;
+  // Whether bonus can be converted
+  bool can_convert = 3;
+  // Total wagering required
+  double total_required = 4;
+  // Total wagered so far
+  double total_wagered = 5;
+}
+
+// GetHistoryRequest - request wager history
+message GetHistoryRequest {
+  // User ID
+  string user_id = 1;
+  // Maximum number of records (1-100)
+  int32 limit = 2;
+}
+
+// GetHistoryResponse - wager history result
+message GetHistoryResponse {
+  // List of wagers
+  repeated Wager wagers = 1;
+  // Total count of wagers
+  int32 total_count = 2;
+}
+
+// Wager - single wager record
+message Wager {
+  // Unique wager ID
+  string wager_id = 1;
+  // User ID
+  string user_id = 2;
+  // Game ID
+  string game_id = 3;
+  // Wager amount
+  double amount = 4;
+  // Game result: "win" or "lose"
+  string game_result = 5;
+  // Payout amount
+  double payout = 6;
+  // Amount from bonus used
+  double bonus_used = 7;
+  // Amount from real balance used
+  double real_used = 8;
+  // Timestamp (ISO 8601)
+  string created_at = 9;
+}

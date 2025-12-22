@@ -1,0 +1,19 @@
+# HTTP REST Controllers
+http_controllers:
+    resource:
+        path: ../src/Presentation/Http/
+        namespace: App\Presentation\Http
+    type: attribute
+
+# Connect Protocol Controllers
+connect_controllers:
+    resource:
+        path: ../src/Presentation/Connect/
+        namespace: App\Presentation\Connect
+    type: attribute
+
+# Health check route
+health:
+    path: /health
+    controller: App\Presentation\Http\HealthController::check
+    methods: GET

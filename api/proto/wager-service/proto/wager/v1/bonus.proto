@@ -1,0 +1,88 @@
+syntax = "proto3";
+
+package wager.v1;
+
+option go_package = "gitlab.com/gitops-poc-dzha/api/gen/wager-service/go/wager/v1;wagerv1";
+
+// BonusService - Bonus management and wagering
+// Handles bonus claiming, progress tracking, and conversion
+service BonusService {
+  // Claim claims a welcome bonus for a user
+  rpc Claim(ClaimRequest) returns (ClaimResponse);
+
+  // GetProgress returns bonus wagering progress
+  rpc GetProgress(GetProgressRequest) returns (GetProgressResponse);
+
+  // Convert converts bonus balance to real money
+  rpc Convert(ConvertRequest) returns (ConvertResponse);
+}
+
+// ClaimRequest - claim bonus request
+message ClaimRequest {
+  // User ID claiming the bonus
+  string user_id = 1;
+}
+
+// ClaimResponse - claim bonus result
+message ClaimResponse {
+  // Whether claim was successful
+  bool success = 1;
+  // Bonus ID
+  string bonus_id = 2;
+  // Bonus amount credited
+  double amount = 3;
+  // Wagering requirement (e.g., 35x)
+  double wagering_multiplier = 4;
+  // Total amount to wager before conversion
+  double wagering_required = 5;
+  // Bonus expiry date (ISO 8601)
+  string expires_at = 6;
+  // Error message if not successful
+  string error = 7;
+}
+
+// GetProgressRequest - get bonus progress request
+message GetProgressRequest {
+  // User ID
+  string user_id = 1;
+}
+
+// GetProgressResponse - bonus progress result
+message GetProgressResponse {
+  // Whether user has an active bonus
+  bool has_active_bonus = 1;
+  // Current bonus balance
+  double bonus_balance = 2;
+  // Current real balance
+  double real_balance = 3;
+  // Wagering progress percentage (0-100)
+  double progress_percent = 4;
+  // Total wagering required
+  double wagering_required = 5;
+  // Amount wagered so far
+  double wagered_amount = 6;
+  // Remaining amount to wager
+  double remaining = 7;
+  // Whether bonus can be converted to real money
+  bool can_convert = 8;
+  // Bonus expiry date (ISO 8601)
+  string expires_at = 9;
+}
+
+// ConvertRequest - convert bonus to real money
+message ConvertRequest {
+  // User ID
+  string user_id = 1;
+}
+
+// ConvertResponse - conversion result
+message ConvertResponse {
+  // Whether conversion was successful
+  bool success = 1;
+  // Amount converted from bonus to real
+  double converted_amount = 2;
+  // New real balance
+  double new_balance = 3;
+  // Error message if not successful
+  string error = 4;
+}

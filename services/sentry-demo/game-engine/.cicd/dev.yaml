@@ -1,0 +1,17 @@
+# Dev environment overrides for sentry-game-engine
+
+image:
+  repository: registry.gitlab.com/gitops-poc-dzha/sentry-demo/game-engine
+  tag: bb1ad7da
+replicaCount: 1
+# Environment-specific configmap values
+configmap:
+  # Infrastructure (cross-namespace = FQDN)
+  MONGODB_URL: "mongodb://root:rootpassword@mongodb.infra-dev.svc:27017/games?authSource=admin"
+  RABBITMQ_URL: "amqp://guest:guest@rabbitmq.infra-dev.svc:5672"
+  # Environment indicator
+  SENTRY_ENVIRONMENT: "dev"
+# Vault (environment-specific)
+vault:
+  role: sentry-game-engine-dev
+  path: gitops-poc-dzha/sentry-game-engine/dev/config

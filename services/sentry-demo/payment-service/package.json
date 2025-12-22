@@ -1,0 +1,29 @@
+{
+  "name": "payment-service",
+  "version": "1.0.0",
+  "description": "Payment processing service with Clean Architecture",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "start:rest": "ENABLE_REST=true ENABLE_CONNECT=false node src/index.js",
+    "start:connect": "ENABLE_REST=false ENABLE_CONNECT=true node src/index.js",
+    "start:both": "ENABLE_REST=true ENABLE_CONNECT=true node src/index.js",
+    "dev": "nodemon src/index.js"
+  },
+  "dependencies": {
+    "@bufbuild/protobuf": "^2.10.0",
+    "@connectrpc/connect": "^2.1.0",
+    "@connectrpc/connect-express": "^2.1.0",
+    "@connectrpc/connect-node": "^2.1.0",
+    "@gitops-poc-dzha/payment-service-nodejs": "git+https://gitlab.com/gitops-poc-dzha/api/gen/payment-service/nodejs-connect.git#main",
+    "@sentry/node": "^8.0.0",
+    "@sentry/profiling-node": "^8.0.0",
+    "amqplib": "^0.10.4",
+    "express": "^4.21.2",
+    "mongodb": "^5.0.0",
+    "prom-client": "^15.1.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.7"
+  }
+}

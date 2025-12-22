@@ -1,0 +1,51 @@
+syntax = "proto3";
+
+package payment.v1;
+
+option go_package = "gitlab.com/gitops-poc-dzha/api/gen/payment-service/go/payment/v1;paymentv1";
+
+// PaymentService - Payment processing and financial operations
+// Handles balance updates and transaction recording
+service PaymentService {
+  // Process handles a payment transaction (bet/payout)
+  rpc Process(ProcessRequest) returns (ProcessResponse);
+
+  // TrackFinancialMetrics triggers financial metric scenarios for demo purposes
+  rpc TrackFinancialMetrics(TrackFinancialMetricsRequest) returns (TrackFinancialMetricsResponse);
+}
+
+// ProcessRequest - payment processing request
+message ProcessRequest {
+  // User ID for the transaction
+  string user_id = 1;
+  // Bet amount (debit)
+  double bet = 2;
+  // Payout amount (credit)
+  double payout = 3;
+}
+
+// ProcessResponse - payment processing result
+message ProcessResponse {
+  // Whether the payment was successful
+  bool success = 1;
+  // User's new balance after the transaction
+  double new_balance = 2;
+  // Transaction ID
+  string transaction_id = 3;
+  // Transaction type: "WIN" or "LOSS"
+  string transaction_type = 4;
+}
+
+// TrackFinancialMetricsRequest - trigger financial metric scenarios
+message TrackFinancialMetricsRequest {
+  // Scenario type: "normal", "payment_failure_spike", "revenue_anomaly"
+  string scenario = 1;
+}
+
+// TrackFinancialMetricsResponse - financial metrics result
+message TrackFinancialMetricsResponse {
+  // Status message
+  string status = 1;
+  // Additional metrics data
+  map<string, double> metrics = 2;
+}

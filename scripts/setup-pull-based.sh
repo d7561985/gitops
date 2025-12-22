@@ -85,15 +85,19 @@ else
     echo_warn "Skipping credentials setup - add repos manually in ArgoCD UI"
 fi
 
+# Brand configuration (default: poc)
+BRAND="${BRAND:-poc}"
+GITOPS_CONFIG_DIR="$ROOT_DIR/infra/$BRAND/gitops-config"
+
 # Step 3: Apply ArgoCD Project
 echo ""
 echo_info "Step 3: Creating ArgoCD Project..."
-kubectl apply -f "$ROOT_DIR/gitops-config/argocd/project.yaml"
+kubectl apply -f "$GITOPS_CONFIG_DIR/argocd/project.yaml"
 
 # Step 4: Apply Bootstrap Application (App of Apps)
 echo ""
 echo_info "Step 4: Creating Bootstrap Application (App of Apps)..."
-kubectl apply -f "$ROOT_DIR/gitops-config/argocd/bootstrap-app.yaml"
+kubectl apply -f "$GITOPS_CONFIG_DIR/argocd/bootstrap-app.yaml"
 
 # Step 5: Wait and check
 echo ""
@@ -120,7 +124,7 @@ if [ -n "$ARGOCD_PASSWORD" ]; then
     echo ""
 fi
 echo "Next steps:"
-echo "  1. Commit and push gitops-config/argocd/ changes to GitLab"
+echo "  1. Commit and push infra/$BRAND/gitops-config/argocd/ changes to GitLab"
 echo "  2. Switch services to Pull mode: GITOPS_MODE=\"pull\" in .gitlab-ci.yml"
 echo "  3. ArgoCD will auto-sync changes within 3 minutes"
 echo ""

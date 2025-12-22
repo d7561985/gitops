@@ -1,0 +1,11 @@
+tornado==6.3.3
+sentry-sdk[tornado]==2.18.0
+pymongo==4.5.0
+numpy==1.24.3
+pika==1.3.2
+psutil==5.9.5
+requests==2.31.0
+prometheus-client==0.21.0
+protobuf>=4.25.0
+# Generated proto package from GitLab (required for Connect protocol)
+gitops-poc-dzha-game-engine @ git+https://gitlab.com/gitops-poc-dzha/api/gen/game-engine/python.git@main

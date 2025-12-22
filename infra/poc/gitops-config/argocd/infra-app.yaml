@@ -1,0 +1,30 @@
+# Infrastructure Application
+# Deploys MongoDB, Redis, RabbitMQ to infra-dev namespace
+#
+# TODO: Move to separate GitLab repo: gitlab.com/gitops-poc-dzha/infra
+# Then change source.repoURL and source.path accordingly
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: infra-dev
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: gitops-poc-dzha
+
+  source:
+    repoURL: https://gitlab.com/gitops-poc-dzha/infra/poc/gitops-config.git
+    targetRevision: main
+    path: infra
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: infra-dev
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

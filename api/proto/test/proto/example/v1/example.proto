@@ -1,0 +1,269 @@
+// Example proto file demonstrating best practices
+//
+// This file shows:
+// - Proper package and option declarations
+// - Service with CRUD operations
+// - Request/Response message patterns
+// - Streaming RPC example
+// - Field documentation
+// - Enum usage
+// - Pagination pattern
+//
+// Replace this file with your actual service definition.
+
+syntax = "proto3";
+
+package example.v1;
+
+// Go package: last segment is the package alias used in imports
+option go_package = "gitlab.com/gitops-poc-dzha/api/gen/example-service/go/example/v1;examplev1";
+
+// PHP namespace follows PSR-4 autoloading
+option php_namespace = "GitopsPocDzha\\ExampleService\\Example\\V1";
+
+// Java package for Android/JVM clients
+option java_package = "com.gitopspocdzha.exampleservice.example.v1";
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/empty.proto";
+
+// ExampleService demonstrates a typical CRUD service with streaming.
+//
+// This service manages Example resources and provides both unary
+// and streaming RPCs.
+service ExampleService {
+  // GetExample retrieves a single example by ID.
+  //
+  // Returns NOT_FOUND if the example does not exist.
+  rpc GetExample(GetExampleRequest) returns (GetExampleResponse);
+
+  // CreateExample creates a new example resource.
+  //
+  // Returns ALREADY_EXISTS if an example with the same name exists.
+  rpc CreateExample(CreateExampleRequest) returns (CreateExampleResponse);
+
+  // UpdateExample updates an existing example.
+  //
+  // Returns NOT_FOUND if the example does not exist.
+  rpc UpdateExample(UpdateExampleRequest) returns (UpdateExampleResponse);
+
+  // DeleteExample removes an example by ID.
+  //
+  // Returns NOT_FOUND if the example does not exist.
+  // This is an idempotent operation.
+  rpc DeleteExample(DeleteExampleRequest) returns (google.protobuf.Empty);
+
+  // ListExamples returns a paginated list of examples.
+  //
+  // Results are sorted by creation time, newest first.
+  rpc ListExamples(ListExamplesRequest) returns (ListExamplesResponse);
+
+  // WatchExamples streams example change events.
+  //
+  // The stream remains open until the client disconnects.
+  // Use this for real-time updates in UI applications.
+  rpc WatchExamples(WatchExamplesRequest) returns (stream WatchExamplesResponse);
+}
+
+// Example represents an example resource in the system.
+message Example {
+  // Unique identifier for the example.
+  // Format: "ex_" followed by 12 alphanumeric characters.
+  string id = 1;
+
+  // Human-readable name for the example.
+  // Must be unique within the account.
+  // Length: 1-255 characters.
+  string name = 2;
+
+  // Optional description providing additional context.
+  // Length: 0-1000 characters.
+  string description = 3;
+
+  // Current status of the example.
+  ExampleStatus status = 4;
+
+  // Arbitrary key-value metadata.
+  // Keys must be strings, values must be strings.
+  // Maximum 50 entries.
+  map<string, string> metadata = 5;
+
+  // When this example was created.
+  google.protobuf.Timestamp created_at = 6;
+
+  // When this example was last updated.
+  google.protobuf.Timestamp updated_at = 7;
+
+  // Version number for optimistic concurrency control.
+  // Incremented on each update.
+  int64 version = 8;
+}
+
+// ExampleStatus represents the lifecycle state of an Example.
+enum ExampleStatus {
+  // Default value, should not be used.
+  EXAMPLE_STATUS_UNSPECIFIED = 0;
+
+  // Example is active and operational.
+  EXAMPLE_STATUS_ACTIVE = 1;
+
+  // Example is temporarily disabled.
+  EXAMPLE_STATUS_INACTIVE = 2;
+
+  // Example is pending approval.
+  EXAMPLE_STATUS_PENDING = 3;
+
+  // Example has been archived.
+  EXAMPLE_STATUS_ARCHIVED = 4;
+}
+
+// GetExampleRequest is the request for GetExample.
+message GetExampleRequest {
+  // Required. The ID of the example to retrieve.
+  string id = 1;
+}
+
+// GetExampleResponse is the response for GetExample.
+message GetExampleResponse {
+  // The requested example.
+  Example example = 1;
+}
+
+// CreateExampleRequest is the request for CreateExample.
+message CreateExampleRequest {
+  // Required. Human-readable name for the example.
+  string name = 1;
+
+  // Optional. Description of the example.
+  string description = 2;
+
+  // Optional. Initial metadata.
+  map<string, string> metadata = 3;
+}
+
+// CreateExampleResponse is the response for CreateExample.
+message CreateExampleResponse {
+  // The newly created example.
+  Example example = 1;
+}
+
+// UpdateExampleRequest is the request for UpdateExample.
+message UpdateExampleRequest {
+  // Required. The ID of the example to update.
+  string id = 1;
+
+  // Optional. New name for the example.
+  // If not provided, the name is not changed.
+  optional string name = 2;
+
+  // Optional. New description for the example.
+  // If not provided, the description is not changed.
+  optional string description = 3;
+
+  // Optional. New status for the example.
+  // If not provided, the status is not changed.
+  optional ExampleStatus status = 4;
+
+  // Optional. Metadata to merge with existing metadata.
+  // Existing keys are overwritten, new keys are added.
+  // To remove a key, set its value to empty string.
+  map<string, string> metadata = 5;
+
+  // Optional. Expected version for optimistic concurrency.
+  // If provided and doesn't match, the update fails with ABORTED.
+  optional int64 expected_version = 6;
+}
+
+// UpdateExampleResponse is the response for UpdateExample.
+message UpdateExampleResponse {
+  // The updated example.
+  Example example = 1;
+}
+
+// DeleteExampleRequest is the request for DeleteExample.
+message DeleteExampleRequest {
+  // Required. The ID of the example to delete.
+  string id = 1;
+}
+
+// ListExamplesRequest is the request for ListExamples.
+message ListExamplesRequest {
+  // Optional. Maximum number of results to return.
+  // Default: 20, Maximum: 100.
+  int32 page_size = 1;
+
+  // Optional. Token from previous response for pagination.
+  // If empty, returns the first page.
+  string page_token = 2;
+
+  // Optional. Filter by status.
+  // If not specified, returns all statuses except ARCHIVED.
+  repeated ExampleStatus status_filter = 3;
+
+  // Optional. Search query to filter by name or description.
+  // Supports partial matching.
+  string search = 4;
+}
+
+// ListExamplesResponse is the response for ListExamples.
+message ListExamplesResponse {
+  // The list of examples.
+  repeated Example examples = 1;
+
+  // Token for fetching the next page.
+  // Empty if there are no more results.
+  string next_page_token = 2;
+
+  // Total count of matching examples (ignoring pagination).
+  int32 total_count = 3;
+}
+
+// WatchExamplesRequest is the request for WatchExamples.
+message WatchExamplesRequest {
+  // Optional. Only watch examples with these IDs.
+  // If empty, watches all examples.
+  repeated string example_ids = 1;
+
+  // Optional. Only watch examples with these statuses.
+  repeated ExampleStatus status_filter = 2;
+}
+
+// WatchExamplesResponse is the response for WatchExamples streaming RPC.
+message WatchExamplesResponse {
+  // The event that occurred.
+  ExampleEvent event = 1;
+}
+
+// ExampleEvent represents a change to an Example.
+message ExampleEvent {
+  // Unique identifier for this event.
+  string event_id = 1;
+
+  // The type of event that occurred.
+  ExampleEventType event_type = 2;
+
+  // The example after the change.
+  // For DELETE events, this contains the example before deletion.
+  Example example = 3;
+
+  // When this event occurred.
+  google.protobuf.Timestamp timestamp = 4;
+}
+
+// ExampleEventType represents the type of change event.
+enum ExampleEventType {
+  // Default value, should not be used.
+  EXAMPLE_EVENT_TYPE_UNSPECIFIED = 0;
+
+  // A new example was created.
+  EXAMPLE_EVENT_TYPE_CREATED = 1;
+
+  // An existing example was updated.
+  EXAMPLE_EVENT_TYPE_UPDATED = 2;
+
+  // An example was deleted.
+  EXAMPLE_EVENT_TYPE_DELETED = 3;
+
+  // An example's status changed.
+  EXAMPLE_EVENT_TYPE_STATUS_CHANGED = 4;
+}

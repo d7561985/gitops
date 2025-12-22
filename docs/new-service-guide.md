@@ -13,7 +13,7 @@
 
 ## Шаг 1: Регистрация сервиса
 
-Добавьте сервис в `gitops-config/platform/core.yaml`:
+Добавьте сервис в `infra/poc/gitops-config/platform/core.yaml`:
 
 ```yaml
 services:

@@ -212,8 +212,8 @@ git commit -m "Initial commit"
 git push -u origin main
 
 # Применить bootstrap (ArgoCD создаст все Applications)
-kubectl apply -f gitops-config/argocd/project.yaml
-kubectl apply -f gitops-config/argocd/bootstrap-app.yaml
+kubectl apply -f infra/poc/gitops-config/argocd/project.yaml
+kubectl apply -f infra/poc/gitops-config/argocd/bootstrap-app.yaml
 ```
 
 ---
