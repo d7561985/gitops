@@ -94,7 +94,11 @@ spec:
           from: Same
     {{- end }}
     {{- end }}
-    {{- /* Preview environments listener (wildcard for feature branches) */ -}}
+    {{- /* Preview environments listener (for feature branch previews) */ -}}
+    {{- /*
+    Uses wildcard *.baseDomain which covers {jira-tag}.baseDomain
+    HTTPRoute hostnames specify exact {jira-tag}.baseDomain
+    */ -}}
     {{- if $.Values.previewEnvironments.enabled }}
     {{- if eq $gatewayNamespace $.Values.previewEnvironments.gateway.namespace }}
     - name: http-preview
@@ -103,8 +107,7 @@ spec:
       hostname: "*.{{ $.Values.previewEnvironments.baseDomain }}"
       allowedRoutes:
         namespaces:
-          # Allow routes from any namespace (preview namespaces are dynamic)
-          from: All
+          from: Same
     {{- end }}
     {{- end }}
 

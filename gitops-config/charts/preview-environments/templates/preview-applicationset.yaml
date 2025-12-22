@@ -4,13 +4,18 @@ Preview Environments ApplicationSet
 Generates ArgoCD Applications for Merge Requests with JIRA-tagged branches.
 Uses Pull Request Generator to watch GitLab MRs.
 
+Shared Namespace Mode:
+- Previews deploy to existing namespace (e.g., poc-dev)
+- No namespace sprawl, secrets already exist
+- Resources distinguished by appName suffix (e.g., sentry-frontend-jira-0001)
+
 Branch naming convention: PROJ-123-description
 - branchMatch filters: only branches starting with JIRA tag
 - regexFind extracts: JIRA tag for short URL (proj-123.preview.domain.com)
 
 Flow:
   Branch PROJ-123-feature → MR opened → Application created → Preview deployed
-  MR closed/merged → Application deleted → Preview cleaned up
+  MR closed/merged → Application deleted → Preview resources cleaned up
 
 Reference: https://argo-cd.readthedocs.io/en/latest/operator-manual/applicationset/Generators-Pull-Request/
 */ -}}
@@ -87,24 +92,50 @@ spec:
               - $values/{{ $service.cicdPath }}/default.yaml
             # Preview-specific overrides
             values: |
-              # Use image from MR branch (built by CI)
-              image:
-                tag: "{{`{{.head_short_sha}}`}}"
+              # Override app name to include JIRA tag (e.g., sentry-frontend-jira-0001)
+              # This ensures unique resource names in shared namespace
+              appName: "{{ $service.appNameBase | default $serviceName }}-{{`{{ regexFind "^[A-Za-z]+-[0-9]+" .branch | lower }}`}}"
 
-              # Preview-specific hostname (only JIRA tag: proj-123.preview.domain.com)
+              # Use branch name as image tag
+              # CI tags images with sanitized branch name (lowercase, special chars to dashes)
+              # This avoids issues with [skip ci] commits changing HEAD after image build
+              image:
+                tag: "{{`{{.branch | replace "/" "-" | lower}}`}}"
+
+              # Preview-specific hostname: {jira-tag}.domain.com
+              # Format covered by CloudFlare Universal SSL wildcard *.baseDomain
               httpRoute:
+                enabled: true
                 hostnames:
                   - "{{`{{ regexFind "^[A-Za-z]+-[0-9]+" .branch | lower }}`}}.{{ $.Values.previewEnvironments.baseDomain }}"
                 parentRefs:
                   - name: gateway
                     namespace: {{ $.Values.previewEnvironments.gateway.namespace }}
                     sectionName: http-preview
+                rules:
+                  # /api → shared backend (api-gateway-sv in same namespace)
+                  # More specific path takes precedence over catch-all
+                  - matches:
+                      - path:
+                          type: PathPrefix
+                          value: /api
+                    backendRefs:
+                      - name: api-gateway-sv
+                        port: 8080
+                  # / → preview frontend (unique per JIRA tag)
+                  - matches:
+                      - path:
+                          type: PathPrefix
+                          value: /
+                    backendRefs:
+                      - name: "{{ $service.appNameBase | default $serviceName }}-{{`{{ regexFind "^[A-Za-z]+-[0-9]+" .branch | lower }}`}}-sv"
+                        port: 4200
 
-              # Point to dev backend (cross-namespace)
+              # Use same namespace backend (no cross-namespace needed)
               configmap:
-                API_URL: "http://api-gateway-sv.{{ $service.backendNamespace }}.svc.cluster.local:8080"
+                API_URL: "http://api-gateway-sv:8080"
 
-              # Disable Vault for preview (use dev secrets)
+              # Disable Vault for preview (use existing secrets in namespace)
               vault:
                 enabled: false
 
@@ -115,12 +146,11 @@ spec:
 
       destination:
         server: https://kubernetes.default.svc
-        # Each preview gets its own namespace (only JIRA tag)
-        namespace: '{{ $service.namespacePrefix }}-{{`{{ regexFind "^[A-Za-z]+-[0-9]+" .branch | lower }}`}}'
+        # Deploy to existing namespace (secrets already there, no namespace sprawl)
+        namespace: '{{ $service.namespace }}'
 
       syncPolicy:
         syncOptions:
-          - CreateNamespace=true
           - PruneLast=true
         automated:
           prune: true

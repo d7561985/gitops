@@ -1,5 +1,7 @@
 # Pull-Based GitOps with ArgoCD
 
+> **Full documentation:** See [gitops/docs/](../../docs/) for detailed guides on preview environments, domain mirrors, and more.
+
 ## Overview
 
 Pull-based GitOps использует ArgoCD для мониторинга Git репозитория и автоматической синхронизации состояния кластера.

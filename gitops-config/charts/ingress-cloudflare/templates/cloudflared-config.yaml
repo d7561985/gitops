@@ -87,11 +87,11 @@ data:
       {{- end }}
       {{- end }}
       {{- end }}
-      {{- /* Preview Environments (wildcard for feature branches) */ -}}
+      {{- /* Preview Environments (for feature branch previews) */ -}}
       {{- if .Values.previewEnvironments.enabled }}
       {{- $previewGatewayService := printf "http://cilium-gateway-gateway.%s.svc.cluster.local:%d" .Values.previewEnvironments.gateway.namespace (.Values.previewEnvironments.gateway.port | default 80 | int) }}
       # === Preview Environments ===
-      # Wildcard for feature branch previews
+      # Wildcard covers all preview-{jira}.baseDomain subdomains
       - hostname: "*.{{ .Values.previewEnvironments.baseDomain }}"
         service: {{ $previewGatewayService }}
       {{- end }}

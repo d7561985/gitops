@@ -10,10 +10,11 @@ domainMirrors:
   enabled: true
   addToTunnel: true
 
-# Preview environments routing (optional - if enabled)
+# Preview environments routing
+# Format: preview-{jira}.demo-poc-01.work (covered by *.demo-poc-01.work)
 previewEnvironments:
   enabled: true
-  baseDomain: "preview.demo-poc-01.work"
+  baseDomain: "demo-poc-01.work"
   gateway:
     namespace: "poc-dev"
     port: 80

@@ -78,3 +78,20 @@ ingress:
     credentialsSecret: cloudflared-credentials
     replicas: 2
     namespace: cloudflare
+
+# -----------------------------------------------------------------------------
+# Preview Environments (shared config for Gateway & Vault)
+# -----------------------------------------------------------------------------
+previewEnvironments:
+  enabled: true
+  # Preview domain format: {jira-tag}.demo-poc-01.work
+  # Uses *.demo-poc-01.work wildcard (covered by CloudFlare Universal SSL)
+  baseDomain: "demo-poc-01.work"
+  gateway:
+    namespace: "poc-dev"
+    protocol: HTTP
+    port: 80
+  # Vault settings for bootstrap-job
+  vault:
+    enabled: true
+    path: "gitops-poc-dzha/argocd/gitlab-preview/dev"

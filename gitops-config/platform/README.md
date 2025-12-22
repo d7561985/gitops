@@ -2,6 +2,8 @@
 
 Modular platform configuration using centralized values with multi-source ArgoCD Applications.
 
+> **Full documentation:** See [gitops/docs/](../../docs/) for detailed guides on preview environments, domain mirrors, and more.
+
 ## Architecture
 
 ```
@@ -68,15 +70,26 @@ serviceGroups:
 ```
 
 ### Enabling Preview Environments
+
+Preview environments create temporary deployments for Merge Requests with JIRA-tagged branches.
+
+**Domain format**: `{jira-tag}.demo-poc-01.work` (e.g., `jira-0001.demo-poc-01.work`)
+
 Edit `preview.yaml`:
 ```yaml
 previewEnvironments:
   enabled: true
+  baseDomain: "demo-poc-01.work"
   services:
     my-service:
       enabled: true
       projectId: "12345678"
+      branchMatch: "^[A-Z]+-[0-9]+-.*"
+      namespace: "poc-dev"  # Shared namespace mode
+      appNameBase: "my-service"
 ```
+
+> **Detailed guide:** See [preview-environments-guide.md](../../docs/preview-environments-guide.md) for full configuration, CI setup, and troubleshooting.
 
 ## Deployment
 
