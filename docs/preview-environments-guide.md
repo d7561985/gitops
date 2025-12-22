@@ -9,7 +9,7 @@ Preview environments позволяют автоматически деплои�
 **Ключевые принципы:**
 - **GitOps** — ArgoCD Pull Request Generator следит за MR в GitLab
 - **Автоматизация** — создание/удаление при открытии/закрытии MR
-- **Изоляция** — каждый preview в отдельном namespace
+- **Shared Namespace** — preview деплоится в существующий namespace (poc-dev)
 - **Shared Backend** — frontend использует backend из dev environment
 
 ## Архитектура
@@ -18,7 +18,7 @@ Preview environments позволяют автоматически деплои�
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                            GitLab MR                                         │
 │  Разработчик создаёт ветку PROJ-123-description, открывает MR               │
-│  CI собирает image: frontend:{commit-sha}                                    │
+│  CI собирает image: frontend:{branch-name}                                   │
 └─────────────────────────────────────────────────────────────────────────────┘
                                     │
                                     ▼
@@ -33,7 +33,7 @@ Preview environments позволяют автоматически деплои�
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                        ArgoCD Application                                    │
 │  Name: preview-frontend-{jira-tag}                                           │
-│  Namespace: preview-frontend-{jira-tag}                                      │
+│  Namespace: poc-dev (shared namespace)                                       │
 │  Sources:                                                                    │
 │    - k8app chart (v3.8.0)                                                   │
 │    - sentry-demo repo (branch: {branch})                                    │
@@ -41,45 +41,43 @@ Preview environments позволяют автоматически деплои�
                                     │
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                     Kubernetes Resources                                     │
+│                     poc-dev namespace (shared)                               │
 │                                                                              │
-│  Namespace: preview-frontend-proj-123                                        │
 │  ┌────────────────────────────────────────────────────────────────────────┐ │
-│  │ Deployment: sentry-frontend                                             │ │
-│  │   image: registry.../frontend:abc1234                                   │ │
+│  │ Deployment: sentry-frontend-proj-123 (unique name with JIRA suffix)     │ │
+│  │   image: registry.../frontend:proj-123-description                      │ │
 │  │   env:                                                                  │ │
-│  │     API_URL: http://api-gateway-sv.poc-dev.svc.cluster.local:8080      │ │
+│  │     API_URL: http://api-gateway-sv:8080                                 │ │
 │  └────────────────────────────────────────────────────────────────────────┘ │
 │  ┌────────────────────────────────────────────────────────────────────────┐ │
 │  │ HTTPRoute                                                               │ │
-│  │   hostname: proj-123.preview.demo-poc-01.work                           │ │
+│  │   hostname: proj-123.demo-poc-01.work                                   │ │
 │  │   parentRef: gateway/http-preview (poc-dev)                             │ │
+│  │   backendRef: sentry-frontend-proj-123-sv:4200                          │ │
 │  └────────────────────────────────────────────────────────────────────────┘ │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                    │
-                                    │ Cross-namespace routing
-                                    ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                    poc-dev namespace (shared backend)                        │
-│  api-gateway-sv:8080 → game-engine, payment, wager services                 │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │ Existing services: api-gateway-sv, game-engine-sv, etc.                 │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ## Формат домена
 
 ```
-{jira-tag}.preview.{baseDomain}
+{jira-tag}.{baseDomain}
 ```
 
 Из branch name извлекается только JIRA тег для короткого URL:
 
 | Branch | JIRA Tag | URL |
 |--------|----------|-----|
-| `PROJ-123-new-login-feature` | `proj-123` | `proj-123.preview.demo-poc-01.work` |
-| `JIRA-456-fix-button-color` | `jira-456` | `jira-456.preview.demo-poc-01.work` |
-| `ABC-1-test` | `abc-1` | `abc-1.preview.demo-poc-01.work` |
+| `PROJ-123-new-login-feature` | `proj-123` | `proj-123.demo-poc-01.work` |
+| `JIRA-456-fix-button-color` | `jira-456` | `jira-456.demo-poc-01.work` |
+| `ABC-1-test` | `abc-1` | `abc-1.demo-poc-01.work` |
 
 > **Note:** JIRA тег извлекается regex `^[A-Za-z]+-[0-9]+` и приводится к lowercase.
+>
+> **SSL:** CloudFlare Universal SSL покрывает `*.demo-poc-01.work` — Advanced Certificate не требуется!
 
 ### Требования к именам веток
 
@@ -145,25 +143,12 @@ curl -s "https://api.cloudflare.com/client/v4/zones" \
   -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" | jq '.result[] | {name, id}'
 ```
 
-### Шаг 4: Заказать Advanced Certificate
+### Шаг 4: Обновить values.yaml
 
-CloudFlare Universal SSL не покрывает multi-level subdomains. Нужен Advanced Certificate:
-
-1. CloudFlare Dashboard → demo-poc-01.work
-2. SSL/TLS → Edge Certificates
-3. Order Advanced Certificate:
-   - Hostnames:
-     - `demo-poc-01.work`
-     - `*.demo-poc-01.work`
-     - `*.preview.demo-poc-01.work` ← **для preview**
-   - Certificate validity: 1 year
-
-> **Стоимость:** $10/month за домен
-
-### Шаг 5: Обновить values.yaml
+> **Note:** CloudFlare Universal SSL автоматически покрывает `*.demo-poc-01.work` — дополнительный сертификат не требуется!
 
 ```yaml
-# gitops-config/platform/core.yaml
+# gitops-config/platform/preview.yaml
 
 previewEnvironments:
   enabled: true
@@ -173,7 +158,8 @@ previewEnvironments:
     enabled: true
     path: "gitops-poc-dzha/argocd/gitlab-preview/dev"  # Путь в Vault
 
-  baseDomain: "preview.demo-poc-01.work"
+  # Формат домена: {jira-tag}.baseDomain
+  baseDomain: "demo-poc-01.work"
   zoneId: "your-cloudflare-zone-id"
 
   gitlab:
@@ -183,6 +169,9 @@ previewEnvironments:
       key: token
     requeueAfterSeconds: 60
 
+  # Shared namespace mode - все preview в одном namespace
+  sharedNamespace: true
+
   services:
     frontend:
       enabled: true
@@ -190,8 +179,8 @@ previewEnvironments:
       branchMatch: "^[A-Z]+-[0-9]+-.*"  # JIRA tag pattern
       cicdPath: "frontend/.cicd"
       repoURL: "https://gitlab.com/gitops-poc-dzha/sentry-demo.git"
-      namespacePrefix: "preview-frontend"
-      backendNamespace: "poc-dev"
+      namespace: "poc-dev"  # Deploy to existing namespace
+      appNameBase: "sentry-frontend"  # Resources: sentry-frontend-{jira-tag}
 
   gateway:
     namespace: "poc-dev"
@@ -200,7 +189,7 @@ previewEnvironments:
     port: 80
 ```
 
-### Шаг 6: Применить изменения
+### Шаг 5: Применить изменения
 
 ```bash
 git add .
@@ -231,7 +220,7 @@ argocd app sync platform-core --grpc-web
    - ArgoCD обнаружит MR (до 60 сек)
 
 5. **Получить URL**:
-   - URL: `proj-123.preview.demo-poc-01.work` (только JIRA тег!)
+   - URL: `proj-123.demo-poc-01.work` (только JIRA тег!)
    - Или посмотреть в ArgoCD UI
 
 6. **Тестировать**:
@@ -291,15 +280,82 @@ generators:
 | Ресурс | Name | Namespace |
 |--------|------|-----------|
 | ArgoCD Application | `preview-frontend-proj-123` | argocd |
-| Namespace | `preview-frontend-proj-123` | - |
-| Deployment | `sentry-frontend` | preview-frontend-proj-123 |
-| Service | `sentry-frontend-sv` | preview-frontend-proj-123 |
-| HTTPRoute | автогенерируемый | preview-frontend-proj-123 |
+| Deployment | `sentry-frontend-proj-123` | poc-dev |
+| Service | `sentry-frontend-proj-123-sv` | poc-dev |
+| HTTPRoute | автогенерируемый | poc-dev |
+
+**Shared Namespace преимущества:**
+- Секреты уже существуют (нет ручного управления)
+- Нет sprawl namespaces
+- Ресурсы различаются суффиксом JIRA-тега
+
+**HTTPRoute маршрутизация:**
+
+Preview HTTPRoute включает два правила:
+```yaml
+rules:
+  # /api → shared backend (существующий api-gateway)
+  - matches:
+      - path: {type: PathPrefix, value: /api}
+    backendRefs:
+      - name: api-gateway-sv
+        port: 8080
+  # / → preview frontend (уникальный для JIRA тега)
+  - matches:
+      - path: {type: PathPrefix, value: /}
+    backendRefs:
+      - name: sentry-frontend-{jira-tag}-sv
+        port: 4200
+```
+
+Это позволяет preview frontend использовать shared backend для API запросов.
 
 При закрытии MR:
 - ArgoCD Application удаляется
-- Namespace удаляется (cascade)
-- Все ресурсы очищаются
+- Все ресурсы preview (Deployment, Service, HTTPRoute) удаляются
+- Существующие сервисы не затрагиваются
+
+## CI: Image Tagging по имени ветки
+
+**Важно:** CI должен тегировать images именем ветки, а не commit SHA!
+
+### Почему не SHA?
+
+CI часто создаёт `[skip ci]` commits после сборки (например, version bump):
+
+```
+1. CI собирает image с SHA abc123
+2. CI создаёт commit "[skip ci] bump version"
+3. HEAD теперь def456
+4. ArgoCD берёт def456 как image tag
+5. ImagePullBackOff — image def456 не существует!
+```
+
+Branch name остаётся стабильным во время всего MR lifecycle.
+
+### Настройка .gitlab-ci.yml
+
+```yaml
+build:
+  stage: build
+  script:
+    # Build с SHA (для production deployments)
+    - docker build -t $REGISTRY/$SERVICE:$CI_COMMIT_SHORT_SHA .
+    - docker push $REGISTRY/$SERVICE:$CI_COMMIT_SHORT_SHA
+
+    # Также тегировать именем ветки (для preview)
+    - BRANCH_TAG=$(echo "$CI_COMMIT_REF_NAME" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9-]/-/g')
+    - docker tag $REGISTRY/$SERVICE:$CI_COMMIT_SHORT_SHA $REGISTRY/$SERVICE:$BRANCH_TAG
+    - docker push $REGISTRY/$SERVICE:$BRANCH_TAG
+```
+
+### ApplicationSet использует branch tag
+
+```yaml
+# В ApplicationSet template
+image:
+  tag: "{{.branch | replace "/" "-" | lower}}"
+```
 
 ## Ограничения
 
@@ -347,24 +403,62 @@ kubectl logs -n vault-secrets-operator-system -l app.kubernetes.io/name=vault-se
 
 ### SSL ошибка (ERR_SSL_VERSION_OR_CIPHER_MISMATCH)
 
-Advanced Certificate не настроен или не активен:
+CloudFlare Universal SSL покрывает только первый уровень wildcard:
 
-1. CloudFlare → SSL/TLS → Edge Certificates
-2. Проверить что `*.preview.demo-poc-01.work` есть в списке
-3. Status должен быть "Active"
+| Паттерн | Покрывается Universal SSL |
+|---------|---------------------------|
+| `*.demo-poc-01.work` | ✅ Да |
+| `*.preview.demo-poc-01.work` | ❌ Нет |
+
+**Решение:** Используйте формат `{jira-tag}.demo-poc-01.work` (без `.preview.`).
+
+> **Note:** Advanced Certificate ($10/month) НЕ требуется при правильном формате домена!
 
 ### 404 на preview URL
 
 ```bash
 # Проверить HTTPRoute
-kubectl get httproute -n preview-frontend-proj-123
+kubectl get httproute -n poc-dev | grep proj-123
 
 # Проверить что Gateway listener существует
 kubectl get gateway gateway -n poc-dev -o yaml | grep http-preview
 
+# Проверить что hostname в listener правильный (wildcard)
+kubectl get gateway gateway -n poc-dev -o jsonpath='{.spec.listeners[?(@.name=="http-preview")].hostname}'
+# Должно быть: *.demo-poc-01.work
+
 # Проверить cloudflared config
 kubectl get cm cloudflared-config -n cloudflare -o yaml | grep preview
 ```
+
+### Gateway validation error (prefix-*.domain)
+
+Gateway API не поддерживает prefix-wildcard паттерны:
+
+```
+# ❌ Невалидно
+hostname: "preview-*.demo-poc-01.work"
+
+# ✅ Валидно
+hostname: "*.demo-poc-01.work"
+```
+
+**Решение:** Gateway использует стандартный wildcard `*.baseDomain`, HTTPRoute указывает точный hostname.
+
+### ImagePullBackOff
+
+```bash
+# Какой tag ожидается?
+kubectl get deployment -n poc-dev sentry-frontend-proj-123 \
+  -o jsonpath='{.spec.template.spec.containers[0].image}'
+
+# Проверить что image с branch tag существует в registry
+# (команда зависит от вашего registry)
+```
+
+**Частая причина:** CI тегирует по SHA, но после сборки создаётся `[skip ci]` commit.
+
+**Решение:** Тегировать images именем ветки (см. раздел "CI: Image Tagging").
 
 ### Preview не удаляется после merge
 
@@ -395,9 +489,11 @@ kubectl logs -n argocd -l app.kubernetes.io/name=argocd-server | grep webhook
 
 | Компонент | Стоимость |
 |-----------|-----------|
-| CloudFlare Advanced Certificate | $10/month |
+| CloudFlare Universal SSL | $0 (включён) |
 | GitLab (Free tier) | $0 |
 | Kubernetes resources | Minimal (1 pod per preview) |
+
+> **Note:** Advanced Certificate НЕ требуется при использовании формата `{jira-tag}.baseDomain`!
 
 ## См. также
 
