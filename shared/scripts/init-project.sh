@@ -245,7 +245,7 @@ fi
 
 echo_header "Updating Vault secrets script"
 
-VAULT_SCRIPT="$ROOT_DIR/scripts/setup-vault-secrets.sh"
+VAULT_SCRIPT="$ROOT_DIR/shared/scripts/setup-vault-secrets.sh"
 if [ -f "$VAULT_SCRIPT" ]; then
     sed -i.bak "s|gitops-poc|${VAULT_PATH_PREFIX}|g" "$VAULT_SCRIPT"
     rm -f "${VAULT_SCRIPT}.bak"
@@ -273,7 +273,7 @@ for SERVICE in $SERVICES; do
 done
 echo ""
 echo "4. Run infrastructure setup (Vault, ArgoCD):"
-echo "   ./scripts/setup-infrastructure.sh"
+echo "   ./shared/scripts/setup-infrastructure.sh"
 echo ""
 echo "5. Create GitLab Deploy Token for Container Registry:"
 echo "   - Go to: https://${GITLAB_HOST}/${GITLAB_GROUP}/-/settings/repository"
@@ -284,8 +284,8 @@ echo "       GITLAB_DEPLOY_TOKEN_USER='gitlab+deploy-token-xxxxx'"
 echo "       GITLAB_DEPLOY_TOKEN='gldt-xxxxxxxxxxxx'"
 echo ""
 echo "6. Setup registry secrets (creates namespaces):"
-echo "   ./scripts/setup-registry-secret.sh"
+echo "   ./shared/scripts/setup-registry-secret.sh"
 echo ""
 echo "7. Configure Vault secrets:"
-echo "   ./scripts/setup-vault-secrets.sh"
+echo "   ./shared/scripts/setup-vault-secrets.sh"
 echo ""

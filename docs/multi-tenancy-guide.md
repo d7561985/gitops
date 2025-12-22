@@ -445,7 +445,7 @@ helm install rabbitmq bitnami/rabbitmq -n infra-staging
 
 ```bash
 # Add new namespace to the list
-NAMESPACES="poc-dev poc-staging poc-prod" ./scripts/setup-registry-secret.sh
+NAMESPACES="poc-dev poc-staging poc-prod" ./shared/scripts/setup-registry-secret.sh
 ```
 
 ### Step 5: Create Service Overlays

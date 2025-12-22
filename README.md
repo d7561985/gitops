@@ -12,10 +12,10 @@ cp .env.example .env
 vim .env  # Изменить GITLAB_GROUP на свой
 
 # 2. Инициализировать проект (обновит все файлы)
-./scripts/init-project.sh
+./shared/scripts/init-project.sh
 
 # 3. Запустить инфраструктуру
-./scripts/setup-infrastructure.sh
+./shared/scripts/setup-infrastructure.sh
 
 # 4. Полезные команды (Makefile)
 make help              # Показать все команды
@@ -180,7 +180,7 @@ configmap:
 minikube start --cpus 4 --memory 8192 --disk-size 40g
 
 # Установить инфраструктуру (Vault, ArgoCD, vault-admin-token)
-./scripts/setup-infrastructure.sh
+./shared/scripts/setup-infrastructure.sh
 ```
 
 > **Note:** `setup-vault-secrets.sh` больше не нужен! Platform-bootstrap chart автоматически создаёт Vault policies, roles и secret placeholders.
@@ -247,10 +247,10 @@ Kubernetes требует `imagePullSecrets` для доступа к прива
 # Вариант 1: Добавить в .env (рекомендуется)
 echo 'GITLAB_DEPLOY_TOKEN_USER="gitlab+deploy-token-xxxxx"' >> .env
 echo 'GITLAB_DEPLOY_TOKEN="gldt-xxxxxxxxxxxx"' >> .env
-./scripts/setup-registry-secret.sh
+./shared/scripts/setup-registry-secret.sh
 
 # Вариант 2: Интерактивный режим (скрипт запросит credentials)
-./scripts/setup-registry-secret.sh
+./shared/scripts/setup-registry-secret.sh
 ```
 
 Скрипт создаёт:
@@ -330,7 +330,7 @@ gitops-config/
 echo 'GITLAB_TOKEN="glpat-xxxxxxxxxxxx"' >> .env
 
 # 2. Запустить скрипт настройки
-./scripts/setup-pull-based.sh
+./shared/scripts/setup-pull-based.sh
 ```
 
 Скрипт автоматически:
@@ -431,6 +431,12 @@ gitops/                            # Монорепо
 │   │   ├── cert-manager/          # TLS certificates
 │   │   ├── external-dns/          # DNS automation
 │   │   └── cloudflare-tunnel/     # Tunnel setup
+│   ├── scripts/                   # → GitLab: shared/scripts
+│   │   ├── setup-infrastructure.sh    # Install all infrastructure
+│   │   ├── setup-pull-based.sh        # Configure ArgoCD
+│   │   ├── init-project.sh            # Initialize new project
+│   │   ├── setup-vault-secrets.sh     # Create Vault policies
+│   │   └── setup-registry-secret.sh   # Create registry secrets
 │   └── templates/                 # → GitLab: shared/templates
 │       ├── service-repo/          # Template for new services
 │       └── proto-service/         # Template for proto repos
@@ -439,13 +445,6 @@ gitops/                            # Монорепо
 │   ├── sentry-demo/               # Submodule
 │   ├── api-gateway/               # Submodule
 │   └── ...
-│
-├── scripts/
-│   ├── setup-infrastructure.sh    # Install all infrastructure
-│   ├── setup-pull-based.sh        # Configure ArgoCD
-│   ├── init-project.sh            # Initialize new project
-│   ├── setup-vault-secrets.sh     # Create Vault policies
-│   └── setup-registry-secret.sh   # Create registry secrets
 │
 └── docs/                          # Documentation
 ```
@@ -839,7 +838,7 @@ kubectl get secret regsecret -n poc-dev
 kubectl get secret regsecret -n poc-dev -o jsonpath='{.data.\.dockerconfigjson}' | base64 -d | jq
 
 # Если секрета нет - перезапустить
-./scripts/setup-registry-secret.sh
+./shared/scripts/setup-registry-secret.sh
 
 # Проверить что сервис объявляет imagePullSecrets
 kubectl get deployment api-gateway -n poc-dev -o yaml | grep -A3 imagePullSecrets

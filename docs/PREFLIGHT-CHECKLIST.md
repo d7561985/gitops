@@ -119,7 +119,7 @@ cp .env.example .env
 vim .env
 
 # Инициализировать проект (подставит значения в файлы)
-./scripts/init-project.sh
+./shared/scripts/init-project.sh
 ```
 
 ### Обязательные переменные в `.env`
@@ -138,7 +138,7 @@ vim .env
 
 ```bash
 # Запустить всю инфраструктуру
-./scripts/setup-infrastructure.sh
+./shared/scripts/setup-infrastructure.sh
 ```
 
 Скрипт установит:
@@ -175,7 +175,7 @@ kubectl get secret argocd-initial-admin-secret -n argocd \
 ### Pull-based (ArgoCD)
 
 ```bash
-./scripts/setup-pull-based.sh
+./shared/scripts/setup-pull-based.sh
 ```
 
 ### Настроить Release Tracking (CI → ArgoCD)
@@ -206,7 +206,7 @@ argocd account generate-token --account ci-readonly
 
 ```bash
 # Registry secrets для GitLab Container Registry
-./scripts/setup-registry-secret.sh
+./shared/scripts/setup-registry-secret.sh
 
 # Запушить gitops-config в GitLab
 cd infra/poc/gitops-config

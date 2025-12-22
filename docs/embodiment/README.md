@@ -337,18 +337,19 @@ gitops/
 │   │       ├── buf.gen.yaml
 │   │       └── proto/
 │   │
-│   └── infrastructure/         # → Setup scripts (adapt to your env)
-│       ├── */setup.sh
-│       └── monitoring/dashboards/
+│   ├── infrastructure/         # → Setup scripts (adapt to your env)
+│   │   ├── */setup.sh
+│   │   └── monitoring/dashboards/
+│   └── scripts/                # → Automation scripts
+│       ├── init-project.sh
+│       └── setup-*.sh
 │
 ├── docs/                       # → Документация
 │   ├── PREFLIGHT-CHECKLIST.md
 │   ├── proto-grpc-infrastructure.md
 │   └── k8app-recommendations.md
 │
-└── scripts/                    # → Automation scripts
-    ├── init-project.sh
-    └── setup-*.sh
+└── services/                   # → Service submodules
 ```
 
 ---
