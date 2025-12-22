@@ -370,7 +370,7 @@ gitops/
 Детальные инструкции по каждой фазе:
 
 - [Фаза 0: Foundation Setup](./phase-0-foundation.md) *(planned)*
-- [Фаза 1: Platform Bootstrap](./phase-1-platform-bootstrap.md) *(planned)*
+- [Фаза 1: Platform Modules](./phase-1-platform-modules.md) *(planned)*
 - [Фаза 2: CI/CD Migration](./phase-2-cicd-migration.md) *(planned)*
 - [Фаза 3: k8app Integration](./phase-3-k8app-integration.md) *(planned)*
 - [Фаза 4: Proto/gRPC Setup](./phase-4-protogen.md) *(planned)*
