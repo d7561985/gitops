@@ -1,6 +1,6 @@
 # GitOps POC: Multi-Repository Architecture
 
-Демонстрация GitOps подходов (Push и Pull) с мультирепозиторной архитектурой на базе GitLab Agent и ArgoCD.
+GitOps платформа с мультирепозиторной архитектурой на базе ArgoCD.
 
 > **Первый раз?** См. [Pre-flight Checklist](docs/PREFLIGHT-CHECKLIST.md) — полный чеклист настройки GitLab, CloudFlare и инфраструктуры.
 
@@ -394,223 +394,67 @@ make proxy-argocd
   - ApplicationSet для генерации 15 Applications
 - Каждый Application следит за `.cicd/*.yaml` в репо сервиса
 
-### 6. Push-based (GitLab Agent)
-
-Push-based подход использует GitLab Agent для прямого деплоя из CI/CD pipeline в кластер.
-
-#### Шаг 1: Создать репозиторий gitops-config в GitLab
-
-```bash
-# Создать пустой репо в GitLab: https://gitlab.com/groups/${GITLAB_GROUP}/-/new
-# Name: gitops-config
-
-# Запушить содержимое
-cd gitops-config/
-git init
-git remote add origin git@gitlab.com:${GITLAB_GROUP}/gitops-config.git
-git add .
-git commit -m "Initial commit: ArgoCD + GitLab Agent config"
-git push -u origin main
-```
-
-#### Шаг 2: Зарегистрировать агента в GitLab и получить токен
-
-1. Перейти в проект `gitops-config` в GitLab:
-   ```
-   https://gitlab.com/${GITLAB_GROUP}/gitops-config
-   ```
-
-2. **Operate** → **Kubernetes clusters** → **Connect a cluster (agent)**
-
-3. Ввести имя агента: `minikube-agent`
-
-4. Нажать **Create and register**
-
-5. **ВАЖНО: Скопировать токен!** Он показывается только один раз.
-   ```
-   Формат: glagent-xxxxxx-xxxxxxxxxxxxxxxxx
-   ```
-
-6. GitLab также покажет готовую команду Helm — можно использовать её или наш скрипт.
-
-#### Шаг 3: Установить агента в Kubernetes кластер
-
-```bash
-# Убедиться что кластер запущен
-kubectl cluster-info
-
-# Добавить токен в .env файл (полученный на шаге 2)
-echo 'GITLAB_AGENT_TOKEN="glagent-xxxxxx-xxxxxxxxxxxxxxxxx"' >> .env
-
-# Запустить установку через наш скрипт
-./scripts/setup-push-based.sh
-```
-
-Или вручную через Helm:
-```bash
-export GITLAB_AGENT_TOKEN='glagent-xxxxxx-xxxxxxxxxxxxxxxxx'
-helm repo add gitlab https://charts.gitlab.io
-helm repo update
-helm upgrade --install gitlab-agent gitlab/gitlab-agent \
-  --namespace gitlab-agent \
-  --create-namespace \
-  --set config.token=${GITLAB_AGENT_TOKEN} \
-  --set config.kasAddress=wss://kas.gitlab.com
-```
-
-#### Шаг 4: Проверить подключение агента
-
-```bash
-# Проверить что pod запущен
-kubectl get pods -n gitlab-agent
-# Ожидаемый статус: Running
-
-# Проверить логи — должно быть "Feature: agent_configuration started"
-kubectl logs -n gitlab-agent -l app.kubernetes.io/name=gitlab-agent
-
-# В GitLab UI: Operate → Kubernetes clusters
-# Агент должен показывать "Connected"
-```
-
-#### Шаг 5: Настроить CI/CD доступ (ci_access)
-
-Конфиг `.gitlab/agents/minikube-agent/config.yaml` уже есть в репо — он разрешает всем проектам группы использовать агента:
-
-```yaml
-ci_access:
-  groups:
-    - id: gitops-poc-dzha
-```
-
-#### Шаг 6: Переключить CI/CD на Push-based режим
-
-**Вариант A:** Изменить в `.gitlab-ci.yml` каждого сервиса:
-```yaml
-variables:
-  GITOPS_MODE: "push"  # Было: "pull"
-```
-
-**Вариант B:** Добавить переменную на уровне группы:
-```
-GitLab Group → Settings → CI/CD → Variables
-Key: GITOPS_MODE
-Value: push
-```
-
-#### Как это работает (Push-based)
-
-```
-┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│  Developer  │────▶│  GitLab CI  │────▶│GitLab Agent │────▶│  Kubernetes │
-│   commit    │     │ build+helm  │     │  (в кластере)│     │   deploy    │
-└─────────────┘     └─────────────┘     └─────────────┘     └─────────────┘
-```
-
-CI использует контекст агента: `${GITLAB_GROUP}/gitops-config:minikube-agent`
-
-#### Troubleshooting Agent
-
-```bash
-# Статус pod
-kubectl get pods -n gitlab-agent
-
-# Логи (ищи ошибки подключения)
-kubectl logs -n gitlab-agent -l app.kubernetes.io/name=gitlab-agent -f
-
-# События namespace
-kubectl get events -n gitlab-agent --sort-by='.lastTimestamp'
-
-# Переустановить агента
-helm uninstall gitlab-agent -n gitlab-agent
-export GITLAB_AGENT_TOKEN='новый-токен'
-./scripts/setup-push-based.sh
-```
-
-| Проблема | Решение |
-|----------|---------|
-| Pod в CrashLoopBackOff | Неверный токен — перерегистрируй агента |
-| "connection refused" | Проверь kasAddress (должен быть `wss://kas.gitlab.com`) |
-| CI не видит контекст | Проверь ci_access в config.yaml и что агент Connected |
-
 ---
 
 ## Структура проекта
 
 ```
-gitops-poc/                        # Этот репозиторий (GitHub)
+gitops/                            # Монорепо
 ├── README.md
 ├── Makefile                       # Полезные команды (make proxy-all, etc.)
 ├── .env.example                   # Шаблон конфигурации
 ├── .env                           # Конфигурация проекта (не в git)
-├── .gitignore
-├── gitops-config/                 # → Отдельный репо в GitLab
-│   ├── .gitlab/
-│   │   └── agents/
-│   │       └── minikube-agent/
-│   │           └── config.yaml    # Конфиг GitLab Agent (Push-based)
-│   ├── argocd/
-│   │   ├── project.yaml           # ArgoCD Project
-│   │   ├── bootstrap-app.yaml     # "App of Apps" - следит за этой папкой
-│   │   └── platform-modules.yaml  # 4 ArgoCD Applications (platform-core, service-groups, preview-envs, ingress)
-│   └── charts/
-│       └── platform-core/, service-groups/, preview-environments/, ingress-cloudflare/    # Single source of truth для платформы
-│           ├── Chart.yaml
-│           ├── values.yaml        # Сервисы, окружения, Vault config
-│           └── templates/
-│               ├── bootstrap-job.yaml     # Vault policies/roles/secrets
-│               ├── applicationset.yaml    # Генерирует 15 Apps
-│               ├── vault-auth.yaml        # VaultAuth per environment
-│               └── namespaces.yaml        # Namespaces
-├── infrastructure/
-│   ├── vault/                     # Vault + VSO
-│   │   ├── helm-values.yaml
-│   │   ├── vso-values.yaml
-│   │   └── setup.sh
-│   ├── argocd/                    # ArgoCD
-│   │   ├── helm-values.yaml
-│   │   └── setup.sh
-│   └── gitlab-agent/              # GitLab Agent
-│       ├── helm-values.yaml
-│       ├── config.yaml
-│       └── setup.sh
+│
+├── infra/                         # Per-brand infrastructure configs
+│   └── poc/
+│       └── gitops-config/         # → GitLab: infra/poc/gitops-config
+│           ├── argocd/
+│           │   ├── project.yaml           # ArgoCD Project
+│           │   ├── bootstrap-app.yaml     # "App of Apps"
+│           │   └── platform-modules.yaml  # 4 ArgoCD Applications
+│           ├── charts/
+│           │   ├── platform-core/         # Namespaces, ApplicationSet, Vault
+│           │   ├── service-groups/        # Infrastructure access (ArgoCD, Grafana)
+│           │   ├── preview-environments/  # Feature branch previews
+│           │   └── ingress-cloudflare/    # CloudFlare Tunnel routing
+│           └── platform/
+│               ├── base.yaml              # Shared settings
+│               ├── core.yaml              # Services config
+│               └── preview.yaml           # Preview environments config
+│
+├── shared/                        # Shared tooling (all brands)
+│   ├── infrastructure/            # → GitLab: shared/infrastructure
+│   │   ├── vault/                 # Vault + VSO setup
+│   │   ├── argocd/                # ArgoCD setup
+│   │   ├── cilium/                # CNI + Hubble
+│   │   ├── monitoring/            # Prometheus + Grafana
+│   │   ├── cert-manager/          # TLS certificates
+│   │   ├── external-dns/          # DNS automation
+│   │   └── cloudflare-tunnel/     # Tunnel setup
+│   └── templates/                 # → GitLab: shared/templates
+│       ├── service-repo/          # Template for new services
+│       └── proto-service/         # Template for proto repos
+│
+├── services/                      # → GitLab: services/*
+│   ├── sentry-demo/               # Submodule
+│   ├── api-gateway/               # Submodule
+│   └── ...
+│
 ├── scripts/
-│   ├── init-project.sh            # Инициализация проекта
-│   ├── setup-infrastructure.sh
-│   ├── setup-vault-secrets.sh
-│   ├── setup-registry-secret.sh   # imagePullSecrets (regsecret)
-│   ├── setup-push-based.sh
-│   ├── setup-pull-based.sh
-│   └── build-local-images.sh
-├── gitops-config/
-│   └── argocd/
-│       ├── applicationset.yaml    # ArgoCD ApplicationSet
-│       ├── project.yaml           # ArgoCD Project
-│       └── README.md
-├── services/                      # Примеры репозиториев сервисов
-│   ├── api-gateway/
-│   │   ├── .cicd/
-│   │   │   ├── default.yaml       # Включает secrets: и secretsProvider:
-│   │   │   ├── dev.yaml
-│   │   │   ├── staging.yaml
-│   │   │   └── prod.yaml
-│   │   └── .gitlab-ci.yml
-│   ├── auth-adapter/
-│   ├── web-grpc/
-│   ├── web-http/
-│   └── health-demo/
-├── templates/                     # Шаблон для новых сервисов
-│   └── service-repo/
-├── docs/
-│   └── k8app-recommendations.md   # Рекомендации для k8app
-└── tests/
-    └── smoke-test.sh
+│   ├── setup-infrastructure.sh    # Install all infrastructure
+│   ├── setup-pull-based.sh        # Configure ArgoCD
+│   ├── init-project.sh            # Initialize new project
+│   ├── setup-vault-secrets.sh     # Create Vault policies
+│   └── setup-registry-secret.sh   # Create registry secrets
+│
+└── docs/                          # Documentation
 ```
 
 ---
 
 ## GitOps подходы
 
-### Pull-based (ArgoCD) — рекомендуется для Production
+### Pull-based (ArgoCD)
 
 | Характеристика | Описание |
 |----------------|----------|
@@ -629,21 +473,7 @@ update:dev:
     - git push
 ```
 
-### Push-based (GitLab Agent) — для быстрой итерации
-
-| Характеристика | Описание |
-|----------------|----------|
-| Триггер деплоя | Pipeline completion |
-| Источник истины | Git + текущее состояние кластера |
-| Версия образа | `--set image.tag=${CI_COMMIT_SHORT_SHA}` |
-| Rollback | Re-run pipeline или `git revert` |
-
-**CI Pipeline деплоит напрямую:**
-```yaml
-deploy:dev:
-  script:
-    - helm upgrade --install ... --set image.tag=${CI_COMMIT_SHORT_SHA}
-```
+ArgoCD автоматически синхронизирует изменения и деплоит новую версию.
 
 ---
 
@@ -659,7 +489,7 @@ Vault работает в **standalone mode** с persistent storage (PVC). Эт�
 
 **Unseal после рестарта:**
 ```bash
-./infrastructure/vault/unseal.sh
+./shared/infrastructure/vault/unseal.sh
 
 # Или вручную:
 UNSEAL_KEY=$(kubectl get secret vault-keys -n vault -o jsonpath='{.data.unseal-key}' | base64 -d)
@@ -670,7 +500,7 @@ kubectl exec vault-0 -n vault -- vault operator unseal "$UNSEAL_KEY"
 ```bash
 helm uninstall vault -n vault
 kubectl delete pvc data-vault-0 -n vault
-./infrastructure/vault/setup.sh
+./shared/infrastructure/vault/setup.sh
 ```
 
 > **Важно:** После переустановки нужно пересинхронизировать `platform-core` для создания policies и roles.
@@ -782,7 +612,7 @@ secretsProvider:
 
 **3. VaultAuth (создаётся infrastructure-app):**
 
-`gitops-config/infrastructure/poc-dev/vault-auth.yaml`:
+`infra/poc/gitops-config/charts/platform-core/templates/vault-auth.yaml`:
 ```yaml
 apiVersion: secrets.hashicorp.com/v1beta1
 kind: VaultAuth
@@ -1053,7 +883,7 @@ kubectl describe pod -n poc-dev -l app=api-gateway
 
 5. Запустить setup:
    ```bash
-   ./infrastructure/cert-manager/setup.sh
+   ./shared/infrastructure/cert-manager/setup.sh
    ```
 
 ### CloudFlare Tunnel (expose local services)
@@ -1090,7 +920,7 @@ Internet → CloudFlare Edge → Tunnel → cloudflared pod → Gateway → Serv
 
 7. Запустить setup:
    ```bash
-   ./infrastructure/cloudflare-tunnel/setup.sh
+   ./shared/infrastructure/cloudflare-tunnel/setup.sh
    ```
 
 8. Настроить **Public Hostname** в dashboard:
@@ -1185,7 +1015,6 @@ cloudflared tunnel --url http://localhost:8080
 |-----------|---------|-------------|
 | **ArgoCD** | 2.9+ | GitOps continuous delivery, App of Apps pattern |
 | **GitLab CI/CD** | - | Build pipelines, container registry |
-| **GitLab Agent** | - | Push-based deployment option |
 | **Helm** | 3.12+ | Package manager, k8app chart v3.6.0 |
 
 ### Security & Secrets
@@ -1292,7 +1121,6 @@ cloudflared tunnel --url http://localhost:8080
 
 ## Ссылки
 
-- [GitLab Agent CI/CD Workflow](https://docs.gitlab.com/user/clusters/agent/ci_cd_workflow/)
 - [GitLab Container Registry](https://docs.gitlab.com/user/packages/container_registry/)
 - [GitLab Deploy Tokens](https://docs.gitlab.com/user/project/deploy_tokens/)
 - [ArgoCD ApplicationSet](https://argo-cd.readthedocs.io/en/stable/user-guide/application-set/)

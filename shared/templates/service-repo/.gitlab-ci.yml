@@ -1,8 +1,7 @@
 # GitLab CI/CD Pipeline Template for {{SERVICE_NAME}}
-# Supports both Push-based and Pull-based GitOps
+# Pull-based GitOps with ArgoCD
 #
-# Pull-based (ArgoCD): CI builds image, updates .cicd/{env}.yaml, pushes
-# Push-based (GitLab Agent): CI builds image, deploys directly via helm
+# Flow: CI builds image → updates .cicd/{env}.yaml → ArgoCD syncs
 #
 # Replace all {{SERVICE_NAME}} with your actual service name
 #
@@ -22,12 +21,6 @@ variables:
   HELM_CHART: "k8app/app"
   HELM_REPO: "https://d7561985.github.io/k8app"
 
-  # GitLab Agent context (for push-based)
-  KUBE_CONTEXT: "gitops-poc-dzha/gitops-config:minikube-agent"
-
-  # GitOps mode: "pull" or "push"
-  GITOPS_MODE: "pull"
-
   # ArgoCD settings for release tracking
   ARGOCD_OPTS: "--grpc-web"
   RELEASE_TIMEOUT: "300"
@@ -35,8 +28,7 @@ variables:
 stages:
   - build
   - update-manifests
-  - release      # Wait for ArgoCD deployment (pull-based)
-  - deploy       # Only for push-based
+  - release
 
 # ============================================
 # Release Template: Wait for ArgoCD deployment
@@ -121,7 +113,7 @@ build:
     - git fetch origin ${CI_COMMIT_BRANCH}
     - git checkout ${CI_COMMIT_BRANCH}
   rules:
-    - if: $GITOPS_MODE == "pull" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
 
 update:dev:
   extends: .update-manifest
@@ -181,7 +173,7 @@ release:dev:
     - job: update:dev
       optional: true
   rules:
-    - if: $GITOPS_MODE == "pull" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
 
 release:staging:
   extends: .release-template
@@ -193,7 +185,7 @@ release:staging:
     - job: update:staging
       optional: true
   rules:
-    - if: $GITOPS_MODE == "pull" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
   when: manual
 
 release:prod:
@@ -206,79 +198,5 @@ release:prod:
     - job: update:prod
       optional: true
   rules:
-    - if: $GITOPS_MODE == "pull" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
   when: manual
-
-# ============================================
-# Push-based GitOps: Direct deploy via GitLab Agent
-# ============================================
-
-.deploy:
-  stage: deploy
-  image: dtzar/helm-kubectl:3.13
-  before_script:
-    - helm repo add k8app ${HELM_REPO}
-    - helm repo update
-    - kubectl config use-context ${KUBE_CONTEXT}
-  rules:
-    - if: $GITOPS_MODE == "push" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-
-deploy:dev:
-  extends: .deploy
-  environment:
-    name: dev
-    kubernetes:
-      namespace: poc-dev
-  script:
-    - kubectl create namespace poc-dev --dry-run=client -o yaml | kubectl apply -f -
-    - |
-      helm upgrade --install ${SERVICE_NAME} ${HELM_CHART} \
-        --namespace poc-dev \
-        --wait --timeout 5m \
-        -f .cicd/default.yaml \
-        -f .cicd/dev.yaml \
-        --set image.repository=${IMAGE_NAME} \
-        --set image.tag=${CI_COMMIT_SHORT_SHA}
-    - kubectl rollout status deployment/${SERVICE_NAME} -n poc-dev --timeout=3m
-
-deploy:staging:
-  extends: .deploy
-  environment:
-    name: staging
-    kubernetes:
-      namespace: poc-staging
-  script:
-    - kubectl create namespace poc-staging --dry-run=client -o yaml | kubectl apply -f -
-    - |
-      helm upgrade --install ${SERVICE_NAME} ${HELM_CHART} \
-        --namespace poc-staging \
-        --wait --timeout 5m \
-        -f .cicd/default.yaml \
-        -f .cicd/staging.yaml \
-        --set image.repository=${IMAGE_NAME} \
-        --set image.tag=${CI_COMMIT_SHORT_SHA}
-    - kubectl rollout status deployment/${SERVICE_NAME} -n poc-staging --timeout=3m
-  when: manual
-  needs:
-    - deploy:dev
-
-deploy:prod:
-  extends: .deploy
-  environment:
-    name: production
-    kubernetes:
-      namespace: poc-prod
-  script:
-    - kubectl create namespace poc-prod --dry-run=client -o yaml | kubectl apply -f -
-    - |
-      helm upgrade --install ${SERVICE_NAME} ${HELM_CHART} \
-        --namespace poc-prod \
-        --wait --timeout 10m \
-        -f .cicd/default.yaml \
-        -f .cicd/prod.yaml \
-        --set image.repository=${IMAGE_NAME} \
-        --set image.tag=${CI_COMMIT_SHORT_SHA}
-    - kubectl rollout status deployment/${SERVICE_NAME} -n poc-prod --timeout=5m
-  when: manual
-  needs:
-    - deploy:staging
