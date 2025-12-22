@@ -267,7 +267,7 @@ configmap:
 Each environment has its own Gateway resource in the application namespace:
 
 ```yaml
-# Created by platform-bootstrap
+# Created by platform-core
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
@@ -365,7 +365,7 @@ ArgoCD handles all deployments via GitOps:
 ### Automated Promotion (Optional)
 
 ```yaml
-# In platform-bootstrap ApplicationSet
+# In platform-core ApplicationSet
 environments:
   dev:
     enabled: true
@@ -386,7 +386,7 @@ When you need to add a new environment (e.g., `staging` or `prod`):
 
 ### Step 1: Enable Environment in Platform Bootstrap
 
-Edit `gitops-config/charts/platform-bootstrap/values.yaml`:
+Edit `gitops-config/platform/core.yaml`:
 
 ```yaml
 environments:
@@ -501,12 +501,12 @@ vault kv put secret/gitops-poc-dzha/my-service/staging/config \
 # - Gateway resource
 # - ArgoCD Applications for all services
 
-argocd app sync platform-bootstrap
+argocd app sync platform-core
 ```
 
 ### What Gets Auto-Created
 
-When you enable a new environment, `platform-bootstrap` automatically creates:
+When you enable a new environment, `platform-core` automatically creates:
 
 | Resource | Name | Namespace |
 |----------|------|-----------|
@@ -530,16 +530,23 @@ For full isolation, create a new GitOps repository:
 ```
 gitops-brand-b/
 ├── gitops-config/
-│   └── charts/
-│       └── platform-bootstrap/
-│           └── values.yaml      # brand-b specific
+│   ├── charts/
+│   │   ├── platform-core/
+│   │   ├── service-groups/
+│   │   ├── preview-environments/
+│   │   └── ingress-cloudflare/
+│   └── platform/
+│       ├── base.yaml            # brand-b specific
+│       ├── core.yaml
+│       ├── service-groups.yaml
+│       └── ingress.yaml
 ├── services/
 │   └── ...                      # brand-b services
 └── infrastructure/
     └── ...
 ```
 
-Update `values.yaml` for brand-b:
+Update `platform/base.yaml` for brand-b:
 
 ```yaml
 global:
@@ -569,7 +576,8 @@ For lighter isolation, add brand as a new "tenant" in the same repo:
 #### Step 1: Create Brand-Specific Bootstrap
 
 ```bash
-cp -r gitops-config/charts/platform-bootstrap gitops-config/charts/brand-b-bootstrap
+cp -r gitops-config/charts gitops-config-brand-b/charts
+cp -r gitops-config/platform gitops-config-brand-b/platform
 ```
 
 Edit `brand-b-bootstrap/values.yaml`:
@@ -688,7 +696,7 @@ spec:
     pods: "20"
 ```
 
-Add to platform-bootstrap or apply manually.
+Add to platform-core or apply manually.
 
 ---
 
@@ -725,7 +733,7 @@ For each environment (`dev.yaml`, `staging.yaml`, `prod.yaml`):
 
 ### 4. Register in Platform Bootstrap
 
-Add to `gitops-config/charts/platform-bootstrap/values.yaml`:
+Add to `gitops-config/platform/core.yaml`:
 
 ```yaml
 services:
@@ -737,7 +745,7 @@ services:
 
 ### 5. Create Vault Secrets
 
-Secrets are auto-provisioned by platform-bootstrap job, but add actual values:
+Secrets are auto-provisioned by platform-core job, but add actual values:
 
 ```bash
 vault kv put secret/gitops-poc-dzha/my-new-service/dev/config \
@@ -802,7 +810,7 @@ deploy:
 ### ArgoCD Not Syncing
 
 1. Check ApplicationSet: `kubectl get applicationset -n argocd`
-2. Verify service is registered in platform-bootstrap values.yaml
+2. Verify service is registered in platform/core.yaml
 3. Check ArgoCD UI for sync errors
 
 ---

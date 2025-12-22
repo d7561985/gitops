@@ -245,7 +245,7 @@ make proxy-all  # или make proxy-argocd
 2. **Проверить ArgoCD:**
    ```bash
    kubectl get applications -n argocd
-   argocd app sync platform-bootstrap --grpc-web
+   argocd app sync platform-core --grpc-web
    ```
 
 ### Потеряны Vault ключи
@@ -257,8 +257,8 @@ helm uninstall vault -n vault
 kubectl delete pvc data-vault-0 -n vault
 ./infrastructure/vault/setup.sh
 
-# Пересинхронизировать platform-bootstrap
-argocd app sync platform-bootstrap --grpc-web
+# Пересинхронизировать platform-core
+argocd app sync platform-core --grpc-web
 ```
 
 ### Secrets в Vault
@@ -299,7 +299,7 @@ vault kv put secret/${GITLAB_GROUP}/api-gateway/dev/config \
    ```bash
    git add . && git commit -m "feat: add mirror domain"
    git push
-   argocd app sync platform-bootstrap --grpc-web
+   argocd app sync platform-core --grpc-web
    ```
 
 4. **Проверить**:
@@ -382,7 +382,7 @@ previewEnvironments:
 ```bash
 git add . && git commit -m "feat: enable preview environments"
 git push
-argocd app sync platform-bootstrap --grpc-web
+argocd app sync platform-core --grpc-web
 
 # Проверить ApplicationSet
 kubectl get applicationset preview-frontend -n argocd

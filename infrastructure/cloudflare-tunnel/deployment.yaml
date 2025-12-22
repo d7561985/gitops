@@ -1,8 +1,8 @@
 # =============================================================================
 # DEPRECATED - This file is no longer used!
 # =============================================================================
-# CloudFlare Tunnel is now managed by platform-bootstrap Helm chart.
-# See: gitops-config/charts/platform-bootstrap/templates/cloudflared-*.yaml
+# CloudFlare Tunnel is now managed by ingress-cloudflare Helm chart.
+# See: gitops-config/charts/ingress-cloudflare/templates/cloudflared-*.yaml
 #
 # The Helm chart provides:
 # - Automatic ConfigMap generation from values.yaml

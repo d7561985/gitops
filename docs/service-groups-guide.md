@@ -326,7 +326,7 @@ git commit -m "feat: enable infrastructure domains"
 git push
 
 # Синхронизировать ArgoCD
-argocd app sync platform-bootstrap --grpc-web
+argocd app sync platform-service-groups --grpc-web
 ```
 
 ### 5. Проверить

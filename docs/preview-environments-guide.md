@@ -134,7 +134,7 @@ vault kv put secret/gitops-poc-dzha/argocd/gitlab-preview/dev \
 > По умолчанию: `gitops-poc-dzha/argocd/gitlab-preview/dev`
 >
 > VSO автоматически синхронизирует токен в K8s secret (имя из `tokenRef.secretName`).
-> Это происходит при sync platform-bootstrap.
+> Это происходит при sync platform-core.
 
 ### Шаг 3: Получить CloudFlare Zone ID
 
@@ -163,7 +163,7 @@ CloudFlare Universal SSL не покрывает multi-level subdomains. Нуж�
 ### Шаг 5: Обновить values.yaml
 
 ```yaml
-# gitops-config/charts/platform-bootstrap/values.yaml
+# gitops-config/platform/core.yaml
 
 previewEnvironments:
   enabled: true
@@ -207,7 +207,7 @@ git add .
 git commit -m "feat: enable preview environments for frontend"
 git push
 
-argocd app sync platform-bootstrap --grpc-web
+argocd app sync platform-core --grpc-web
 ```
 
 ## Использование

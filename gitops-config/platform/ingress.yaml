@@ -1,0 +1,19 @@
+# =============================================================================
+# Ingress Configuration - CloudFlare Tunnel
+# =============================================================================
+# Aggregates routing from all platform components.
+# This file combines routes from environments, service-groups, preview-envs.
+# =============================================================================
+
+# Domain mirrors support for environments
+domainMirrors:
+  enabled: true
+  addToTunnel: true
+
+# Preview environments routing (optional - if enabled)
+previewEnvironments:
+  enabled: true
+  baseDomain: "preview.demo-poc-01.work"
+  gateway:
+    namespace: "poc-dev"
+    port: 80

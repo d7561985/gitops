@@ -86,7 +86,7 @@
 **Цель:** Единый source of truth для всей платформы
 
 ```yaml
-# Что делает platform-bootstrap chart:
+# Что делает platform-core chart:
 1. Создает namespaces (poc-dev, poc-staging, poc-prod)
 2. Настраивает Vault policies/roles автоматически
 3. Создает VaultAuth ресурсы
@@ -132,7 +132,7 @@ BEFORE (ad-hoc):                    AFTER (unified):
 | 2.2 | Скопировать `.gitlab-ci.yml` | `templates/service-repo/.gitlab-ci.yml` |
 | 2.3 | Настроить `default.yaml` (ports, env vars, secrets) | — |
 | 2.4 | Настроить `dev.yaml` (image repository) | — |
-| 2.5 | Добавить сервис в `platform-bootstrap/values.yaml` | — |
+| 2.5 | Добавить сервис в `platform/core.yaml` | — |
 
 **CI/CD Variables (на уровне группы):**
 
@@ -188,7 +188,7 @@ secrets:
 secretsProvider:
   provider: vault
   vault:
-    authRef: vault-auth       # Создается platform-bootstrap
+    authRef: vault-auth       # Создается platform-core
     mount: secret
     type: kv-v2
 ```
@@ -323,7 +323,7 @@ metrics:
 ```
 gitops/
 ├── gitops-config/              # → Весь репозиторий в GitLab
-│   ├── charts/platform-bootstrap/  # Single source of truth
+│   ├── charts/platform-core/  # Single source of truth
 │   └── argocd/                      # App of Apps
 │
 ├── templates/

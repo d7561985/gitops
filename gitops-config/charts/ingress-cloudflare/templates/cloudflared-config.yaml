@@ -20,7 +20,7 @@ metadata:
   name: cloudflared-config
   namespace: {{ .Values.ingress.cloudflare.namespace | default "cloudflare" }}
   labels:
-    app.kubernetes.io/name: platform-bootstrap
+    app.kubernetes.io/name: ingress-cloudflare
     app.kubernetes.io/component: cloudflare-tunnel
   annotations:
     # Annotation for stakater/Reloader to restart cloudflared on config change
@@ -30,7 +30,7 @@ data:
     # ==========================================================================
     # CloudFlare Tunnel Configuration (Locally-Managed)
     # ==========================================================================
-    # Этот файл генерируется автоматически из platform-bootstrap Helm chart.
+    # Этот файл генерируется автоматически из ingress-cloudflare Helm chart.
     # Не редактируйте вручную - изменения будут перезаписаны!
     #
     # Добавление нового домена:

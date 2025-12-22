@@ -1,0 +1,70 @@
+# =============================================================================
+# Platform Core - Default Values
+# =============================================================================
+# Core infrastructure for application deployment.
+# Creates namespaces, gateways, applicationsets, vault auth.
+# =============================================================================
+
+# Inherited from base.yaml
+global: {}
+environments: {}
+services: {}
+vault: {}
+vaultAuth: {}
+dns: {}
+ingress: {}
+
+# Namespaces
+namespaces:
+  enabled: true
+  labels:
+    app.kubernetes.io/managed-by: platform-core
+
+# Gateway for environments
+gateway:
+  enabled: true
+  gatewayClassName: cilium
+  listener:
+    name: http-app
+    protocol: HTTP
+    port: 80
+  certManager:
+    enabled: false
+
+# Domain mirrors
+domainMirrors:
+  enabled: true
+  addToGateway: true
+  createDNS: true
+  addToTunnel: true
+  defaultRoutes:
+    - name: api
+      path: /api
+      pathType: PathPrefix
+      serviceName: api-gateway-sv
+      servicePort: 8080
+    - name: frontend
+      path: /
+      pathType: PathPrefix
+      serviceName: sentry-frontend-sv
+      servicePort: 4200
+
+# ApplicationSet for services
+applicationSet:
+  enabled: true
+  name: gitops-services
+  project: ""  # Set in values
+
+# Bootstrap job for Vault
+job:
+  enabled: true
+  image: hashicorp/vault:1.15
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 300
+  hook: PreSync
+  hookDeletePolicy: HookSucceeded
+  syncWave: "-10"
+
+# Preview environments support (for gateway listener)
+previewEnvironments:
+  enabled: false

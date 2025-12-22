@@ -1,0 +1,11 @@
+apiVersion: v2
+name: ingress-cloudflare
+description: CloudFlare Tunnel ingress provider with automatic routing configuration
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+
+# Aggregates routing from all platform components:
+# - environments (app domains + mirrors)
+# - serviceGroups (infra domains)
+# - previewEnvironments (wildcard preview)

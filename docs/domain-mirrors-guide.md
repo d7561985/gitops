@@ -117,7 +117,7 @@ external-dns работает автоматически:
 3. **Proxied** — включён глобально флагом `--cloudflare-proxied`
 
 ```yaml
-# Gateway (platform-bootstrap) — определяет target для DNS
+# Gateway (platform-core) — определяет target для DNS
 metadata:
   annotations:
     external-dns.alpha.kubernetes.io/target: "<tunnel-id>.cfargotunnel.com"
@@ -181,9 +181,9 @@ Service: api-gateway-sv → Pod
 
 | Ресурс | Создаётся | Кем |
 |--------|-----------|-----|
-| Gateway listener | Автоматически | platform-bootstrap (Helm) |
-| HTTPRoute | Автоматически | platform-bootstrap (Helm) |
-| Tunnel ingress rule | Автоматически | platform-bootstrap (ConfigMap) |
+| Gateway listener | Автоматически | platform-core (Helm) |
+| HTTPRoute | Автоматически | platform-core (Helm) |
+| Tunnel ingress rule | Автоматически | platform-ingress (ConfigMap) |
 | DNS CNAME запись | Автоматически | external-dns |
 
 ### Преимущества
@@ -288,7 +288,7 @@ curl -s "https://api.cloudflare.com/client/v4/zones" \
 ### Шаг 3: Добавить зеркало в values.yaml
 
 ```yaml
-# gitops-config/charts/platform-bootstrap/values.yaml
+# gitops-config/platform/core.yaml
 
 environments:
   dev:
@@ -312,10 +312,10 @@ git push
 
 ```bash
 # Проверить статус
-argocd app get platform-bootstrap --grpc-web
+argocd app get platform-core --grpc-web
 
 # Принудительный sync
-argocd app sync platform-bootstrap --grpc-web
+argocd app sync platform-core --grpc-web
 ```
 
 ### Шаг 6: Проверить
@@ -440,11 +440,11 @@ Zero Trust → Networks → Tunnels → [ваш tunnel] → Public Hostname → 
 
 ```bash
 # Проверить что template генерируется
-helm template platform-bootstrap ./charts/platform-bootstrap \
+helm template platform-core ./charts/platform-core \
   | grep -A50 "kind: HTTPRoute" | grep mirror
 
 # Проверить values
-helm template platform-bootstrap ./charts/platform-bootstrap \
+helm template platform-core ./charts/platform-core \
   --set "environments.dev.mirrors[0].domain=test.com" \
   --set "environments.dev.mirrors[0].zoneId=abc"
 ```

@@ -8,12 +8,12 @@
 - **ArgoCD** для деплоя
 - **k8app Helm chart** (v3.8.0+) для стандартизации
 - **Vault** для секретов
-- **platform-bootstrap** для автоматической конфигурации
+- **platform-core** для автоматической конфигурации
 - **Distroless images** для безопасности (Go, Node.js)
 
 ## Шаг 1: Регистрация сервиса
 
-Добавьте сервис в `gitops-config/charts/platform-bootstrap/values.yaml`:
+Добавьте сервис в `gitops-config/platform/core.yaml`:
 
 ```yaml
 services:
@@ -555,7 +555,7 @@ import (
 
 ## Чеклист
 
-- [ ] Добавлен в platform-bootstrap/values.yaml
+- [ ] Добавлен в platform/core.yaml
 - [ ] Создан репозиторий с кодом
 - [ ] Выбран подходящий Dockerfile (distroless для Go/Node.js)
 - [ ] Создан .cicd/default.yaml

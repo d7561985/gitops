@@ -113,7 +113,7 @@
 | Операция | Developer | Tech Lead | Maintainer | SRE/Platform | Security |
 |----------|:---------:|:---------:|:----------:|:------------:|:--------:|
 | **gitops-config changes** | - | C | C | R | A |
-| **platform-bootstrap update** | - | C | C | R | A |
+| **platform-core update** | - | C | C | R | A |
 | **New service onboarding** | C | R | A | C | C |
 | **Namespace creation** | - | C | C | R | A |
 | **Network policy changes** | - | C | C | R | A |

@@ -1,0 +1,113 @@
+# =============================================================================
+# Service Groups - Infrastructure Services External Access
+# =============================================================================
+# Provides external access to infrastructure services like ArgoCD, Grafana, etc.
+# Each service gets its own subdomain with automatic DNS and routing.
+#
+# URL format: {subdomain}.{clusterName}.{baseDomain}
+# Example: argocd.poc.infra-01.work
+#
+# Multi-cluster support: change clusterName per cluster
+#   - poc      → argocd.poc.infra-01.work
+#   - prod-eu  → argocd.prod-eu.infra-01.work
+# =============================================================================
+
+serviceGroups:
+  # ===========================================================================
+  # Infrastructure - ArgoCD, Grafana, Vault, Hubble
+  # ===========================================================================
+  infrastructure:
+    enabled: true
+
+    # Base domain for service group
+    baseDomain: "infra-01.work"
+
+    # Unique cluster name (part of URL)
+    clusterName: "poc"
+
+    # Namespace for this group's Gateway
+    gatewayNamespace: "platform"
+
+    # CloudFlare Zone ID
+    zoneId: "cca72b9991480eb87d5e07717ddb8a4a"
+
+    # Gateway configuration
+    gateway:
+      gatewayClassName: cilium
+      protocol: HTTP
+      port: 80
+
+    # Security: IP whitelist (VPN/Office)
+    # Implemented via CiliumNetworkPolicy
+    security:
+      ipWhitelist:
+        enabled: false  # Enable when VPN is configured
+        cidrs: []
+          # - "10.8.0.0/24"     # VPN range
+          # - "192.168.1.0/24"  # Office network
+
+    # Services with external access
+    services:
+      argocd:
+        enabled: true
+        subdomain: argocd
+        namespace: argocd
+        serviceName: argocd-server
+        servicePort: 80
+        path: /
+        pathType: PathPrefix
+
+      grafana:
+        enabled: true
+        subdomain: grafana
+        namespace: monitoring
+        serviceName: kube-prometheus-stack-grafana
+        servicePort: 80
+        path: /
+        pathType: PathPrefix
+
+      vault:
+        enabled: true
+        subdomain: vault
+        namespace: vault
+        serviceName: vault
+        servicePort: 8200
+        path: /
+        pathType: PathPrefix
+
+      hubble:
+        enabled: true
+        subdomain: hubble
+        namespace: kube-system
+        serviceName: hubble-ui
+        servicePort: 80
+        path: /
+        pathType: PathPrefix
+
+  # ===========================================================================
+  # Databases - MongoDB, Redis admin access (example, disabled)
+  # ===========================================================================
+  # databases:
+  #   enabled: false
+  #   baseDomain: "db.demo-poc-01.work"
+  #   clusterName: "poc"
+  #   gatewayNamespace: "platform-db"
+  #   zoneId: ""
+  #   gateway:
+  #     gatewayClassName: cilium
+  #     protocol: HTTP
+  #     port: 80
+  #   security:
+  #     ipWhitelist:
+  #       enabled: true
+  #       cidrs:
+  #         - "10.8.0.0/24"  # Only VPN
+  #   services:
+  #     mongo-express:
+  #       enabled: false
+  #       subdomain: mongo
+  #       namespace: infra-dev
+  #       serviceName: mongo-express
+  #       servicePort: 8081
+  #       path: /
+  #       pathType: PathPrefix

@@ -1,0 +1,53 @@
+# =============================================================================
+# Preview Environments Chart - Default Values
+# =============================================================================
+# This chart creates:
+# - VaultAuth for argocd namespace
+# - VaultStaticSecret for GitLab token
+# - ApplicationSet for preview environments
+#
+# Merge with base.yaml for full configuration.
+# =============================================================================
+
+previewEnvironments:
+  enabled: false
+
+  # Vault integration
+  vault:
+    enabled: true
+    path: ""  # Required: e.g., "gitops-poc-dzha/argocd/gitlab-preview/dev"
+
+  # Preview domain
+  baseDomain: ""  # Required: e.g., "preview.demo-poc-01.work"
+  zoneId: ""      # CloudFlare Zone ID
+
+  # GitLab connection
+  gitlab:
+    api: "https://gitlab.com/"
+    tokenRef:
+      secretName: gitlab-preview-token
+      key: token
+    requeueAfterSeconds: 60
+
+  # Services to enable preview for
+  services: {}
+    # frontend:
+    #   enabled: true
+    #   projectId: ""
+    #   branchMatch: "^[A-Z]+-[0-9]+-.*"
+    #   cicdPath: "frontend/.cicd"
+    #   repoURL: ""
+    #   namespacePrefix: "preview-frontend"
+    #   backendNamespace: "poc-dev"
+
+  # Gateway configuration
+  gateway:
+    namespace: ""  # Required: e.g., "poc-dev"
+    gatewayClassName: cilium
+    protocol: HTTP
+    port: 80
+
+# Inherited from base.yaml
+global: {}
+vault: {}
+vaultAuth: {}

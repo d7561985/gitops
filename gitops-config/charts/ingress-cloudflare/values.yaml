@@ -1,0 +1,30 @@
+# =============================================================================
+# CloudFlare Tunnel Ingress - Default Values
+# =============================================================================
+# This chart creates cloudflared deployment with automatic routing.
+# Aggregates routes from: environments, serviceGroups, previewEnvironments.
+# =============================================================================
+
+# Inherited from base.yaml
+global:
+  namespacePrefix: poc
+
+# Ingress provider settings
+ingress:
+  provider: cloudflare-tunnel
+  cloudflare:
+    enabled: true
+    tunnelId: ""            # Required: your tunnel ID
+    credentialsSecret: cloudflared-credentials
+    replicas: 2
+    namespace: cloudflare
+
+# Domain mirrors support
+domainMirrors:
+  enabled: true
+  addToTunnel: true
+
+# Routing sources (populated from other values files):
+environments: {}
+serviceGroups: {}
+previewEnvironments: {}

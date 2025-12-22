@@ -1,0 +1,8 @@
+apiVersion: v2
+name: service-groups
+description: Infrastructure service exposure (ArgoCD, Grafana, Vault, etc.)
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+
+# Self-contained chart - creates own Gateway and routing

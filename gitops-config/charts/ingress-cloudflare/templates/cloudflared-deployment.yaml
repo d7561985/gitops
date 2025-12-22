@@ -61,7 +61,7 @@ metadata:
   name: {{ .Values.ingress.cloudflare.namespace | default "cloudflare" }}
   labels:
     app.kubernetes.io/name: cloudflare-tunnel
-    app.kubernetes.io/managed-by: platform-bootstrap
+    app.kubernetes.io/managed-by: ingress-cloudflare
 
 ---
 # =============================================================================
@@ -78,7 +78,7 @@ metadata:
   labels:
     app.kubernetes.io/name: cloudflared
     app.kubernetes.io/component: tunnel
-    app.kubernetes.io/managed-by: platform-bootstrap
+    app.kubernetes.io/managed-by: ingress-cloudflare
 spec:
   replicas: {{ .Values.ingress.cloudflare.replicas | default 2 }}
   selector:

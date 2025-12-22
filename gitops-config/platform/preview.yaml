@@ -1,0 +1,44 @@
+# =============================================================================
+# Preview Environments Configuration
+# =============================================================================
+# Chart-specific values for preview-environments.
+# Combined with base.yaml by ArgoCD multi-source.
+# =============================================================================
+
+previewEnvironments:
+  enabled: true
+
+  # Vault integration
+  vault:
+    enabled: true
+    path: "gitops-poc-dzha/argocd/gitlab-preview/dev"
+
+  # Preview domain
+  baseDomain: "preview.demo-poc-01.work"
+  zoneId: "4326314d3e3737ed7a7cde0081ab31af"
+
+  # GitLab connection
+  gitlab:
+    api: "https://gitlab.com/"
+    tokenRef:
+      secretName: gitlab-preview-token
+      key: token
+    requeueAfterSeconds: 60
+
+  # Services to enable preview for
+  services:
+    frontend:
+      enabled: true
+      projectId: "76998085"
+      branchMatch: "^[A-Z]+-[0-9]+-.*"
+      cicdPath: "frontend/.cicd"
+      repoURL: "https://gitlab.com/gitops-poc-dzha/sentry-demo.git"
+      namespacePrefix: "preview-frontend"
+      backendNamespace: "poc-dev"
+
+  # Gateway configuration
+  gateway:
+    namespace: "poc-dev"
+    gatewayClassName: cilium
+    protocol: HTTP
+    port: 80

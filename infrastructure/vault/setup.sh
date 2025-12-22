@@ -201,7 +201,7 @@ else
     export VAULT_TOKEN="$ROOT_TOKEN"
 fi
 
-# Store root token in vault-admin-token secret for platform-bootstrap
+# Store root token in vault-admin-token secret for platform-core
 echo_info "Creating vault-admin-token secret..."
 kubectl create secret generic vault-admin-token -n vault \
     --from-literal=token="$VAULT_TOKEN" \
@@ -246,7 +246,7 @@ echo "Vault Status:"
 vault status
 echo ""
 echo "Next steps:"
-echo "  1. Run platform-bootstrap to create policies and roles"
+echo "  1. Run platform-core to create policies and roles"
 echo "  2. Access Vault UI: kubectl port-forward svc/vault -n vault 8200:8200"
 echo "     Then open http://localhost:8200"
 if [ -f "$VAULT_KEYS_FILE" ]; then

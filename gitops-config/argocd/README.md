@@ -73,13 +73,21 @@ kubectl apply -f gitops-config/argocd/project.yaml
 kubectl apply -f gitops-config/argocd/bootstrap-app.yaml
 ```
 
-Bootstrap Application автоматически создаёт:
-- **platform-bootstrap** — Helm chart, который генерирует:
-  - Namespaces (poc-dev, poc-staging, poc-prod)
-  - Vault policies и Kubernetes auth roles
-  - Vault secret placeholders
-  - ApplicationSet для всех сервисов
-  - VaultAuth ресурсы для каждого окружения
+Bootstrap Application автоматически создаёт модульные charts:
+
+| Application | Chart | Description |
+|-------------|-------|-------------|
+| platform-core | charts/platform-core | Namespaces, Gateway, ApplicationSet, VaultAuth |
+| platform-service-groups | charts/service-groups | Infrastructure access (ArgoCD, Grafana, Vault) |
+| platform-preview-envs | charts/preview-environments | Feature branch preview deployments |
+| platform-ingress | charts/ingress-cloudflare | CloudFlare Tunnel routing |
+
+Конфигурация в `platform/` (multi-source values):
+- `base.yaml` — shared settings (global, dns, vault, environments)
+- `core.yaml` — services registry, namespaces
+- `service-groups.yaml` — infrastructure services
+- `preview.yaml` — preview environments
+- `ingress.yaml` — cloudflare routing
 
 ## Sync Waves
 
