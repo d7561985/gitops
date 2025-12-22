@@ -31,7 +31,7 @@ GitOps — операционная модель для cloud-native прило�
 # helm install my-app ...
 
 # Используется декларативное описание:
-# gitops-config/charts/platform-bootstrap/values.yaml
+# gitops-config/platform/core.yaml
 
 environments:
   dev:
@@ -51,7 +51,7 @@ services:
 - Версионность: вся история изменений сохранена
 - Review: изменения можно проверить до применения
 
-**Источник:** [`gitops-config/charts/platform-bootstrap/values.yaml`](../gitops-config/charts/platform-bootstrap/values.yaml)
+**Источник:** [`gitops-config/platform/core.yaml`](../gitops-config/platform/core.yaml)
 
 ---
 
@@ -193,7 +193,7 @@ services:
 **AutoSync Configuration:**
 
 ```yaml
-# gitops-config/charts/platform-bootstrap/values.yaml
+# gitops-config/platform/core.yaml
 environments:
   dev:
     autoSync: true      # ← Automatic reconciliation
@@ -203,7 +203,7 @@ environments:
     autoSync: false     # ← Manual approval required
 ```
 
-**Источник:** [`gitops-config/charts/platform-bootstrap/values.yaml:47-78`](../gitops-config/charts/platform-bootstrap/values.yaml)
+**Источник:** [`gitops-config/platform/core.yaml:47-78`](../gitops-config/platform/core.yaml)
 
 ---
 

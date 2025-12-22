@@ -8,7 +8,7 @@ Service repository template for GitOps POC.
 2. Replace all `{{SERVICE_NAME}}` with your actual service name
 3. Choose appropriate Dockerfile from `dockerfiles/` directory
 4. Update `.cicd/default.yaml` with your service configuration
-5. Register the service in `gitops-config/charts/platform-bootstrap/values.yaml`
+5. Register the service in `gitops-config/platform/core.yaml`
 
 ## Structure
 
@@ -231,7 +231,7 @@ rm -f /tmp/gitlab_token
 
 ## Service Registration
 
-Add your service to `gitops-config/charts/platform-bootstrap/values.yaml`:
+Add your service to `gitops-config/platform/core.yaml`:
 
 ```yaml
 services:

@@ -131,7 +131,7 @@ l7Proxy: true                    # L7 visibility
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
-**Конфигурация Gateway:** [`gitops-config/charts/platform-bootstrap/templates/gateway.yaml`](../gitops-config/charts/platform-bootstrap/templates/gateway.yaml)
+**Конфигурация Gateway:** [`gitops-config/charts/platform-core/templates/gateway.yaml`](../gitops-config/charts/platform-core/templates/gateway.yaml)
 
 **Конфигурация HTTPRoute (пример):**
 
@@ -200,7 +200,7 @@ httpRoute:
 
 **Конфигурация VSO:** [`infrastructure/vault/vso-values.yaml`](../infrastructure/vault/vso-values.yaml)
 
-**Bootstrap Job:** [`gitops-config/charts/platform-bootstrap/templates/bootstrap-job.yaml`](../gitops-config/charts/platform-bootstrap/templates/bootstrap-job.yaml)
+**Bootstrap Job:** [`gitops-config/charts/platform-core/templates/bootstrap-job.yaml`](../gitops-config/charts/platform-core/templates/bootstrap-job.yaml)
 
 Автоматически создаёт:
 - Vault policies для каждого namespace/env
@@ -238,7 +238,7 @@ secret/data/{VAULT_PATH_PREFIX}/{service}/{env}/config
 │            │ Creates                                                     │
 │            ▼                                                             │
 │  ┌───────────────────┐                                                   │
-│  │ platform-bootstrap│ ◄── Helm chart, Single Source of Truth           │
+│  │ platform-modules  │ ◄── Helm chart, Single Source of Truth           │
 │  │ Application       │                                                   │
 │  └─────────┬─────────┘                                                   │
 │            │                                                             │
@@ -259,7 +259,7 @@ secret/data/{VAULT_PATH_PREFIX}/{service}/{env}/config
 
 **Bootstrap Application:** [`gitops-config/argocd/bootstrap-app.yaml`](../gitops-config/argocd/bootstrap-app.yaml)
 
-**ApplicationSet:** [`gitops-config/charts/platform-bootstrap/templates/applicationset.yaml`](../gitops-config/charts/platform-bootstrap/templates/applicationset.yaml)
+**ApplicationSet:** [`gitops-config/charts/platform-core/templates/applicationset.yaml`](../gitops-config/charts/platform-core/templates/applicationset.yaml)
 
 ---
 
@@ -351,7 +351,7 @@ secret/data/{VAULT_PATH_PREFIX}/{service}/{env}/config
 
 ### Single Source of Truth
 
-Весь платформенный слой описан в одном Helm chart: [`gitops-config/charts/platform-bootstrap/`](../gitops-config/charts/platform-bootstrap/)
+Весь платформенный слой описан в одном Helm chart: [`gitops-config/charts/platform-core/`](../gitops-config/charts/platform-core/)
 
 **Что генерирует chart:**
 
@@ -366,7 +366,7 @@ secret/data/{VAULT_PATH_PREFIX}/{service}/{env}/config
 | `cloudflared-config.yaml` | ConfigMap | Tunnel ingress rules для mirrors |
 | `reference-grant.yaml` | ReferenceGrant | Cross-namespace routing |
 
-**Конфигурация:** [`gitops-config/charts/platform-bootstrap/values.yaml`](../gitops-config/charts/platform-bootstrap/values.yaml)
+**Конфигурация:** [`gitops-config/platform/core.yaml`](../gitops-config/platform/core.yaml)
 
 ```yaml
 # Ключевые секции values.yaml
@@ -439,7 +439,7 @@ Ingress провайдер полностью независим от DNS manage
 **Конфигурация провайдеров:**
 
 ```yaml
-# gitops-config/charts/platform-bootstrap/values.yaml
+# gitops-config/platform/core.yaml
 
 ingress:
   provider: cloudflare-tunnel   # или: haproxy, nginx, external
@@ -458,7 +458,7 @@ ingress:
   #   loadBalancerIP: "203.0.113.20"
 ```
 
-**Источник:** [`gitops-config/charts/platform-bootstrap/values.yaml:224-257`](../gitops-config/charts/platform-bootstrap/values.yaml)
+**Источник:** [`gitops-config/platform/core.yaml:224-257`](../gitops-config/platform/core.yaml)
 
 ---
 
@@ -516,7 +516,7 @@ ingress:
 │                     EXTERNAL-DNS FLOW                                    │
 ├─────────────────────────────────────────────────────────────────────────┤
 │                                                                          │
-│  platform-bootstrap                                                      │
+│  platform-modules                                                      │
 │  ──────────────────                                                      │
 │  gateway.yaml template adds annotations:                                │
 │                                                                          │
@@ -556,7 +556,7 @@ ingress:
 ### Конфигурация в values.yaml
 
 ```yaml
-# platform-bootstrap values.yaml
+# platform-modules values.yaml
 dns:
   enabled: true
   provider: cloudflare
@@ -580,7 +580,7 @@ annotations:
   external-dns.alpha.kubernetes.io/target: "203.0.113.10"
 ```
 
-**Источник:** [`gitops-config/charts/platform-bootstrap/templates/gateway.yaml:46-66`](../gitops-config/charts/platform-bootstrap/templates/gateway.yaml)
+**Источник:** [`gitops-config/charts/platform-core/templates/gateway.yaml:46-66`](../gitops-config/charts/platform-core/templates/gateway.yaml)
 
 ### helm-values.yaml
 
@@ -683,7 +683,7 @@ Domain Mirrors — функциональность для автоматиче�
 ### Конфигурация
 
 ```yaml
-# gitops-config/charts/platform-bootstrap/values.yaml
+# gitops-config/platform/core.yaml
 
 environments:
   dev:
@@ -722,7 +722,7 @@ domainMirrors:
       servicePort: 4200
 ```
 
-**Источник:** [`gitops-config/charts/platform-bootstrap/values.yaml:47-80, 279-318`](../gitops-config/charts/platform-bootstrap/values.yaml)
+**Источник:** [`gitops-config/platform/core.yaml:47-80, 279-318`](../gitops-config/platform/core.yaml)
 
 ### Ключевые особенности
 
@@ -735,9 +735,9 @@ domainMirrors:
 
 | Template | Функция |
 |----------|---------|
-| [`gateway.yaml`](../gitops-config/charts/platform-bootstrap/templates/gateway.yaml) | Добавляет listeners для mirrors |
-| [`httproute-mirrors.yaml`](../gitops-config/charts/platform-bootstrap/templates/httproute-mirrors.yaml) | Создаёт HTTPRoutes |
-| [`cloudflared-config.yaml`](../gitops-config/charts/platform-bootstrap/templates/cloudflared-config.yaml) | Генерирует tunnel ingress rules |
+| [`gateway.yaml`](../gitops-config/charts/platform-core/templates/gateway.yaml) | Добавляет listeners для mirrors |
+| [`httproute-mirrors.yaml`](../gitops-config/charts/platform-core/templates/httproute-mirrors.yaml) | Создаёт HTTPRoutes |
+| [`cloudflared-config.yaml`](../gitops-config/charts/platform-core/templates/cloudflared-config.yaml) | Генерирует tunnel ingress rules |
 
 ---
 
@@ -788,7 +788,7 @@ Service Groups — универсальный механизм публикац�
 ### Конфигурация
 
 ```yaml
-# gitops-config/charts/platform-bootstrap/values.yaml
+# gitops-config/platform/core.yaml
 
 serviceGroups:
   infrastructure:
@@ -829,7 +829,7 @@ serviceGroups:
         servicePort: 8200
 ```
 
-**Источник:** [`gitops-config/charts/platform-bootstrap/values.yaml:319-422`](../gitops-config/charts/platform-bootstrap/values.yaml)
+**Источник:** [`gitops-config/platform/core.yaml:319-422`](../gitops-config/platform/core.yaml)
 
 ### Что создаётся автоматически
 

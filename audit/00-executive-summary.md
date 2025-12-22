@@ -16,7 +16,7 @@
 - Аудируемость всех изменений через Git history
 - Возможность review изменений до применения
 
-**Источник:** [`gitops-config/charts/platform-bootstrap/values.yaml`](../gitops-config/charts/platform-bootstrap/values.yaml) — единый источник истины для всей платформы
+**Источник:** [`gitops-config/platform/core.yaml`](../gitops-config/platform/core.yaml) — единый источник истины для всей платформы
 
 ### 2. Агностичность к окружениям
 **Один код — множество окружений**
@@ -126,14 +126,14 @@ Cluster
 | **cert-manager** | TLS сертификаты | [`infrastructure/cert-manager/`](../infrastructure/cert-manager/) |
 | **kube-prometheus-stack** | Monitoring | [`infrastructure/monitoring/`](../infrastructure/monitoring/) |
 
-**Автоматизация:** `platform-bootstrap` Helm chart создаёт всё необходимое для сервисов:
+**Автоматизация:** `platform-modules` Helm chart создаёт всё необходимое для сервисов:
 - Namespaces
 - Vault policies и roles
 - VaultAuth ресурсы
 - Gateway listeners
 - ArgoCD Applications
 
-**Источник:** [`gitops-config/charts/platform-bootstrap/`](../gitops-config/charts/platform-bootstrap/)
+**Источник:** [`gitops-config/charts/platform-core/`](../gitops-config/charts/platform-core/)
 
 ### Слой приложений (Application Layer)
 
@@ -262,7 +262,7 @@ api/
 │  │  Provides:                        Maintains:                       │   │
 │  │  • k8app Helm chart               • Kubernetes cluster            │   │
 │  │  • CI/CD templates                • Cilium/Gateway API            │   │
-│  │  • platform-bootstrap             • Vault/ArgoCD                  │   │
+│  │  • platform-modules             • Vault/ArgoCD                  │   │
 │  │  • Proto generation               • Monitoring stack              │   │
 │  │  • Documentation                  • Security policies             │   │
 │  └───────────────────────────────────────────────────────────────────┘   │

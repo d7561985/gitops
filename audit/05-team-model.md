@@ -71,7 +71,7 @@
 │  │  ─────────                        ──────────                        ││
 │  │  • k8app Helm chart               • Kubernetes cluster             ││
 │  │  • CI/CD templates                • Cilium/Gateway API             ││
-│  │  • platform-bootstrap             • Vault/ArgoCD                   ││
+│  │  • platform-modules             • Vault/ArgoCD                   ││
 │  │  • Proto generation               • Monitoring stack               ││
 │  │  • Documentation                  • Security policies              ││
 │  │  • Training                       • Cost optimization              ││
@@ -159,7 +159,7 @@
 | Операция | Developer | Tech Lead | Maintainer | SRE/Platform | Security |
 |----------|:---------:|:---------:|:----------:|:------------:|:--------:|
 | **gitops-config changes** | - | C | C | R | A |
-| **platform-bootstrap update** | - | C | C | R | A |
+| **platform-modules update** | - | C | C | R | A |
 | **New service onboarding** | C | R | A | C | C |
 | **Namespace creation** | - | C | C | R | A |
 | **Network policy changes** | - | C | C | R | A |
@@ -412,7 +412,7 @@ route:
 |----------|------------|
 | **Infrastructure** | Kubernetes, Cilium, Vault, ArgoCD |
 | **Templates** | k8app chart, CI/CD templates, service-repo template |
-| **Automation** | platform-bootstrap, proto generation |
+| **Automation** | platform-modules, proto generation |
 | **Observability** | Prometheus, Grafana, Hubble |
 | **Documentation** | PREFLIGHT-CHECKLIST, new-service-guide |
 | **Support** | Training, troubleshooting, consulting |
@@ -497,7 +497,7 @@ route:
 │  New Service Onboarding:                                                 │
 │  ────────────────────────                                                │
 │  • Product Team: Creates repo, configures .cicd/                        │
-│  • Platform Team: Adds to platform-bootstrap, creates Vault paths       │
+│  • Platform Team: Adds to platform-core, creates Vault paths       │
 │  • Both: Validate deployment                                             │
 │                                                                          │
 └─────────────────────────────────────────────────────────────────────────┘
@@ -529,7 +529,7 @@ route:
 │  3. ABSTRACTION OVER COMPLEXITY                                          │
 │  ─────────────────────────────                                           │
 │  • k8app абстрагирует K8s complexity                                    │
-│  • platform-bootstrap абстрагирует platform setup                       │
+│  • platform-modules абстрагирует platform setup                       │
 │  • Разработчик видит только values файлы                               │
 │                                                                          │
 │  4. AUTOMATION MULTIPLIER                                                │
@@ -566,7 +566,7 @@ route:
 │  └─────────────────────────────────────────────────────────────────┘   │
 │                                                                          │
 │  ┌─────────────────────────────────────────────────────────────────┐   │
-│  │ platform-bootstrap Extensions                                     │   │
+│  │ Platform Modules Extensions                                     │   │
 │  │ • Auto-provision new brands (namespacePrefix)                    │   │
 │  │ • Cost allocation per namespace                                   │   │
 │  │ • Automated backup policies per env                              │   │
@@ -599,7 +599,7 @@ route:
 │                                                                          │
 │  IMPLEMENTATION                                                          │
 │  ──────────────                                                          │
-│  [ ] Template добавлен в k8app или platform-bootstrap                  │
+│  [ ] Template добавлен в k8app или platform-core                  │
 │  [ ] Default values разумные (convention over configuration)           │
 │  [ ] Feature flag (enabled: true/false)                                │
 │                                                                          │
@@ -629,7 +629,7 @@ route:
 | Компонент | Частота обновлений | Ответственность |
 |-----------|-------------------|-----------------|
 | **k8app chart** | По необходимости | Platform Team |
-| **platform-bootstrap** | При добавлении сервисов/environments | Platform Team |
+| **platform-modules** | При добавлении сервисов/environments | Platform Team |
 | **Cilium** | Quarterly + security patches | Platform Team |
 | **ArgoCD** | Quarterly | Platform Team |
 | **Vault** | Quarterly + security patches | Platform Team |

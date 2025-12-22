@@ -59,7 +59,7 @@ k8app — унифицированный Helm chart для деплоя микр
 
 **Репозиторий:** https://d7561985.github.io/k8app
 
-**Версия:** 3.8.0 (указана в [`values.yaml:32`](../gitops-config/charts/platform-bootstrap/values.yaml))
+**Версия:** 3.8.0 (указана в [`values.yaml:32`](../gitops-config/platform/core.yaml))
 
 ### Возможности k8app
 
@@ -389,9 +389,9 @@ k8app v3.8.0 автоматически создаёт `VaultStaticSecret` дл�
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
-**VaultAuth** создаётся автоматически `platform-bootstrap`:
+**VaultAuth** создаётся автоматически `platform-modules`:
 
-**Источник:** [`gitops-config/charts/platform-bootstrap/templates/vault-auth.yaml`](../gitops-config/charts/platform-bootstrap/templates/vault-auth.yaml)
+**Источник:** [`gitops-config/charts/platform-core/templates/vault-auth.yaml`](../gitops-config/charts/platform-core/templates/vault-auth.yaml)
 
 ---
 
@@ -497,7 +497,7 @@ deploy-dev:
 │                                                                          │
 │  STEP 3: Register in Platform Bootstrap                                  │
 │  ───────────────────────────────────────                                 │
-│  # gitops-config/charts/platform-bootstrap/values.yaml                  │
+│  # gitops-config/platform/core.yaml                  │
 │  services:                                                               │
 │    my-new-service:         # ← Add this                                 │
 │      syncWave: "0"                                                       │
@@ -512,7 +512,7 @@ deploy-dev:
 │  STEP 5: Push and Wait                                                   │
 │  ─────────────────────                                                   │
 │  • git push (triggers CI)                                                │
-│  • ArgoCD syncs platform-bootstrap                                       │
+│  • ArgoCD syncs platform-modules                                       │
 │  • ArgoCD creates Application for my-new-service-dev                    │
 │  • Service deployed!                                                     │
 │                                                                          │

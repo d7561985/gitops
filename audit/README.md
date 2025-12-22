@@ -51,7 +51,7 @@
 ### 1. Декларативность
 Вся инфраструктура описана как код в Git.
 
-**Источник:** [`gitops-config/charts/platform-bootstrap/values.yaml`](../gitops-config/charts/platform-bootstrap/values.yaml)
+**Источник:** [`gitops-config/platform/core.yaml`](../gitops-config/platform/core.yaml)
 
 ### 2. GitOps Pull-Based
 ArgoCD периодически сверяет и синхронизирует состояние кластера с Git.

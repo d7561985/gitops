@@ -311,9 +311,9 @@ gitops-config/
 ├── argocd/
 │   ├── project.yaml               # ArgoCD Project с permissions
 │   ├── bootstrap-app.yaml         # "App of Apps" — следит за этой папкой
-│   └── platform-bootstrap-app.yaml # ArgoCD Application для platform-bootstrap chart
+│   └── platform-modules.yaml # ArgoCD Application для platform-core chart
 └── charts/
-    └── platform-bootstrap/        # Helm chart - single source of truth
+    └── platform-core/, service-groups/, preview-environments/, ingress-cloudflare/        # Helm chart - single source of truth
         ├── Chart.yaml
         ├── values.yaml            # Конфигурация сервисов и окружений
         └── templates/
@@ -362,12 +362,12 @@ make proxy-argocd
 # http://localhost:8081
 ```
 
-#### Как это работает (App of Apps + Platform Bootstrap)
+#### Как это работает (App of Apps + Modular Platform Charts)
 
 ```
 ┌─────────────────┐     ┌───────────────────┐     ┌─────────────────────┐
-│ gitops-config/  │────▶│  bootstrap-app    │────▶│  platform-bootstrap │
-│ argocd/         │     │  (watches folder) │     │  (Helm chart)       │
+│ gitops-config/  │────▶│  bootstrap-app    │────▶│  platform-modules  │
+│ argocd/         │     │  (watches folder) │     │    (4 Apps)        │
 └─────────────────┘     └───────────────────┘     └──────────┬──────────┘
                                                              │ генерирует
                         ┌────────────────────────────────────┴────────────────────────────┐
@@ -386,8 +386,8 @@ make proxy-argocd
 ```
 
 - **bootstrap-app** следит за `gitops-config/argocd/` в GitLab
-- При изменении применяет `project.yaml` и `platform-bootstrap-app.yaml`
-- **platform-bootstrap** (Helm chart) создаёт:
+- При изменении применяет `project.yaml` и `platform-modules.yaml`
+- **platform-core** and modular charts создаёт:
   - Namespaces для каждого окружения
   - Vault policies и Kubernetes auth roles (через PreSync Job)
   - VaultAuth ресурсы для VSO
@@ -551,9 +551,9 @@ gitops-poc/                        # Этот репозиторий (GitHub)
 │   ├── argocd/
 │   │   ├── project.yaml           # ArgoCD Project
 │   │   ├── bootstrap-app.yaml     # "App of Apps" - следит за этой папкой
-│   │   └── platform-bootstrap-app.yaml  # ArgoCD Application для platform-bootstrap
+│   │   └── platform-modules.yaml  # 4 ArgoCD Applications (platform-core, service-groups, preview-envs, ingress)
 │   └── charts/
-│       └── platform-bootstrap/    # Single source of truth для платформы
+│       └── platform-core/, service-groups/, preview-environments/, ingress-cloudflare/    # Single source of truth для платформы
 │           ├── Chart.yaml
 │           ├── values.yaml        # Сервисы, окружения, Vault config
 │           └── templates/
@@ -673,7 +673,7 @@ kubectl delete pvc data-vault-0 -n vault
 ./infrastructure/vault/setup.sh
 ```
 
-> **Важно:** После переустановки нужно пересинхронизировать `platform-bootstrap` для создания policies и roles.
+> **Важно:** После переустановки нужно пересинхронизировать `platform-core` для создания policies и roles.
 
 ### Архитектура
 
@@ -931,7 +931,7 @@ Redis exporter автоматически скрейпится через Servic
 3. **Создать репозиторий в GitLab:**
    - `${GITLAB_GROUP}/my-new-service`
 
-4. **Добавить сервис в `gitops-config/charts/platform-bootstrap/values.yaml`:**
+4. **Добавить сервис в `gitops-config/platform/core.yaml`:**
    ```yaml
    services:
      # ... существующие сервисы
@@ -942,7 +942,7 @@ Redis exporter автоматически скрейпится через Servic
 5. **Закоммитить и запушить изменения:**
    ```bash
    cd gitops-config
-   git add charts/platform-bootstrap/values.yaml
+   git add platform/core.yaml
    git commit -m "feat: add my-new-service to platform"
    git push
    ```
