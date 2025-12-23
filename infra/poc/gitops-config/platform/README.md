@@ -19,10 +19,31 @@ platform/
 
 | Chart | Description | Sync Wave |
 |-------|-------------|-----------|
-| platform-core | Namespaces, Gateway, ApplicationSet, Vault | -10 |
+| platform-core | Namespaces, Gateway, ApplicationSet, Vault | -10 to 2 |
 | service-groups | Infrastructure external access | -5 |
 | preview-environments | Feature branch previews | -4 |
 | ingress-cloudflare | CloudFlare Tunnel routing | -3 |
+
+## Sync Waves (Deployment Order)
+
+ArgoCD deploys resources in sync wave order (lower first):
+
+| Wave | Component | Description |
+|------|-----------|-------------|
+| **-10** | Bootstrap Job | Vault: policies, roles, secret placeholders |
+| **-5** | Service Groups | Infrastructure access (ArgoCD, Grafana, Vault) |
+| **-4** | Preview Envs | Feature branch previews |
+| **-3** | Ingress | CloudFlare Tunnel routing |
+| **-2** | Namespaces | `poc-dev`, `infra-dev`, `poc-staging`, `infra-staging` |
+| **-1** | Infrastructure | MongoDB, RabbitMQ → `infra-{env}` |
+| **0** | Backend | `user-service`, `game-engine`, `payment`, `wager` |
+| **1** | API Gateway | Depends on backend services |
+| **2** | Frontend | Depends on API Gateway |
+
+**Service sync wave recommendations:**
+- `"0"` — backend services without dependencies on other services
+- `"1"` — services depending on backend (API Gateway, aggregators)
+- `"2"` — frontend applications
 
 ## Multi-Source Values
 
@@ -50,7 +71,7 @@ Edit `core.yaml`:
 ```yaml
 services:
   my-service:
-    syncWave: "0"
+    syncWave: "0"  # 0=backend, 1=gateway, 2=frontend
     repoURL: https://gitlab.com/group/my-service.git
     path: .cicd
 ```

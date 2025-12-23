@@ -57,8 +57,26 @@ serviceMonitor:
 ```yaml
 services:
   my-service:
-    syncWave: "0"  # Порядок деплоя (0 = первый)
+    syncWave: "0"  # Порядок деплоя (см. таблицу ниже)
 ```
+
+### Sync Waves (порядок развёртывания)
+
+ArgoCD развёртывает ресурсы в порядке sync waves — от меньшего к большему:
+
+| Wave | Компонент | Описание |
+|------|-----------|----------|
+| **-10** | Bootstrap Job | Vault: policies, roles, secret placeholders |
+| **-2** | Namespaces | `poc-dev`, `infra-dev`, `poc-staging`, `infra-staging` |
+| **-1** | Infrastructure | MongoDB, RabbitMQ → `infra-{env}` |
+| **0** | Backend services | `user-service`, `game-engine`, `payment`, `wager` |
+| **1** | API Gateway | Зависит от backend сервисов |
+| **2** | Frontend | Зависит от API Gateway |
+
+**Рекомендации по выбору wave:**
+- `"0"` — backend сервисы без зависимостей от других сервисов
+- `"1"` — сервисы зависящие от backend (API Gateway, aggregators)
+- `"2"` — frontend приложения
 
 Это автоматически создаст:
 - Vault policy: `gitops-poc-dzha-my-service-dev`
