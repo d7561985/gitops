@@ -5,11 +5,9 @@
 #   kubectl apply -f bootstrap-app.yaml
 #
 # After that, ArgoCD will:
-# 1. Apply project.yaml (ArgoCD Project)
-# 2. Apply vault-bootstrap-app.yaml (Helm chart that generates everything else)
-#    - Vault path bootstrap Job
-#    - ApplicationSet for all services
-#    - VaultAuth for each environment
+# 1. Apply project.yaml (ArgoCD Project with allowed destinations)
+# 2. Apply platform-modules.yaml (platform-core, service-groups, preview-envs, ingress)
+#    - platform-core generates: namespaces, gateways, infra apps, applicationset
 
 apiVersion: argoproj.io/v1alpha1
 kind: Application
@@ -27,7 +25,7 @@ spec:
     path: argocd
     directory:
       recurse: false
-      include: '{project.yaml,platform-modules.yaml,infra-app.yaml}'
+      include: '{project.yaml,platform-modules.yaml}'
 
   destination:
     server: https://kubernetes.default.svc
