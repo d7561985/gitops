@@ -11,8 +11,8 @@
 # Global Settings
 # -----------------------------------------------------------------------------
 global:
-  # GitLab group for services (used as default repoURL base)
-  gitlabGroup: gitops-poc-dzha/services
+  # GitLab group (used for labels and default repoURL base)
+  gitlabGroup: gitops-poc-dzha
   # Brand identifier
   brand: poc
   vaultPathPrefix: gitops-poc-dzha
