@@ -1,8 +1,8 @@
 # Dev environment overrides for sentry-payment
 
 image:
-  repository: registry.gitlab.com/gitops-poc-dzha/sentry-demo/payment-service
-  tag: 886a484b
+  repository: registry.gitlab.com/gitops-poc-dzha/services/sentry-demo/payment-service
+  tag: 88010cb6
 replicaCount: 1
 # Environment-specific configmap values
 configmap:

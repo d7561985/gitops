@@ -6,7 +6,7 @@ environment: dev
 branch: main
 image:
   repository: registry.gitlab.com/gitops-poc-dzha/services/user-service
-  tag: "c6768603"
+  tag: "f08fc9ad"
   pullPolicy: IfNotPresent
 replicas: 1
 resources:

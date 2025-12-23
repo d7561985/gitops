@@ -6,7 +6,7 @@ appName: sentry-wager
 serviceAccountName: default
 
 image:
-  repository: registry.gitlab.com/gitops-poc-dzha/sentry-demo/wager-service
+  repository: registry.gitlab.com/gitops-poc-dzha/services/sentry-demo/wager-service
   tag: latest
   pullPolicy: Always
 

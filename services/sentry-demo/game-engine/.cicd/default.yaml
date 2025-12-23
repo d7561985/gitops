@@ -7,7 +7,7 @@ version: "1.0.0"
 serviceAccountName: default
 
 image:
-  repository: registry.gitlab.com/gitops-poc-dzha/sentry-demo/game-engine
+  repository: registry.gitlab.com/gitops-poc-dzha/services/sentry-demo/game-engine
   tag: latest
   pullPolicy: Always
 

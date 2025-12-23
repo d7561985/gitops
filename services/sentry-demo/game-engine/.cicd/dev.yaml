@@ -1,7 +1,7 @@
 # Dev environment overrides for sentry-game-engine
 
 image:
-  repository: registry.gitlab.com/gitops-poc-dzha/sentry-demo/game-engine
+  repository: registry.gitlab.com/gitops-poc-dzha/services/sentry-demo/game-engine
   tag: bb1ad7da
 replicaCount: 1
 # Environment-specific configmap values

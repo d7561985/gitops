@@ -7,7 +7,7 @@ version: "1.0.0"
 serviceAccountName: default
 
 image:
-  repository: registry.gitlab.com/gitops-poc-dzha/sentry-demo/frontend
+  repository: registry.gitlab.com/gitops-poc-dzha/services/sentry-demo/frontend
   tag: latest
   pullPolicy: Always
 
