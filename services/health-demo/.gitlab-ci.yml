@@ -11,7 +11,6 @@
 variables:
   SERVICE_NAME: "health-demo"
   IMAGE_NAME: ${CI_REGISTRY_IMAGE}
-  ARGOCD_OPTS: "--grpc-web"
   RELEASE_TIMEOUT: "300"
 
 stages:
@@ -21,27 +20,57 @@ stages:
 
 # ============================================
 # Release Template: Wait for ArgoCD deployment
+# Uses REST API instead of gRPC (CloudFlare compatible)
 # ============================================
 .release-template:
   stage: release
   image: alpine:3.19
-  variables:
-    ARGOCD_VERSION: "v3.2.1"
   before_script:
-    - apk add --no-cache curl
-    - |
-      curl -fsSL --retry 3 --retry-delay 5 -o /usr/local/bin/argocd \
-        "https://github.com/argoproj/argo-cd/releases/download/${ARGOCD_VERSION}/argocd-linux-amd64"
-      chmod +x /usr/local/bin/argocd
-      argocd version --client --short || { echo "ERROR: ArgoCD binary is invalid"; exit 1; }
+    - apk add --no-cache curl jq
   script:
-    - echo "Waiting for ${ARGOCD_APP_NAME} to sync and become healthy..."
-    - echo "ArgoCD Server - ${ARGOCD_SERVER}"
-    - echo "Timeout - ${RELEASE_TIMEOUT}s"
-    - argocd app get ${ARGOCD_APP_NAME} --server ${ARGOCD_SERVER} --auth-token ${ARGOCD_AUTH_TOKEN} --refresh ${ARGOCD_OPTS} --insecure > /dev/null
-    - argocd app wait ${ARGOCD_APP_NAME} --server ${ARGOCD_SERVER} --auth-token ${ARGOCD_AUTH_TOKEN} --timeout ${RELEASE_TIMEOUT} --health --sync ${ARGOCD_OPTS} --insecure
-    - echo "RELEASE SUCCESSFUL"
-    - argocd app get ${ARGOCD_APP_NAME} --server ${ARGOCD_SERVER} --auth-token ${ARGOCD_AUTH_TOKEN} ${ARGOCD_OPTS} --insecure || true
+    - |
+      echo "Waiting for ${ARGOCD_APP_NAME} to sync and become healthy..."
+      echo "ArgoCD Server: https://${ARGOCD_SERVER}"
+      echo "Timeout: ${RELEASE_TIMEOUT}s"
+
+      ARGOCD_API="https://${ARGOCD_SERVER}/api/v1/applications/${ARGOCD_APP_NAME}"
+      AUTH_HEADER="Authorization: Bearer ${ARGOCD_AUTH_TOKEN}"
+
+      # Trigger refresh
+      curl -sf "${ARGOCD_API}?refresh=normal" -H "${AUTH_HEADER}" > /dev/null || true
+
+      # Wait for sync and health
+      start_time=$(date +%s)
+      while true; do
+        response=$(curl -sf "${ARGOCD_API}" -H "${AUTH_HEADER}" 2>/dev/null)
+        if [ $? -ne 0 ]; then
+          echo "ERROR: Failed to get application status"
+          exit 1
+        fi
+
+        sync_status=$(echo "$response" | jq -r '.status.sync.status // "Unknown"')
+        health_status=$(echo "$response" | jq -r '.status.health.status // "Unknown"')
+
+        echo "Status: sync=${sync_status}, health=${health_status}"
+
+        if [ "$sync_status" = "Synced" ] && [ "$health_status" = "Healthy" ]; then
+          echo ""
+          echo "=== RELEASE SUCCESSFUL ==="
+          echo "Application: ${ARGOCD_APP_NAME}"
+          echo "Sync: ${sync_status}"
+          echo "Health: ${health_status}"
+          exit 0
+        fi
+
+        elapsed=$(($(date +%s) - start_time))
+        if [ $elapsed -ge ${RELEASE_TIMEOUT} ]; then
+          echo "ERROR: Timeout after ${RELEASE_TIMEOUT}s"
+          echo "Final status: sync=${sync_status}, health=${health_status}"
+          exit 1
+        fi
+
+        sleep 5
+      done
 
 # ============================================
 # Build Stage
