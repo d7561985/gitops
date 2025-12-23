@@ -55,8 +55,17 @@ spec:
           targetRevision: {{ .Values.global.k8app.version | quote }}
           helm:
             valueFiles:
+              # Platform defaults (lowest priority) - common for all services
+              - $platform/shared/k8app-defaults.yaml
+              # Service defaults
               - $values/{{`{{path}}`}}/default.yaml
+              # Environment overlay (highest priority)
               - $values/{{`{{path}}`}}/{{`{{env}}`}}.yaml
+
+        # Platform repository with shared defaults
+        - repoURL: https://gitlab.com/{{ .Values.global.gitlabGroup }}/infra/poc/gitops-config.git
+          targetRevision: main
+          ref: platform
 
         # Service repository with values
         - repoURL: '{{`{{repoURL}}`}}'

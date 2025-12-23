@@ -1,20 +1,14 @@
 # Analytics Service - Default Values
-# Business metrics and analytics service
-# HTTP/Connect API for RTP, sessions, and financial metrics
-# Based on k8app/app chart: https://github.com/d7561985/k8app
+# Inherits: serviceAccountName, imagePullSecrets, secretsProvider, serviceMonitor
+# from platform shared/k8app-defaults.yaml
 
 appName: analytics-service
 version: "1.0.0"
-
-serviceAccountName: default
 
 image:
   repository: analytics-service
   tag: local
   pullPolicy: Never
-
-imagePullSecrets:
-  - name: regsecret
 
 service:
   enabled: true
@@ -29,7 +23,6 @@ service:
       internalPort: 9090
       protocol: TCP
 
-# Health checks - tcpSocket for Connect/HTTP service
 livenessProbe:
   enabled: true
   mode: tcpSocket
@@ -54,12 +47,5 @@ args:
   - "-port=8081"
   - "-metrics-port=9090"
 
-# Environment via configmap
 configmap:
   REDIS_ADDR: ""
-
-serviceMonitor:
-  enabled: true
-  port: "metrics"
-  path: "/metrics"
-  interval: 30s

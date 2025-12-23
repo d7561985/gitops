@@ -1,20 +1,15 @@
 # User Service - Default Values
 # Authentication and user management service
-# gRPC API for user registration, login, and session validation
-# Based on k8app/app chart: https://github.com/d7561985/k8app
+# Inherits: serviceAccountName, imagePullSecrets, secretsProvider, serviceMonitor
+# from platform shared/k8app-defaults.yaml
 
 appName: user-service
 version: "1.0.0"
-
-serviceAccountName: default
 
 image:
   repository: user-service
   tag: local
   pullPolicy: Never
-
-imagePullSecrets:
-  - name: regsecret
 
 service:
   enabled: true
@@ -53,25 +48,10 @@ args:
   - "-port=8081"
   - "-metrics-port=9090"
 
-serviceMonitor:
-  enabled: true
-  port: "metrics"
-  path: "/metrics"
-  interval: 30s
-
-# Environment via configmap (environment-agnostic)
+# Environment via configmap (infrastructure addresses in env overlay)
 configmap:
   MONGODB_DATABASE: "users"
-  # MONGODB_URI, RABBITMQ_URI → defined in env overlay
 
-# Secrets from Vault
+# Service-specific secrets (paths only, provider inherited)
 secrets:
   JWT_SECRET: "/gitops-poc-dzha/user-service/dev/config"
-
-secretsProvider:
-  provider: "vault"
-  vault:
-    authRef: "vault-auth"
-    mount: "secret"
-    type: "kv-v2"
-    refreshAfter: "1h"

@@ -1,27 +1,16 @@
 # Health Demo Service - Default Values
 # gRPC health check and streaming demo service
-# Implements grpc.health.v1.Health with Check and Watch methods
-# Based on k8app/app chart v3.4.0: https://github.com/d7561985/k8app
+# Inherits: serviceAccountName, imagePullSecrets, secretsProvider, serviceMonitor
+# from platform shared/k8app-defaults.yaml
 
 appName: health-demo
 version: "1.0.0"
 
-# Service Account (use default, k8app doesn't create SA)
-serviceAccountName: default
-
-# Image configuration
-# For local Minikube: repository: health-demo, tag: local, pullPolicy: Never
-# For GitLab Registry: repository: registry.gitlab.com/${GITLAB_GROUP}/health-demo
 image:
   repository: health-demo
   tag: local
-  pullPolicy: Never  # Change to IfNotPresent for GitLab Registry
+  pullPolicy: Never
 
-# Image Pull Secrets - universal format (k8app v3.4.0+)
-imagePullSecrets:
-  - name: regsecret
-
-# Service configuration (k8app format)
 service:
   enabled: true
   type: ClusterIP
@@ -35,7 +24,6 @@ service:
       internalPort: 9090
       protocol: TCP
 
-# Health checks - gRPC tcpSocket fallback (k8app format)
 livenessProbe:
   enabled: true
   mode: tcpSocket
@@ -56,39 +44,11 @@ readinessProbe:
   timeoutSeconds: 5
   failureThreshold: 3
 
-# Command line args passed to the binary
 args:
   - "-port=8081"
   - "-metrics-port=9090"
 
-# =============================================================================
-# Prometheus ServiceMonitor (k8app v3.8.0+)
-# =============================================================================
-serviceMonitor:
-  enabled: true
-  port: "metrics"
-  path: "/metrics"
-  interval: 30s
-
-# =============================================================================
-# Secrets Configuration (k8app v3.4.0+)
-# =============================================================================
-# Simple interface: ENV_VAR_NAME: "vault-path"
-# - Relative path: {namespace}/{appName}/{environment}/{path}
-# - Absolute path (starts with /): used as-is
-#
-# Chart automatically creates VaultStaticSecret and syncs to K8s Secret
-# =============================================================================
+# Service-specific secrets (paths only, provider inherited)
 secrets:
-  # Using absolute path to match existing Vault structure
   ENVIRONMENT: "/gitops-poc-dzha/health-demo/dev/config"
   SERVICE_NAME: "/gitops-poc-dzha/health-demo/dev/config"
-
-# Secrets Provider Configuration (k8app v3.4.0+)
-secretsProvider:
-  provider: "vault"  # vault | aws | none
-  vault:
-    authRef: "vault-auth"  # VaultAuth resource in namespace
-    mount: "secret"
-    type: "kv-v2"
-    refreshAfter: "1h"

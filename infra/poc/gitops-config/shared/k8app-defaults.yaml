@@ -1,0 +1,40 @@
+# =============================================================================
+# Platform Defaults for k8app Helm Chart
+# =============================================================================
+# Common values inherited by ALL services in the platform.
+# Services can override any value in their .cicd/default.yaml
+#
+# Priority (lowest to highest):
+#   1. This file (platform defaults)
+#   2. .cicd/default.yaml (service defaults)
+#   3. .cicd/{env}.yaml (environment overlay)
+# =============================================================================
+
+# Use default Kubernetes service account
+serviceAccountName: default
+
+# GitLab Container Registry credentials
+imagePullSecrets:
+  - name: regsecret
+
+# =============================================================================
+# Vault Secrets Provider
+# =============================================================================
+# All services use Vault for secrets management.
+# Individual secrets are defined in each service's .cicd files.
+secretsProvider:
+  provider: "vault"
+  vault:
+    authRef: "vault-auth"
+    mount: "secret"
+    type: "kv-v2"
+    refreshAfter: "1h"
+
+# =============================================================================
+# Prometheus Monitoring
+# =============================================================================
+serviceMonitor:
+  enabled: true
+  port: "metrics"
+  path: "/metrics"
+  interval: 30s
