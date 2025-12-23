@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, Inject } from '@angular/core';
+import { Component, OnInit, OnDestroy, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { interval, Subscription } from 'rxjs';
 import * as Sentry from '@sentry/angular';
@@ -10,7 +10,6 @@ import {
 } from '../utils/sentry-traces';
 import {
   ANALYTICS_SERVICE,
-  IAnalyticsService,
   RTPMetrics,
   SessionMetrics,
   FinancialMetrics
@@ -192,8 +191,7 @@ export class BusinessMetricsComponent implements OnInit, OnDestroy {
   errorMessage = '';
 
   private refreshSubscription?: Subscription;
-
-  constructor(@Inject(ANALYTICS_SERVICE) private analyticsService: IAnalyticsService) {}
+  private readonly analyticsService = inject(ANALYTICS_SERVICE);
 
   ngOnInit(): void {
     this.loadMetrics();
@@ -268,15 +266,15 @@ export class BusinessMetricsComponent implements OnInit, OnDestroy {
           span?.setAttribute('metrics.error_count', errorCount);
 
           setTransactionStatus(span, errorCount === 0);
-        } catch (error: any) {
-          setTransactionStatus(span, false, error);
+        } catch (error) {
+          setTransactionStatus(span, false, error instanceof Error ? error : undefined);
           Sentry.captureException(error);
         }
       }
     );
   }
 
-  private handleError(message: string, error: any): void {
+  private handleError(message: string, error: unknown): void {
     this.hasError = true;
     this.errorMessage = message;
     console.error(message, error);
