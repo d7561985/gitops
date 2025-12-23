@@ -32,7 +32,7 @@ Domain Mirrors:
 {{- end }}
 {{- end }}
 
-{{- /* Gateway resource */ -}}
+{{/* Gateway resource */}}
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
@@ -110,7 +110,6 @@ spec:
           from: Same
     {{- end }}
     {{- end }}
-
 {{- /* Certificate for HTTPS listener (if cert-manager enabled) */ -}}
 {{- if $.Values.gateway.certManager.enabled }}
 {{- if eq ($.Values.gateway.listener.protocol | default "HTTP") "HTTPS" }}
