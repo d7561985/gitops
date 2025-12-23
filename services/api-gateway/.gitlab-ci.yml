@@ -1,8 +1,7 @@
 # GitLab CI/CD Pipeline for api-gateway
-# Supports both Push-based and Pull-based GitOps
+# Pull-based GitOps with ArgoCD
 #
-# Pull-based (ArgoCD): CI builds image, updates .cicd/{env}.yaml, pushes
-# Push-based (GitLab Agent): CI builds image, deploys directly via helm
+# Flow: CI builds image → updates .cicd/{env}.yaml → ArgoCD syncs
 #
 # Required CI/CD Variables (set at Group level):
 #   CI_PUSH_TOKEN     - Group Access Token with write_repository scope
@@ -11,35 +10,42 @@
 
 variables:
   SERVICE_NAME: "api-gateway"
-
-  # Docker registry (GitLab Container Registry)
-  REGISTRY: ${CI_REGISTRY}
   IMAGE_NAME: ${CI_REGISTRY_IMAGE}
-
-  # Helm chart
-  HELM_CHART: "k8app/app"
-  HELM_REPO: "https://d7561985.github.io/k8app"
-
-  # GitLab Agent context (for push-based)
-  KUBE_CONTEXT: "gitops-poc-dzha/gitops-config:minikube-agent"
-
-  # GitOps mode: "pull" or "push"
-  GITOPS_MODE: "pull"
-
-  # ArgoCD settings for release tracking
   ARGOCD_OPTS: "--grpc-web"
   RELEASE_TIMEOUT: "300"
 
 stages:
   - build
   - update-manifests
-  - release      # Wait for ArgoCD deployment
-  - deploy       # Only for push-based
+  - release
+
+# ============================================
+# Release Template: Wait for ArgoCD deployment
+# ============================================
+.release-template:
+  stage: release
+  image: alpine:3.19
+  variables:
+    ARGOCD_VERSION: "v2.13.2"
+  before_script:
+    - apk add --no-cache curl
+    - |
+      curl -fsSL --retry 3 --retry-delay 5 -o /usr/local/bin/argocd \
+        "https://github.com/argoproj/argo-cd/releases/download/${ARGOCD_VERSION}/argocd-linux-amd64"
+      chmod +x /usr/local/bin/argocd
+      argocd version --client --short || { echo "ERROR: ArgoCD binary is invalid"; exit 1; }
+  script:
+    - echo "Waiting for ${ARGOCD_APP_NAME} to sync and become healthy..."
+    - echo "ArgoCD Server - ${ARGOCD_SERVER}"
+    - echo "Timeout - ${RELEASE_TIMEOUT}s"
+    - argocd app get ${ARGOCD_APP_NAME} --refresh ${ARGOCD_OPTS} > /dev/null
+    - argocd app wait ${ARGOCD_APP_NAME} --timeout ${RELEASE_TIMEOUT} --health --sync ${ARGOCD_OPTS}
+    - echo "RELEASE SUCCESSFUL"
+    - argocd app get ${ARGOCD_APP_NAME} ${ARGOCD_OPTS} || true
 
 # ============================================
 # Build Stage
 # ============================================
-
 build:
   stage: build
   image: docker:24
@@ -52,7 +58,6 @@ build:
   script:
     - docker build -t ${IMAGE_NAME}:${CI_COMMIT_SHORT_SHA} .
     - docker push ${IMAGE_NAME}:${CI_COMMIT_SHORT_SHA}
-    # Tag as latest for main branch
     - |
       if [ "$CI_COMMIT_BRANCH" == "$CI_DEFAULT_BRANCH" ]; then
         docker tag ${IMAGE_NAME}:${CI_COMMIT_SHORT_SHA} ${IMAGE_NAME}:latest
@@ -63,12 +68,8 @@ build:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
 
 # ============================================
-# Pull-based GitOps: Update manifests
+# Update manifests (Pull-based GitOps)
 # ============================================
-
-# Pull-based: Update .cicd/*.yaml and push back to repo
-# Requires CI_PUSH_TOKEN (Group Access Token with write_repository scope)
-# See README.md for setup instructions
 .update-manifest:
   stage: update-manifests
   image: alpine:3.19
@@ -76,12 +77,11 @@ build:
     - apk add --no-cache git yq
     - git config --global user.email "ci@gitlab.com"
     - git config --global user.name "GitLab CI"
-    # Clone with push token (CI_JOB_TOKEN doesn't have push rights)
     - git remote set-url origin "https://oauth2:${CI_PUSH_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
     - git fetch origin ${CI_COMMIT_BRANCH}
     - git checkout ${CI_COMMIT_BRANCH}
   rules:
-    - if: $GITOPS_MODE == "pull" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
 
 update:dev:
   extends: .update-manifest
@@ -94,8 +94,6 @@ update:dev:
       git add .cicd/dev.yaml
       git commit -m "ci(dev): update image to ${CI_COMMIT_SHORT_SHA} [skip ci]"
       git push origin ${CI_COMMIT_BRANCH}
-
-      echo "ArgoCD will detect this change and deploy automatically"
 
 update:staging:
   extends: .update-manifest
@@ -130,53 +128,6 @@ update:prod:
 # ============================================
 # Release Stage: Wait for ArgoCD deployment
 # ============================================
-.release-template:
-  stage: release
-  image: alpine:3.19
-  before_script:
-    - apk add --no-cache curl
-    - curl -sSL -o /usr/local/bin/argocd "https://github.com/argoproj/argo-cd/releases/download/${ARGOCD_VERSION}/argocd-linux-amd64"
-    - chmod +x /usr/local/bin/argocd
-  script:
-    - |
-      echo "============================================="
-      echo "Waiting for ArgoCD deployment"
-      echo "============================================="
-      echo "Application: ${ARGOCD_APP_NAME}"
-      echo "Server:      ${ARGOCD_SERVER}"
-      echo "Timeout:     ${RELEASE_TIMEOUT}s"
-      echo "============================================="
-    - |
-      if argocd app wait ${ARGOCD_APP_NAME} \
-        --timeout ${RELEASE_TIMEOUT} \
-        --health \
-        --sync \
-        ${ARGOCD_OPTS}; then
-        echo ""
-        echo "============================================="
-        echo "RELEASE SUCCESSFUL"
-        echo "============================================="
-        echo "Application: ${ARGOCD_APP_NAME}"
-        echo "Image Tag:   ${CI_COMMIT_SHORT_SHA}"
-        echo "============================================="
-        argocd app get ${ARGOCD_APP_NAME} ${ARGOCD_OPTS} || true
-      else
-        EXIT_CODE=$?
-        echo ""
-        echo "============================================="
-        echo "RELEASE FAILED"
-        echo "============================================="
-        echo "Application: ${ARGOCD_APP_NAME}"
-        echo "============================================="
-        echo ""
-        echo "--- Application Status ---"
-        argocd app get ${ARGOCD_APP_NAME} ${ARGOCD_OPTS} 2>&1 || true
-        echo ""
-        echo "--- Application Resources ---"
-        argocd app resources ${ARGOCD_APP_NAME} ${ARGOCD_OPTS} 2>&1 || true
-        exit $EXIT_CODE
-      fi
-
 release:dev:
   extends: .release-template
   variables:
@@ -187,7 +138,7 @@ release:dev:
     - job: update:dev
       optional: true
   rules:
-    - if: $GITOPS_MODE == "pull" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
 
 release:staging:
   extends: .release-template
@@ -199,7 +150,7 @@ release:staging:
     - job: update:staging
       optional: true
   rules:
-    - if: $GITOPS_MODE == "pull" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
   when: manual
 
 release:prod:
@@ -212,79 +163,5 @@ release:prod:
     - job: update:prod
       optional: true
   rules:
-    - if: $GITOPS_MODE == "pull" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
   when: manual
-
-# ============================================
-# Push-based GitOps: Direct deploy via GitLab Agent
-# ============================================
-
-.deploy:
-  stage: deploy
-  image: dtzar/helm-kubectl:3.13
-  before_script:
-    - helm repo add k8app ${HELM_REPO}
-    - helm repo update
-    - kubectl config use-context ${KUBE_CONTEXT}
-  rules:
-    - if: $GITOPS_MODE == "push" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-
-deploy:dev:
-  extends: .deploy
-  environment:
-    name: dev
-    kubernetes:
-      namespace: poc-dev
-  script:
-    - kubectl create namespace poc-dev --dry-run=client -o yaml | kubectl apply -f -
-    - |
-      helm upgrade --install ${SERVICE_NAME} ${HELM_CHART} \
-        --namespace poc-dev \
-        --wait --timeout 5m \
-        -f .cicd/default.yaml \
-        -f .cicd/dev.yaml \
-        --set image.repository=${IMAGE_NAME} \
-        --set image.tag=${CI_COMMIT_SHORT_SHA}
-    - kubectl rollout status deployment/${SERVICE_NAME} -n poc-dev --timeout=3m
-
-deploy:staging:
-  extends: .deploy
-  environment:
-    name: staging
-    kubernetes:
-      namespace: poc-staging
-  script:
-    - kubectl create namespace poc-staging --dry-run=client -o yaml | kubectl apply -f -
-    - |
-      helm upgrade --install ${SERVICE_NAME} ${HELM_CHART} \
-        --namespace poc-staging \
-        --wait --timeout 5m \
-        -f .cicd/default.yaml \
-        -f .cicd/staging.yaml \
-        --set image.repository=${IMAGE_NAME} \
-        --set image.tag=${CI_COMMIT_SHORT_SHA}
-    - kubectl rollout status deployment/${SERVICE_NAME} -n poc-staging --timeout=3m
-  when: manual
-  needs:
-    - deploy:dev
-
-deploy:prod:
-  extends: .deploy
-  environment:
-    name: production
-    kubernetes:
-      namespace: poc-prod
-  script:
-    - kubectl create namespace poc-prod --dry-run=client -o yaml | kubectl apply -f -
-    - |
-      helm upgrade --install ${SERVICE_NAME} ${HELM_CHART} \
-        --namespace poc-prod \
-        --wait --timeout 10m \
-        -f .cicd/default.yaml \
-        -f .cicd/prod.yaml \
-        --set image.repository=${IMAGE_NAME} \
-        --set image.tag=${CI_COMMIT_SHORT_SHA}
-    - kubectl rollout status deployment/${SERVICE_NAME} -n poc-prod --timeout=5m
-  when: manual
-  needs:
-    - deploy:staging

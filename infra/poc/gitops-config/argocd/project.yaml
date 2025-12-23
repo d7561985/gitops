@@ -11,9 +11,7 @@ spec:
 
   sourceRepos:
     - 'https://d7561985.github.io/k8app'
-    - 'https://gitlab.com/gitops-poc-dzha/*'
-    - 'https://gitlab.com/gitops-poc-dzha/services/*'
-    - 'https://gitlab.com/gitops-poc-dzha/infra/poc/*'
+    - 'https://gitlab.com/gitops-poc-dzha/**'
 
   destinations:
     - namespace: 'vault'
