@@ -11,6 +11,45 @@
 - **platform-core** для автоматической конфигурации
 - **Distroless images** для безопасности (Go, Node.js)
 
+## Архитектура конфигурации
+
+Платформа использует **трёхуровневое наследование** для минимизации boilerplate:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  Priority (lowest → highest):                                   │
+│                                                                  │
+│  1. shared/k8app-defaults.yaml   ← Platform defaults (общие)    │
+│  2. .cicd/default.yaml           ← Service defaults             │
+│  3. .cicd/{env}.yaml             ← Environment overlay          │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Что наследуется автоматически
+
+Файл `gitops-config/shared/k8app-defaults.yaml` содержит общие настройки:
+
+```yaml
+# Наследуется ВСЕМИ сервисами автоматически
+serviceAccountName: default
+imagePullSecrets:
+  - name: regsecret
+secretsProvider:
+  provider: "vault"
+  vault:
+    authRef: "vault-auth"
+    mount: "secret"
+    type: "kv-v2"
+    refreshAfter: "1h"
+serviceMonitor:
+  enabled: true
+  port: "metrics"
+  path: "/metrics"
+  interval: 30s
+```
+
+**Не нужно указывать в сервисе:** `serviceAccountName`, `imagePullSecrets`, `secretsProvider`, `serviceMonitor`.
+
 ## Шаг 1: Регистрация сервиса
 
 Добавьте сервис в `infra/poc/gitops-config/platform/core.yaml`:
@@ -59,7 +98,7 @@ my-service/
 ├── internal/
 │   └── ...
 ├── .cicd/
-│   ├── default.yaml     # Базовые настройки k8app
+│   ├── default.yaml     # Настройки сервиса (минимальные!)
 │   └── dev.yaml         # Переопределения для dev
 ├── .gitlab-ci.yml
 ├── Dockerfile
@@ -69,20 +108,20 @@ my-service/
 
 ## Шаг 4: Конфигурация k8app
 
-### .cicd/default.yaml
+### .cicd/default.yaml (минимальный)
 
 ```yaml
+# My Service - Default Values
+# Inherits: serviceAccountName, imagePullSecrets, secretsProvider, serviceMonitor
+# from platform shared/k8app-defaults.yaml
+
 appName: my-service
 version: "1.0.0"
-serviceAccountName: default
 
 image:
   repository: my-service
   tag: local
   pullPolicy: Never
-
-imagePullSecrets:
-  - name: regsecret
 
 service:
   enabled: true
@@ -97,50 +136,46 @@ service:
       internalPort: 9090
       protocol: TCP
 
-# Для gRPC используйте tcpSocket
 livenessProbe:
   enabled: true
   mode: tcpSocket
   tcpSocket:
     port: 8081
-  initialDelaySeconds: 10
+  initialDelaySeconds: 5
   periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
 
 readinessProbe:
   enabled: true
   mode: tcpSocket
   tcpSocket:
     port: 8081
-  initialDelaySeconds: 5
+  initialDelaySeconds: 3
   periodSeconds: 5
+  timeoutSeconds: 5
+  failureThreshold: 3
 
 args:
   - "-port=8081"
   - "-metrics-port=9090"
 
-serviceMonitor:
-  enabled: true
-  port: "metrics"
-  path: "/metrics"
-  interval: 30s
+# Environment variables via configmap
+configmap:
+  MY_CONFIG: "value"
 
-# Секреты из Vault
+# Secrets from Vault (paths only, provider inherited)
 secrets:
   DATABASE_URL: "/gitops-poc-dzha/my-service/dev/config"
   API_KEY: "/gitops-poc-dzha/my-service/dev/config"
-
-secretsProvider:
-  provider: "vault"
-  vault:
-    authRef: "vault-auth"
-    mount: "secret"
-    type: "kv-v2"
-    refreshAfter: "1h"
 ```
 
 ### .cicd/dev.yaml
 
 ```yaml
+# My Service - Dev Environment
+# CI updates image.repository and image.tag on each build
+
 environment: dev
 branch: main
 
@@ -165,6 +200,10 @@ labels:
 
 annotations:
   argocd.argoproj.io/sync-wave: "0"
+
+# Environment-specific config
+configmap:
+  MONGODB_URI: "mongodb://root:rootpassword@mongodb.infra-dev.svc:27017/mydb?authSource=admin"
 ```
 
 ## Шаг 5: Dockerfile (Go с Distroless)
@@ -172,7 +211,7 @@ annotations:
 ### Без приватных зависимостей
 
 ```dockerfile
-FROM golang:1.23-alpine AS builder
+FROM golang:1.24-alpine AS builder
 WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
@@ -188,7 +227,7 @@ ENTRYPOINT ["/server"]
 ### С приватными GitLab зависимостями
 
 ```dockerfile
-FROM golang:1.23-alpine AS builder
+FROM golang:1.24-alpine AS builder
 WORKDIR /app
 
 RUN apk add --no-cache git ca-certificates
@@ -223,12 +262,17 @@ ENTRYPOINT ["/server"]
 ### .gitlab-ci.yml
 
 ```yaml
+# GitLab CI/CD Pipeline
+# Pull-based GitOps with ArgoCD
+#
+# Required CI/CD Variables (set at Group level):
+#   CI_PUSH_TOKEN     - Group Access Token with write_repository scope
+#   ARGOCD_SERVER     - ArgoCD server URL (e.g., argocd.demo-poc-01.work)
+#   ARGOCD_AUTH_TOKEN - ArgoCD API token
+
 variables:
   SERVICE_NAME: "my-service"
-  REGISTRY: ${CI_REGISTRY}
   IMAGE_NAME: ${CI_REGISTRY_IMAGE}
-  GITOPS_MODE: "pull"
-  ARGOCD_OPTS: "--grpc-web"
   RELEASE_TIMEOUT: "300"
 
 stages:
@@ -236,6 +280,9 @@ stages:
   - update-manifests
   - release
 
+# ============================================
+# Build Stage
+# ============================================
 build:
   stage: build
   image: docker:24
@@ -247,7 +294,7 @@ build:
     - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
   script:
     # Для приватных Go зависимостей добавьте --build-arg GITLAB_TOKEN=${CI_PUSH_TOKEN}
-    - docker build --build-arg GITLAB_TOKEN=${CI_PUSH_TOKEN} -t ${IMAGE_NAME}:${CI_COMMIT_SHORT_SHA} .
+    - docker build -t ${IMAGE_NAME}:${CI_COMMIT_SHORT_SHA} .
     - docker push ${IMAGE_NAME}:${CI_COMMIT_SHORT_SHA}
     - |
       if [ "$CI_COMMIT_BRANCH" == "$CI_DEFAULT_BRANCH" ]; then
@@ -256,7 +303,11 @@ build:
       fi
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
 
+# ============================================
+# Update manifests (Pull-based GitOps)
+# ============================================
 update:dev:
   stage: update-manifests
   image: alpine:3.19
@@ -269,31 +320,75 @@ update:dev:
     - git checkout ${CI_COMMIT_BRANCH}
   script:
     - |
+      echo "Updating dev environment to ${CI_COMMIT_SHORT_SHA}"
       yq -i '.image.tag = "'${CI_COMMIT_SHORT_SHA}'"' .cicd/dev.yaml
       yq -i '.image.repository = "'${IMAGE_NAME}'"' .cicd/dev.yaml
+
       git add .cicd/dev.yaml
       git commit -m "ci(dev): update image to ${CI_COMMIT_SHORT_SHA} [skip ci]"
       git push origin ${CI_COMMIT_BRANCH}
   rules:
-    - if: $GITOPS_MODE == "pull" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
 
+# ============================================
+# Release Stage: Wait for ArgoCD deployment
+# Uses REST API (CloudFlare Tunnel compatible)
+# ============================================
 release:dev:
   stage: release
   image: alpine:3.19
   variables:
     ARGOCD_APP_NAME: ${SERVICE_NAME}-dev
-    ARGOCD_VERSION: "v2.13.2"
   before_script:
-    - apk add --no-cache curl
-    - curl -sSL -o /usr/local/bin/argocd "https://github.com/argoproj/argo-cd/releases/download/${ARGOCD_VERSION}/argocd-linux-amd64"
-    - chmod +x /usr/local/bin/argocd
+    - apk add --no-cache curl jq
   script:
-    - argocd app get ${ARGOCD_APP_NAME} --refresh ${ARGOCD_OPTS} > /dev/null
-    - argocd app wait ${ARGOCD_APP_NAME} --timeout ${RELEASE_TIMEOUT} --health --sync ${ARGOCD_OPTS}
+    - |
+      echo "Waiting for ${ARGOCD_APP_NAME} to sync and become healthy..."
+      echo "ArgoCD Server: https://${ARGOCD_SERVER}"
+      echo "Timeout: ${RELEASE_TIMEOUT}s"
+
+      ARGOCD_API="https://${ARGOCD_SERVER}/api/v1/applications/${ARGOCD_APP_NAME}"
+      AUTH_HEADER="Authorization: Bearer ${ARGOCD_AUTH_TOKEN}"
+
+      # Trigger refresh
+      curl -sf "${ARGOCD_API}?refresh=normal" -H "${AUTH_HEADER}" > /dev/null || true
+
+      # Wait for sync and health
+      start_time=$(date +%s)
+      while true; do
+        response=$(curl -sf "${ARGOCD_API}" -H "${AUTH_HEADER}" 2>/dev/null)
+        if [ $? -ne 0 ]; then
+          echo "ERROR: Failed to get application status"
+          exit 1
+        fi
+
+        sync_status=$(echo "$response" | jq -r '.status.sync.status // "Unknown"')
+        health_status=$(echo "$response" | jq -r '.status.health.status // "Unknown"')
+
+        echo "Status: sync=${sync_status}, health=${health_status}"
+
+        if [ "$sync_status" = "Synced" ] && [ "$health_status" = "Healthy" ]; then
+          echo ""
+          echo "=== RELEASE SUCCESSFUL ==="
+          echo "Application: ${ARGOCD_APP_NAME}"
+          exit 0
+        fi
+
+        elapsed=$(($(date +%s) - start_time))
+        if [ $elapsed -ge ${RELEASE_TIMEOUT} ]; then
+          echo "ERROR: Timeout after ${RELEASE_TIMEOUT}s"
+          exit 1
+        fi
+
+        sleep 5
+      done
+  environment:
+    name: dev
   needs:
     - job: update:dev
+      optional: true
   rules:
-    - if: $GITOPS_MODE == "pull" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
 ```
 
 ## Шаг 7: Создание секретов в Vault
@@ -491,8 +586,6 @@ npm start
 
 ```
 api/proto/my-service/
-├── buf.yaml
-├── buf.gen.yaml
 ├── .gitlab-ci.yml
 └── proto/
     └── myservice/
@@ -500,40 +593,7 @@ api/proto/my-service/
             └── service.proto
 ```
 
-### 2. buf.yaml
-
-```yaml
-version: v2
-modules:
-  - path: proto
-    name: buf.build/gitops-poc-dzha/my-service
-lint:
-  use:
-    - DEFAULT
-breaking:
-  use:
-    - FILE
-```
-
-### 3. buf.gen.yaml
-
-```yaml
-version: v2
-managed:
-  enabled: true
-  override:
-    - file_option: go_package_prefix
-      value: gitlab.com/gitops-poc-dzha/api/gen/my-service/go
-plugins:
-  - remote: buf.build/protocolbuffers/go
-    out: gen/go
-    opt: paths=source_relative
-  - remote: buf.build/grpc/go
-    out: gen/go
-    opt: paths=source_relative
-```
-
-### 4. .gitlab-ci.yml
+### 2. .gitlab-ci.yml (минимальный)
 
 ```yaml
 include:
@@ -542,10 +602,12 @@ include:
     file: '/templates/proto-gen/template.yml'
 
 variables:
-  PROTO_GEN_LANGUAGES: "go"  # go,nodejs,php,python,angular
+  PROTO_GEN_LANGUAGES: "go,web"  # go,nodejs,php,python,web
 ```
 
-### 5. Использование сгенерированного кода
+> **Примечание:** `buf.yaml` и `buf.gen.yaml` генерируются автоматически из `$CI_PROJECT_NAME`.
+
+### 3. Использование сгенерированного кода
 
 ```go
 import (
@@ -558,7 +620,7 @@ import (
 - [ ] Добавлен в platform/core.yaml
 - [ ] Создан репозиторий с кодом
 - [ ] Выбран подходящий Dockerfile (distroless для Go/Node.js)
-- [ ] Создан .cicd/default.yaml
+- [ ] Создан .cicd/default.yaml (минимальный, без inherited полей)
 - [ ] Создан .cicd/dev.yaml
 - [ ] Создан .gitlab-ci.yml
 - [ ] Созданы секреты в Vault
@@ -569,8 +631,9 @@ import (
 ## Полезные команды
 
 ```bash
-# Статус ArgoCD приложения
-argocd app get my-service-dev --grpc-web
+# Статус ArgoCD приложения (через REST API)
+curl -s "https://${ARGOCD_SERVER}/api/v1/applications/my-service-dev" \
+  -H "Authorization: Bearer ${ARGOCD_AUTH_TOKEN}" | jq '.status.sync.status, .status.health.status'
 
 # Логи пода
 kubectl logs -f deployment/my-service -n poc-dev
@@ -578,8 +641,9 @@ kubectl logs -f deployment/my-service -n poc-dev
 # Секреты
 kubectl get secret my-service-secrets -n poc-dev -o yaml
 
-# Принудительный sync
-argocd app sync my-service-dev --grpc-web
+# Принудительный sync (REST API)
+curl -X POST "https://${ARGOCD_SERVER}/api/v1/applications/my-service-dev/sync" \
+  -H "Authorization: Bearer ${ARGOCD_AUTH_TOKEN}"
 ```
 
 ## Инфраструктурные сервисы
@@ -588,6 +652,7 @@ argocd app sync my-service-dev --grpc-web
 |--------|-------|-----------|
 | MongoDB | mongodb.infra-dev.svc:27017 | infra-dev |
 | RabbitMQ | rabbitmq.infra-dev.svc:5672 | infra-dev |
+| Redis | redis.infra-dev.svc:6379 | infra-dev |
 | Vault | vault.vault.svc:8200 | vault |
 
 ## Preview Environments (Feature Branches)
