@@ -264,10 +264,10 @@ Sentry.init({
   tracesSampleRate: 1.0,
   
   // Частота записи сессий пользователей (0-1)
-  replaysSessionSampleRate: 1.0, // 100% для демо
-  
+  replaysSessionSampleRate: 0, // Отключено
+
   // Частота записи сессий при ошибках (0-1)
-  replaysOnErrorSampleRate: 1.0, // 100% при ошибках
+  replaysOnErrorSampleRate: 0, // Отключено
   
   // Частота профилирования (требует tracesSampleRate > 0)
   profilesSampleRate: 1.0,
