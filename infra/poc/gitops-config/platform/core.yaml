@@ -40,28 +40,16 @@ domainMirrors:
       servicePort: 4200
 
 # Services Registry
+# Sync Waves:
+#   Wave 0: Backend services (no dependencies on other services)
+#   Wave 1: API Gateway (depends on backend services)
+#   Wave 2: Frontend (depends on API Gateway)
 services:
-  api-gateway:
-    syncWave: "0"
-
-  # web-grpc:
-  #   syncWave: "0"
-
-  # web-http:
-  #   syncWave: "0"
-
-  # health-demo:
-  #   syncWave: "0"
-
+  # --- Wave 0: Backend Services ---
   user-service:
     syncWave: "0"
     repoURL: https://gitlab.com/gitops-poc-dzha/services/user-service.git
     path: .cicd
-
-  sentry-frontend:
-    syncWave: "1"
-    repoURL: https://gitlab.com/gitops-poc-dzha/services/sentry-demo.git
-    path: frontend/.cicd
 
   sentry-game-engine:
     syncWave: "0"
@@ -77,6 +65,26 @@ services:
     syncWave: "0"
     repoURL: https://gitlab.com/gitops-poc-dzha/services/sentry-demo.git
     path: wager-service/.cicd
+
+  # --- Wave 1: API Gateway ---
+  api-gateway:
+    syncWave: "1"
+
+  # --- Wave 2: Frontend ---
+  sentry-frontend:
+    syncWave: "2"
+    repoURL: https://gitlab.com/gitops-poc-dzha/services/sentry-demo.git
+    path: frontend/.cicd
+
+  # --- Disabled services ---
+  # web-grpc:
+  #   syncWave: "0"
+
+  # web-http:
+  #   syncWave: "0"
+
+  # health-demo:
+  #   syncWave: "0"
 
   # analytics-service:
   #   syncWave: "0"

@@ -20,6 +20,8 @@ metadata:
     app.kubernetes.io/name: platform-bootstrap
     app.kubernetes.io/component: infrastructure
     environment: {{ $envName }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:
