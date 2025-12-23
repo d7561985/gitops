@@ -79,7 +79,7 @@ update:dev:
   stage: release
   image: alpine:3.19
   variables:
-    ARGOCD_VERSION: "v2.13.2"
+    ARGOCD_VERSION: "v3.2.1"
   before_script:
     - apk add --no-cache curl
     - |
