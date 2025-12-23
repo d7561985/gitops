@@ -1,19 +1,36 @@
 {{- if .Values.namespaces.enabled }}
 {{- /*
-Namespaces for each enabled environment
+Namespaces for each enabled environment:
+- Application namespace: {prefix}-{env} (e.g., poc-dev)
+- Infrastructure namespace: infra-{env} (e.g., infra-dev)
 */ -}}
 {{- range $envName, $env := .Values.environments }}
 {{- if $env.enabled }}
 ---
+# Application namespace
 apiVersion: v1
 kind: Namespace
 metadata:
   name: {{ $.Values.global.namespacePrefix }}-{{ $envName }}
   labels:
     app.kubernetes.io/name: platform-bootstrap
+    app.kubernetes.io/component: application
     environment: {{ $envName }}
     # Allow Gateway API HTTPRoutes to attach to Gateway
     gateway-access: "true"
+    {{- range $key, $value := $.Values.namespaces.labels }}
+    {{ $key }}: {{ $value | quote }}
+    {{- end }}
+---
+# Infrastructure namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ $env.infraNamespace | default (printf "infra-%s" $envName) }}
+  labels:
+    app.kubernetes.io/name: platform-bootstrap
+    app.kubernetes.io/component: infrastructure
+    environment: {{ $envName }}
     {{- range $key, $value := $.Values.namespaces.labels }}
     {{ $key }}: {{ $value | quote }}
     {{- end }}

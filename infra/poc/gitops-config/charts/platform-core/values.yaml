@@ -14,6 +14,10 @@ vaultAuth: {}
 dns: {}
 ingress: {}
 
+# Infrastructure Applications (MongoDB, RabbitMQ per environment)
+infra:
+  enabled: true
+
 # Namespaces
 namespaces:
   enabled: true

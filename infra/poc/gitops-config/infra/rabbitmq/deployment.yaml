@@ -2,7 +2,6 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: rabbitmq
-  namespace: infra-dev
   labels:
     app: rabbitmq
 spec:

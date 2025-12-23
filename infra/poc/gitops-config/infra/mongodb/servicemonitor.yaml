@@ -2,16 +2,15 @@ apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
   name: mongodb
-  namespace: infra-dev
   labels:
     app: mongodb
 spec:
   selector:
     matchLabels:
       app: mongodb
+  # Monitor services in same namespace (set by ArgoCD destination)
   namespaceSelector:
-    matchNames:
-      - infra-dev
+    matchNames: []
   endpoints:
   - port: metrics
     interval: 30s

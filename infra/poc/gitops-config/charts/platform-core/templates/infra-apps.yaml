@@ -1,0 +1,47 @@
+{{- /*
+Infrastructure Applications per Environment
+
+Generates ArgoCD Application for each enabled environment to deploy
+shared infrastructure (MongoDB, RabbitMQ) to infra-{env} namespace.
+
+Source: infra/ kustomization (MongoDB, RabbitMQ deployments)
+Destination: infraNamespace from environment config
+*/ -}}
+{{- if .Values.infra.enabled }}
+{{- range $envName, $env := .Values.environments }}
+{{- if $env.enabled }}
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: infra-{{ $envName }}
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: platform-bootstrap
+    app.kubernetes.io/component: infrastructure
+    environment: {{ $envName }}
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: {{ $.Values.applicationSet.project }}
+
+  source:
+    repoURL: https://gitlab.com/{{ $.Values.global.gitlabGroup }}/infra/poc/gitops-config.git
+    targetRevision: main
+    path: infra
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: {{ $env.infraNamespace | default (printf "infra-%s" $envName) }}
+
+  syncPolicy:
+    {{- if $env.autoSync }}
+    automated:
+      prune: true
+      selfHeal: true
+    {{- end }}
+    syncOptions:
+      - CreateNamespace=false
+{{- end }}
+{{- end }}
+{{- end }}
