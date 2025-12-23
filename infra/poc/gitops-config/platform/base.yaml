@@ -59,6 +59,14 @@ vaultAuth:
     - vault
 
 # -----------------------------------------------------------------------------
+# Registry Credentials (synced from Vault to all namespaces)
+# -----------------------------------------------------------------------------
+registry:
+  enabled: true
+  secretName: regsecret
+  vaultPath: gitops-poc-dzha/platform/registry
+
+# -----------------------------------------------------------------------------
 # ArgoCD ApplicationSet Configuration
 # -----------------------------------------------------------------------------
 applicationSet:

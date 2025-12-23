@@ -83,6 +83,13 @@ spec:
           path "secret/metadata/${PREFIX}/+/{{ $envName }}/*" {
             capabilities = ["read", "list"]
           }
+          # Platform-level secrets (registry, shared config)
+          path "secret/data/${PREFIX}/platform/*" {
+            capabilities = ["read"]
+          }
+          path "secret/metadata/${PREFIX}/platform/*" {
+            capabilities = ["read", "list"]
+          }
           POLICY
 
           # ---------------------------------------------

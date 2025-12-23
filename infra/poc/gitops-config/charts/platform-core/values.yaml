@@ -19,6 +19,7 @@ environments: {}
 services: {}
 vault: {}
 vaultAuth: {}
+registry: {}
 dns: {}
 ingress: {}
 
