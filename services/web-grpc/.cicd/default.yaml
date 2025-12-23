@@ -8,13 +8,15 @@ version: "v0.19.1"
 # Service Account (use default, k8app doesn't create SA)
 serviceAccountName: default
 
-# Image configuration (public image - no registry secret needed)
+# Image configuration
 image:
   repository: nicholasjackson/fake-service
   tag: v0.19.1
   pullPolicy: IfNotPresent
 
-# No imagePullSecrets needed - public image
+# Image Pull Secrets for GitLab Registry
+imagePullSecrets:
+  - name: regsecret
 
 # Service configuration (k8app format)
 service:

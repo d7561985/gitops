@@ -23,4 +23,4 @@ annotations:
   argocd.argoproj.io/sync-wave: "0" # Deploy first (no dependencies)
 image:
   tag: fdf1dc3c
-  repository: registry.gitlab.com/gitops-poc-dzha/web-grpc
+  repository: registry.gitlab.com/gitops-poc-dzha/services/web-grpc

@@ -23,4 +23,4 @@ annotations:
   argocd.argoproj.io/sync-wave: "0"
 image:
   tag: 457b2e2b
-  repository: registry.gitlab.com/gitops-poc-dzha/web-http
+  repository: registry.gitlab.com/gitops-poc-dzha/services/web-http

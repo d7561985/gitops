@@ -6,7 +6,7 @@ environment: dev
 branch: main
 # Image - CI updates these values
 image:
-  repository: registry.gitlab.com/gitops-poc-dzha/api-gateway
+  repository: registry.gitlab.com/gitops-poc-dzha/services/api-gateway
   tag: cd8b76e2
   pullPolicy: IfNotPresent
 # Replicas
@@ -33,7 +33,7 @@ annotations:
 extensions:
   auth-adapter:
     image:
-      repository: registry.gitlab.com/gitops-poc-dzha/auth-adapter
+      repository: registry.gitlab.com/gitops-poc-dzha/services/auth-adapter
       tag: 7306e90b
       pullPolicy: IfNotPresent
 # HTTPRoute (environment-specific)

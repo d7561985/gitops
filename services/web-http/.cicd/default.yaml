@@ -8,13 +8,15 @@ version: "latest"
 # Service Account (use default, k8app doesn't create SA)
 serviceAccountName: default
 
-# Image configuration (public image - no registry secret needed)
+# Image configuration
 image:
   repository: mendhak/http-https-echo
   tag: latest
   pullPolicy: IfNotPresent
 
-# No imagePullSecrets needed - public image
+# Image Pull Secrets for GitLab Registry
+imagePullSecrets:
+  - name: regsecret
 
 # Service configuration (k8app format)
 # mendhak/http-https-echo listens on port 8080 (HTTP) and 8443 (HTTPS) by default
