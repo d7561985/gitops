@@ -1,0 +1,28 @@
+# User Service - Staging Environment Overrides
+# Inherits from default.yaml
+# CI updates image.repository and image.tag on each build
+
+environment: staging
+branch: main
+image:
+  repository: registry.gitlab.com/gitops-poc-dzha/services/user-service
+  tag: latest
+  pullPolicy: IfNotPresent
+replicas: 2
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+labels:
+  app.kubernetes.io/instance: user-service-staging
+  environment: staging
+annotations:
+  argocd.argoproj.io/sync-wave: "0"
+# Environment-specific configmap values
+configmap:
+  # Infrastructure (cross-namespace = FQDN)
+  MONGODB_URI: "mongodb://root:rootpassword@mongodb.infra-staging.svc:27017/users?authSource=admin"
+  RABBITMQ_URI: "amqp://guest:guest@rabbitmq.infra-staging.svc:5672/"

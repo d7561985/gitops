@@ -1,0 +1,18 @@
+# Staging environment overrides for wager-service
+
+image:
+  repository: registry.gitlab.com/gitops-poc-dzha/services/sentry-demo/wager-service
+  tag: latest
+replicas: 2
+
+# Environment-specific configmap values
+configmap:
+  # Infrastructure (cross-namespace = FQDN)
+  MONGODB_URL: "mongodb://root:rootpassword@mongodb.infra-staging.svc:27017/wager?authSource=admin"
+  # Environment indicator
+  SENTRY_ENVIRONMENT: "staging"
+
+# Vault (environment-specific)
+vault:
+  role: sentry-wager-staging
+  path: gitops-poc-dzha/sentry-wager/staging/config

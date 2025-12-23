@@ -1,0 +1,19 @@
+# Staging environment overrides for sentry-payment
+
+image:
+  repository: registry.gitlab.com/gitops-poc-dzha/services/sentry-demo/payment-service
+  tag: latest
+replicaCount: 2
+
+# Environment-specific configmap values
+configmap:
+  # Infrastructure (cross-namespace = FQDN)
+  MONGODB_URL: "mongodb://mongodb.infra-staging.svc:27017/payments"
+  RABBITMQ_URL: "amqp://guest:guest@rabbitmq.infra-staging.svc:5672"
+  # Environment indicator
+  SENTRY_ENVIRONMENT: "staging"
+
+# Vault (environment-specific)
+vault:
+  role: sentry-payment-staging
+  path: gitops-poc-dzha/sentry-payment/staging/config

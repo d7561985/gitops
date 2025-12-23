@@ -1,0 +1,20 @@
+# Staging environment overrides for sentry-frontend
+
+image:
+  repository: registry.gitlab.com/gitops-poc-dzha/services/sentry-demo/frontend
+  tag: latest
+replicaCount: 2
+
+# Vault (environment-specific)
+vault:
+  role: sentry-frontend-staging
+  path: gitops-poc-dzha/sentry-frontend/staging/config
+
+# HTTPRoute (environment-specific)
+httpRoute:
+  parentRefs:
+    - name: gateway
+      namespace: poc-staging
+      sectionName: http-app
+  hostnames:
+    - stage.demo-poc-01.work

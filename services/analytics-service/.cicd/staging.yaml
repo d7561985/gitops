@@ -1,0 +1,26 @@
+# Analytics Service - Staging Environment Overrides
+# Inherits from default.yaml
+# CI updates image.repository and image.tag on each build
+
+environment: staging
+branch: main
+image:
+  repository: registry.gitlab.com/gitops-poc-dzha/services/analytics-service
+  tag: latest
+  pullPolicy: IfNotPresent
+replicas: 2
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 300m
+    memory: 256Mi
+labels:
+  app.kubernetes.io/instance: analytics-service-staging
+  environment: staging
+annotations:
+  argocd.argoproj.io/sync-wave: "0"
+# Redis is optional - service works without it
+configmap:
+  REDIS_ADDR: ""

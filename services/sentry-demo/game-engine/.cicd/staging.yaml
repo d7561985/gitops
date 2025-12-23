@@ -1,0 +1,19 @@
+# Staging environment overrides for sentry-game-engine
+
+image:
+  repository: registry.gitlab.com/gitops-poc-dzha/services/sentry-demo/game-engine
+  tag: latest
+replicaCount: 2
+
+# Environment-specific configmap values
+configmap:
+  # Infrastructure (cross-namespace = FQDN)
+  MONGODB_URL: "mongodb://root:rootpassword@mongodb.infra-staging.svc:27017/games?authSource=admin"
+  RABBITMQ_URL: "amqp://guest:guest@rabbitmq.infra-staging.svc:5672"
+  # Environment indicator
+  SENTRY_ENVIRONMENT: "staging"
+
+# Vault (environment-specific)
+vault:
+  role: sentry-game-engine-staging
+  path: gitops-poc-dzha/sentry-game-engine/staging/config
