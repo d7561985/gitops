@@ -49,3 +49,18 @@ hpa:
 # =============================================================================
 secrets:
   API_KEY: "/gitops-poc-dzha/api-gateway/staging/config"
+
+extensions:
+  auth-adapter:
+    image:
+      repository: registry.gitlab.com/gitops-poc-dzha/services/auth-adapter
+      tag: v1.0.2
+      pullPolicy: IfNotPresent
+# HTTPRoute (environment-specific)
+httpRoute:
+  parentRefs:
+    - name: gateway
+      namespace: poc-staging
+      sectionName: http-app
+  hostnames:
+    - stage.demo-poc-01.work
