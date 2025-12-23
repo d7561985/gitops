@@ -6,7 +6,7 @@
     { "path": "services/health-demo", "name": "health-demo" },
     { "path": "services/web-grpc", "name": "web-grpc" },
     { "path": "services/web-http", "name": "web-http" },
-    { "path": "gitops-config", "name": "gitops-config" },
+    { "path": "infra/poc/gitops-config", "name": "gitops-config" },
     { "path": "services/sentry-demo", "name": "sentry-demo" },
     { "path": "services/user-service", "name": "user-service" }
   ],
