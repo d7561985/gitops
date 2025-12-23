@@ -26,6 +26,8 @@ spec:
       server: https://kubernetes.default.svc
     - namespace: 'infra-dev'
       server: https://kubernetes.default.svc
+    - namespace: 'infra-staging'
+      server: https://kubernetes.default.svc
     - namespace: 'cloudflare'
       server: https://kubernetes.default.svc
     - namespace: 'external-dns'
