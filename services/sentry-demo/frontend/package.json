@@ -32,6 +32,7 @@
     "@connectrpc/connect-web": "^2.1.0",
     "@gitops-poc-dzha/wager-service-web": "git+https://gitlab.com/gitops-poc-dzha/api/gen/wager-service/web.git#main",
     "@gitops-poc-dzha/game-engine-web": "git+https://gitlab.com/gitops-poc-dzha/api/gen/game-engine/web.git#main",
+    "@gitops-poc-dzha/analytics-service-web": "git+https://gitlab.com/gitops-poc-dzha/api/gen/analytics-service/web.git#main",
     "@sentry-internal/browser-utils": "^9.35.0",
     "@sentry/angular": "^9.35.0",
     "@sentry/cli": "^2.20.0",

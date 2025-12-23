@@ -13,6 +13,7 @@ import { SentryErrorHandler } from './services/sentry-error.handler';
 import { GAME_ENGINE_SERVICE_PROVIDER } from './services/game-engine';
 import { BONUS_SERVICE_PROVIDER } from './services/bonus';
 import { WAGER_SERVICE_PROVIDER } from './services/wager';
+import { ANALYTICS_SERVICE_PROVIDER } from './services/analytics';
 
 @NgModule({
     imports: [
@@ -31,6 +32,7 @@ import { WAGER_SERVICE_PROVIDER } from './services/wager';
         GAME_ENGINE_SERVICE_PROVIDER,
         BONUS_SERVICE_PROVIDER,
         WAGER_SERVICE_PROVIDER,
+        ANALYTICS_SERVICE_PROVIDER,
         {
             provide: ErrorHandler,
             useClass: SentryErrorHandler

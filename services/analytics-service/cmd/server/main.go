@@ -11,11 +11,14 @@ import (
 	"syscall"
 	"time"
 
+	"connectrpc.com/connect"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/redis/go-redis/v9"
 	"gitlab.com/gitops-poc-dzha/analytics-service/internal/service"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
+
+	analyticsv1connect "gitlab.com/gitops-poc-dzha/api/gen/analytics-service/go/analytics/v1/analyticsv1connect"
 )
 
 var (
@@ -63,11 +66,13 @@ func main() {
 	// Create analytics service
 	analyticsService := service.NewAnalyticsService(rdb)
 
+	// Create Connect handler with logging interceptor
+	interceptors := connect.WithInterceptors(NewLoggingInterceptor())
+	analyticsServer := NewAnalyticsServiceServer(analyticsService)
+	path, handler := analyticsv1connect.NewAnalyticsServiceHandler(analyticsServer, interceptors)
+
 	// Create HTTP mux
 	mux := http.NewServeMux()
-
-	// Register Connect handler
-	path, handler := analyticsService.Handler()
 	mux.Handle(path, handler)
 
 	// Health check
@@ -99,6 +104,7 @@ func main() {
 	// Start main server
 	go func() {
 		fmt.Printf("Connect server listening on :%s\n", *port)
+		fmt.Printf("Connect path: %s\n", path)
 		fmt.Println("Supported protocols: Connect, gRPC, gRPC-Web")
 		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			fmt.Printf("Server error: %v\n", err)

@@ -6,7 +6,9 @@ require (
 	connectrpc.com/connect v1.19.1
 	github.com/prometheus/client_golang v1.20.5
 	github.com/redis/go-redis/v9 v9.7.0
+	gitlab.com/gitops-poc-dzha/api/gen/analytics-service/go v0.0.0-20251223132905-4e1209776473
 	golang.org/x/net v0.32.0
+	google.golang.org/protobuf v1.36.9
 )
 
 require (
@@ -20,5 +22,6 @@ require (
 	github.com/prometheus/procfs v0.15.1 // indirect
 	golang.org/x/sys v0.28.0 // indirect
 	golang.org/x/text v0.21.0 // indirect
-	google.golang.org/protobuf v1.36.9 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20241209162323-e6fa225c2576 // indirect
+	google.golang.org/grpc v1.68.1 // indirect
 )

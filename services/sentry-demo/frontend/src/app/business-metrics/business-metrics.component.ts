@@ -1,33 +1,20 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Component, OnInit, OnDestroy, Inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { HttpClient } from '@angular/common/http';
 import { interval, Subscription } from 'rxjs';
 import * as Sentry from '@sentry/angular';
-import { 
-  createNewTrace, 
-  TransactionNames, 
-  Operations, 
-  setTransactionStatus 
+import {
+  createNewTrace,
+  TransactionNames,
+  Operations,
+  setTransactionStatus
 } from '../utils/sentry-traces';
-
-interface MetricData {
-  period_hours: number;
-  overall_rtp: number;
-  rtp_threshold: {
-    min: number;
-    max: number;
-    status: string;
-  };
-  game_count?: number;
-  unique_players?: number;
-  total_revenue?: number;
-  total_payouts?: number;
-  avg_deposit?: number;
-  avg_withdrawal?: number;
-  deposit_count?: number;
-  withdrawal_count?: number;
-  sessions?: any[];
-}
+import {
+  ANALYTICS_SERVICE,
+  IAnalyticsService,
+  RTPMetrics,
+  SessionMetrics,
+  FinancialMetrics
+} from '../services/analytics';
 
 @Component({
     selector: 'app-business-metrics',
@@ -35,57 +22,57 @@ interface MetricData {
     imports: [CommonModule],
     template: `
     <div class="metrics-dashboard">
-      <h2>📊 Business Metrics Dashboard</h2>
-    
+      <h2>Business Metrics Dashboard</h2>
+
       <div class="metrics-grid">
         <!-- RTP Metric Card -->
-        <div class="metric-card" [class.anomaly]="rtpData?.rtp_threshold?.status === 'anomaly'">
+        <div class="metric-card" [class.anomaly]="rtpData?.rtpThreshold?.status === 'anomaly'">
           <h3>Return to Player (RTP)</h3>
-          <div class="metric-value">{{ rtpData?.overall_rtp?.toFixed(2) || '0.00' }}%</div>
-          <div class="metric-status" [class.warning]="rtpData?.rtp_threshold?.status === 'anomaly'">
-            {{ rtpData?.rtp_threshold?.status === 'anomaly' ? '⚠️ Anomaly Detected' : '✅ Normal' }}
+          <div class="metric-value">{{ rtpData?.overallRtp?.toFixed(2) || '0.00' }}%</div>
+          <div class="metric-status" [class.warning]="rtpData?.rtpThreshold?.status === 'anomaly'">
+            {{ rtpData?.rtpThreshold?.status === 'anomaly' ? 'Anomaly Detected' : 'Normal' }}
           </div>
-          <div class="metric-range">Expected: {{ rtpData?.rtp_threshold?.min }}-{{ rtpData?.rtp_threshold?.max }}%</div>
+          <div class="metric-range">Expected: {{ rtpData?.rtpThreshold?.min }}-{{ rtpData?.rtpThreshold?.max }}%</div>
         </div>
-    
+
         <!-- Session Metrics Card -->
         <div class="metric-card">
           <h3>Active Sessions</h3>
-          <div class="metric-value">{{ sessionData?.active_sessions || 0 }}</div>
-          <div class="metric-subtext">Avg Duration: {{ sessionData?.avg_duration?.toFixed(0) || 0 }}s</div>
+          <div class="metric-value">{{ sessionData?.activeSessions || 0 }}</div>
+          <div class="metric-subtext">Avg Duration: {{ sessionData?.avgDuration?.toFixed(0) || 0 }}s</div>
         </div>
-    
+
         <!-- Financial Metrics Card -->
         <div class="metric-card">
           <h3>Financial Overview (24h)</h3>
           <div class="metric-row">
             <span>Revenue:</span>
-            <span class="value">{{ '$' + (financialData?.total_revenue?.toFixed(2) || '0.00') }}</span>
+            <span class="value">{{ '$' + (financialData?.totalRevenue?.toFixed(2) || '0.00') }}</span>
           </div>
           <div class="metric-row">
             <span>Deposits:</span>
-            <span class="value">{{ financialData?.deposit_count || 0 }} ({{ '$' + (financialData?.avg_deposit?.toFixed(2) || '0.00') }} avg)</span>
+            <span class="value">{{ financialData?.depositCount || 0 }} ({{ '$' + (financialData?.avgDeposit?.toFixed(2) || '0.00') }} avg)</span>
           </div>
           <div class="metric-row">
             <span>Withdrawals:</span>
-            <span class="value">{{ financialData?.withdrawal_count || 0 }} ({{ '$' + (financialData?.avg_withdrawal?.toFixed(2) || '0.00') }} avg)</span>
+            <span class="value">{{ financialData?.withdrawalCount || 0 }} ({{ '$' + (financialData?.avgWithdrawal?.toFixed(2) || '0.00') }} avg)</span>
           </div>
         </div>
-    
+
         <!-- Game Activity Card -->
         <div class="metric-card">
           <h3>Game Activity</h3>
-          <div class="metric-value">{{ rtpData?.game_count || 0 }}</div>
+          <div class="metric-value">{{ rtpData?.gameCount || 0 }}</div>
           <div class="metric-subtext">Games in last hour</div>
-          <div class="metric-subtext">{{ rtpData?.unique_players || 0 }} unique players</div>
+          <div class="metric-subtext">{{ rtpData?.uniquePlayers || 0 }} unique players</div>
         </div>
       </div>
-    
+
       <div class="refresh-info">
         Auto-refreshing every 10 seconds
-        <span class="status" [class.error]="hasError">{{ hasError ? '❌ Error' : '🟢 Connected' }}</span>
+        <span class="status" [class.error]="hasError">{{ hasError ? 'Error' : 'Connected' }}</span>
       </div>
-    
+
       @if (errorMessage) {
         <div class="error-message">
           {{ errorMessage }}
@@ -198,23 +185,18 @@ interface MetricData {
   `]
 })
 export class BusinessMetricsComponent implements OnInit, OnDestroy {
-  rtpData: MetricData | null = null;
-  sessionData: any = null;
-  financialData: MetricData | null = null;
+  rtpData: RTPMetrics | null = null;
+  sessionData: SessionMetrics | null = null;
+  financialData: FinancialMetrics | null = null;
   hasError = false;
   errorMessage = '';
-  
-  private refreshSubscription?: Subscription;
-  // Use api-gateway for analytics service (relative URL for production)
-  private analyticsUrl = '/api/analytics';
 
-  constructor(private http: HttpClient) {}
+  private refreshSubscription?: Subscription;
+
+  constructor(@Inject(ANALYTICS_SERVICE) private analyticsService: IAnalyticsService) {}
 
   ngOnInit(): void {
-    // Initial load
     this.loadMetrics();
-    
-    // Set up auto-refresh every 10 seconds
     this.refreshSubscription = interval(10000).subscribe(() => {
       this.loadMetrics();
     });
@@ -234,70 +216,58 @@ export class BusinessMetricsComponent implements OnInit, OnDestroy {
         try {
           span?.setAttribute('metrics.type', 'all');
           span?.setAttribute('refresh.auto', true);
-          
-          // Track the number of successful API calls
+
+          const results = await Promise.allSettled([
+            this.analyticsService.getRTPMetrics(1),
+            this.analyticsService.getSessionMetrics(),
+            this.analyticsService.getFinancialMetrics(24),
+          ]);
+
           let successCount = 0;
           let errorCount = 0;
-          
-          // Load RTP metrics
-          this.http.get<MetricData>(`${this.analyticsUrl}/api/v1/business-metrics/rtp?hours=1`)
-            .subscribe({
-              next: (data) => {
-                this.rtpData = data;
-                this.hasError = false;
-                successCount++;
-                span?.setAttribute('metrics.rtp.success', true);
-                span?.setAttribute('rtp.value', data.overall_rtp);
-                span?.setAttribute('rtp.status', data.rtp_threshold?.status || 'normal');
-              },
-              error: (err) => {
-                errorCount++;
-                span?.setAttribute('metrics.rtp.success', false);
-                this.handleError('Failed to load RTP metrics', err);
-              }
-            });
 
-          // Load session metrics
-          this.http.get<any>(`${this.analyticsUrl}/api/v1/business-metrics/sessions`)
-            .subscribe({
-              next: (data) => {
-                this.sessionData = data;
-                successCount++;
-                span?.setAttribute('metrics.sessions.success', true);
-                span?.setAttribute('sessions.active', data.active_sessions || 0);
-              },
-              error: (err) => {
-                errorCount++;
-                span?.setAttribute('metrics.sessions.success', false);
-                this.handleError('Failed to load session metrics', err);
-              }
-            });
+          // RTP Metrics
+          if (results[0].status === 'fulfilled') {
+            this.rtpData = results[0].value;
+            this.hasError = false;
+            successCount++;
+            span?.setAttribute('metrics.rtp.success', true);
+            span?.setAttribute('rtp.value', this.rtpData.overallRtp);
+            span?.setAttribute('rtp.status', this.rtpData.rtpThreshold.status);
+          } else {
+            errorCount++;
+            span?.setAttribute('metrics.rtp.success', false);
+            this.handleError('Failed to load RTP metrics', results[0].reason);
+          }
 
-          // Load financial metrics
-          this.http.get<MetricData>(`${this.analyticsUrl}/api/v1/business-metrics/financial?hours=24`)
-            .subscribe({
-              next: (data) => {
-                this.financialData = data;
-                successCount++;
-                span?.setAttribute('metrics.financial.success', true);
-                span?.setAttribute('financial.revenue', data.total_revenue || 0);
-              },
-              error: (err) => {
-                errorCount++;
-                span?.setAttribute('metrics.financial.success', false);
-                this.handleError('Failed to load financial metrics', err);
-              }
-            });
-          
-          // Add a small delay to ensure all requests have been initiated
-          await new Promise(resolve => setTimeout(resolve, 100));
-          
-          // Set final transaction status based on overall success
+          // Session Metrics
+          if (results[1].status === 'fulfilled') {
+            this.sessionData = results[1].value;
+            successCount++;
+            span?.setAttribute('metrics.sessions.success', true);
+            span?.setAttribute('sessions.active', this.sessionData.activeSessions);
+          } else {
+            errorCount++;
+            span?.setAttribute('metrics.sessions.success', false);
+            this.handleError('Failed to load session metrics', results[1].reason);
+          }
+
+          // Financial Metrics
+          if (results[2].status === 'fulfilled') {
+            this.financialData = results[2].value;
+            successCount++;
+            span?.setAttribute('metrics.financial.success', true);
+            span?.setAttribute('financial.revenue', this.financialData.totalRevenue);
+          } else {
+            errorCount++;
+            span?.setAttribute('metrics.financial.success', false);
+            this.handleError('Failed to load financial metrics', results[2].reason);
+          }
+
           span?.setAttribute('metrics.success_count', successCount);
           span?.setAttribute('metrics.error_count', errorCount);
-          
-          // Transaction is successful even if some metrics fail
-          setTransactionStatus(span, true);
+
+          setTransactionStatus(span, errorCount === 0);
         } catch (error: any) {
           setTransactionStatus(span, false, error);
           Sentry.captureException(error);
