@@ -11,7 +11,6 @@ stages:
   - release
 
 variables:
-  DOCKER_REGISTRY: registry.gitlab.com/gitops-poc-dzha/sentry-demo
   DOCKER_TLS_CERTDIR: "/certs"
   # ArgoCD settings
   ARGOCD_OPTS: "--grpc-web"  # Use gRPC-web for compatibility
@@ -79,21 +78,21 @@ variables:
       docker build
       --secret id=gitlab_token,src=/tmp/gitlab_token
       ${DOCKER_BUILD_ARGS:-}
-      -t $DOCKER_REGISTRY/$SERVICE_NAME:$CI_COMMIT_SHORT_SHA
+      -t $CI_REGISTRY_IMAGE/$SERVICE_NAME:$CI_COMMIT_SHORT_SHA
       $SERVICE_PATH
     - rm -f /tmp/gitlab_token
-    - docker push $DOCKER_REGISTRY/$SERVICE_NAME:$CI_COMMIT_SHORT_SHA
-    - docker tag $DOCKER_REGISTRY/$SERVICE_NAME:$CI_COMMIT_SHORT_SHA $DOCKER_REGISTRY/$SERVICE_NAME:$IMAGE_TAG_ALIAS
-    - docker push $DOCKER_REGISTRY/$SERVICE_NAME:$IMAGE_TAG_ALIAS
+    - docker push $CI_REGISTRY_IMAGE/$SERVICE_NAME:$CI_COMMIT_SHORT_SHA
+    - docker tag $CI_REGISTRY_IMAGE/$SERVICE_NAME:$CI_COMMIT_SHORT_SHA $CI_REGISTRY_IMAGE/$SERVICE_NAME:$IMAGE_TAG_ALIAS
+    - docker push $CI_REGISTRY_IMAGE/$SERVICE_NAME:$IMAGE_TAG_ALIAS
     # Also tag with branch name for preview environments
     - BRANCH_TAG=$(echo "$CI_COMMIT_REF_NAME" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9-]/-/g')
-    - docker tag $DOCKER_REGISTRY/$SERVICE_NAME:$CI_COMMIT_SHORT_SHA $DOCKER_REGISTRY/$SERVICE_NAME:$BRANCH_TAG
-    - docker push $DOCKER_REGISTRY/$SERVICE_NAME:$BRANCH_TAG
+    - docker tag $CI_REGISTRY_IMAGE/$SERVICE_NAME:$CI_COMMIT_SHORT_SHA $CI_REGISTRY_IMAGE/$SERVICE_NAME:$BRANCH_TAG
+    - docker push $CI_REGISTRY_IMAGE/$SERVICE_NAME:$BRANCH_TAG
     # Update image tag in .cicd/dev.yaml
     - |
       echo "Updating dev environment to ${CI_COMMIT_SHORT_SHA}"
       yq -i '.image.tag = "'${CI_COMMIT_SHORT_SHA}'"' $SERVICE_PATH/.cicd/dev.yaml
-      yq -i '.image.repository = "'${DOCKER_REGISTRY}/${SERVICE_NAME}'"' $SERVICE_PATH/.cicd/dev.yaml
+      yq -i '.image.repository = "'${CI_REGISTRY_IMAGE}/${SERVICE_NAME}'"' $SERVICE_PATH/.cicd/dev.yaml
 
       git add $SERVICE_PATH/.cicd/dev.yaml
       git commit -m "ci($SERVICE_NAME): update image to ${CI_COMMIT_SHORT_SHA} [skip ci]"
@@ -134,18 +133,18 @@ build:frontend:prod:
       docker build
       --secret id=gitlab_token,src=/tmp/gitlab_token
       --build-arg APP_VERSION=$CI_COMMIT_TAG
-      -t $DOCKER_REGISTRY/$SERVICE_NAME:$CI_COMMIT_TAG
+      -t $CI_REGISTRY_IMAGE/$SERVICE_NAME:$CI_COMMIT_TAG
       $SERVICE_PATH
     - rm -f /tmp/gitlab_token
-    - docker push $DOCKER_REGISTRY/$SERVICE_NAME:$CI_COMMIT_TAG
-    - docker tag $DOCKER_REGISTRY/$SERVICE_NAME:$CI_COMMIT_TAG $DOCKER_REGISTRY/$SERVICE_NAME:stable
-    - docker push $DOCKER_REGISTRY/$SERVICE_NAME:stable
+    - docker push $CI_REGISTRY_IMAGE/$SERVICE_NAME:$CI_COMMIT_TAG
+    - docker tag $CI_REGISTRY_IMAGE/$SERVICE_NAME:$CI_COMMIT_TAG $CI_REGISTRY_IMAGE/$SERVICE_NAME:stable
+    - docker push $CI_REGISTRY_IMAGE/$SERVICE_NAME:stable
     # Update image tag in .cicd/prod.yaml (if exists)
     - |
       if [ -f "$SERVICE_PATH/.cicd/prod.yaml" ]; then
         echo "Updating prod environment to ${CI_COMMIT_TAG}"
         yq -i '.image.tag = "'${CI_COMMIT_TAG}'"' $SERVICE_PATH/.cicd/prod.yaml
-        yq -i '.image.repository = "'${DOCKER_REGISTRY}/${SERVICE_NAME}'"' $SERVICE_PATH/.cicd/prod.yaml
+        yq -i '.image.repository = "'${CI_REGISTRY_IMAGE}/${SERVICE_NAME}'"' $SERVICE_PATH/.cicd/prod.yaml
 
         git add $SERVICE_PATH/.cicd/prod.yaml
         git commit -m "ci($SERVICE_NAME): release ${CI_COMMIT_TAG} [skip ci]"
