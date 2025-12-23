@@ -78,6 +78,11 @@ services:
     repoURL: https://gitlab.com/gitops-poc-dzha/services/sentry-demo.git
     path: wager-service/.cicd
 
+  analytics-service:
+    syncWave: "0"
+    repoURL: https://gitlab.com/gitops-poc-dzha/services/analytics-service.git
+    path: .cicd
+
 # ApplicationSet for services
 applicationSet:
   enabled: true

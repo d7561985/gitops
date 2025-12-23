@@ -205,7 +205,8 @@ export class BusinessMetricsComponent implements OnInit, OnDestroy {
   errorMessage = '';
   
   private refreshSubscription?: Subscription;
-  private analyticsUrl = 'http://localhost:8084';
+  // Use api-gateway for analytics service (relative URL for production)
+  private analyticsUrl = '/api/analytics';
 
   constructor(private http: HttpClient) {}
 

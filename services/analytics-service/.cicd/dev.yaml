@@ -1,0 +1,26 @@
+# Analytics Service - Dev Environment Overrides
+# Inherits from default.yaml
+# CI updates image.repository and image.tag on each build
+
+environment: dev
+branch: main
+image:
+  repository: registry.gitlab.com/gitops-poc-dzha/services/analytics-service
+  tag: "latest"
+  pullPolicy: IfNotPresent
+replicas: 1
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 200m
+    memory: 128Mi
+labels:
+  app.kubernetes.io/instance: analytics-service-dev
+  environment: dev
+annotations:
+  argocd.argoproj.io/sync-wave: "0"
+# Redis is optional - service works without it
+configmap:
+  REDIS_ADDR: ""

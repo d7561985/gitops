@@ -1,0 +1,16 @@
+# Proto Service CI/CD Pipeline for analytics-service
+#
+# Uses the proto-gen template from api/ci repository.
+# See: https://gitlab.com/gitops-poc-dzha/api/ci
+#
+# Required CI/CD Variables (set at api group level):
+#   CI_PUSH_TOKEN - Personal Access Token with api, write_repository scopes
+
+include:
+  - project: 'gitops-poc-dzha/api/ci'
+    ref: main
+    file: '/templates/proto-gen/template.yml'
+
+variables:
+  # Go backend + Web frontend (web = Connect-ES v2)
+  PROTO_GEN_LANGUAGES: "go,web"

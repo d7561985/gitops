@@ -1,0 +1,122 @@
+syntax = "proto3";
+
+package analytics.v1;
+
+option go_package = "gitlab.com/gitops-poc-dzha/api/gen/analytics-service/go/analytics/v1;analyticsv1";
+
+// AnalyticsService - Business metrics and analytics for gaming platform
+service AnalyticsService {
+  // GetRTPMetrics returns Return-to-Player metrics and game statistics
+  rpc GetRTPMetrics(GetRTPMetricsRequest) returns (GetRTPMetricsResponse);
+
+  // GetSessionMetrics returns active session statistics
+  rpc GetSessionMetrics(GetSessionMetricsRequest) returns (GetSessionMetricsResponse);
+
+  // GetFinancialMetrics returns financial overview (deposits, withdrawals, revenue)
+  rpc GetFinancialMetrics(GetFinancialMetricsRequest) returns (GetFinancialMetricsResponse);
+
+  // RecordGameResult records a game result for analytics (called by game-engine)
+  rpc RecordGameResult(RecordGameResultRequest) returns (RecordGameResultResponse);
+
+  // RecordTransaction records a financial transaction (called by payment-service)
+  rpc RecordTransaction(RecordTransactionRequest) returns (RecordTransactionResponse);
+}
+
+// GetRTPMetricsRequest - request for RTP metrics
+message GetRTPMetricsRequest {
+  // Period in hours to calculate metrics (e.g., 1 for last hour)
+  int32 hours = 1;
+}
+
+// GetRTPMetricsResponse - RTP metrics response
+message GetRTPMetricsResponse {
+  // Time period in hours
+  int32 period_hours = 1;
+  // Overall RTP percentage (e.g., 96.5)
+  double overall_rtp = 2;
+  // RTP threshold configuration
+  RTPThreshold rtp_threshold = 3;
+  // Number of games played in the period
+  int32 game_count = 4;
+  // Number of unique players
+  int32 unique_players = 5;
+  // Total revenue (bets)
+  double total_revenue = 6;
+  // Total payouts (wins)
+  double total_payouts = 7;
+}
+
+// RTPThreshold - RTP threshold configuration and status
+message RTPThreshold {
+  // Minimum expected RTP
+  double min = 1;
+  // Maximum expected RTP
+  double max = 2;
+  // Status: "normal" or "anomaly"
+  string status = 3;
+}
+
+// GetSessionMetricsRequest - request for session metrics
+message GetSessionMetricsRequest {}
+
+// GetSessionMetricsResponse - session metrics response
+message GetSessionMetricsResponse {
+  // Number of active sessions
+  int32 active_sessions = 1;
+  // Average session duration in seconds
+  double avg_duration = 2;
+}
+
+// GetFinancialMetricsRequest - request for financial metrics
+message GetFinancialMetricsRequest {
+  // Period in hours to calculate metrics (e.g., 24 for last day)
+  int32 hours = 1;
+}
+
+// GetFinancialMetricsResponse - financial metrics response
+message GetFinancialMetricsResponse {
+  // Time period in hours
+  int32 period_hours = 1;
+  // Total revenue
+  double total_revenue = 2;
+  // Number of deposits
+  int32 deposit_count = 3;
+  // Average deposit amount
+  double avg_deposit = 4;
+  // Number of withdrawals
+  int32 withdrawal_count = 5;
+  // Average withdrawal amount
+  double avg_withdrawal = 6;
+}
+
+// RecordGameResultRequest - record a game result
+message RecordGameResultRequest {
+  // User ID
+  string user_id = 1;
+  // Bet amount
+  double bet = 2;
+  // Payout amount
+  double payout = 3;
+  // Whether it was a win
+  bool win = 4;
+}
+
+// RecordGameResultResponse - confirmation of recorded game result
+message RecordGameResultResponse {
+  bool success = 1;
+}
+
+// RecordTransactionRequest - record a financial transaction
+message RecordTransactionRequest {
+  // User ID
+  string user_id = 1;
+  // Transaction type: "deposit" or "withdrawal"
+  string type = 2;
+  // Amount
+  double amount = 3;
+}
+
+// RecordTransactionResponse - confirmation of recorded transaction
+message RecordTransactionResponse {
+  bool success = 1;
+}

@@ -1,0 +1,65 @@
+# Analytics Service - Default Values
+# Business metrics and analytics service
+# HTTP/Connect API for RTP, sessions, and financial metrics
+# Based on k8app/app chart: https://github.com/d7561985/k8app
+
+appName: analytics-service
+version: "1.0.0"
+
+serviceAccountName: default
+
+image:
+  repository: analytics-service
+  tag: local
+  pullPolicy: Never
+
+imagePullSecrets:
+  - name: regsecret
+
+service:
+  enabled: true
+  type: ClusterIP
+  ports:
+    http:
+      externalPort: 8081
+      internalPort: 8081
+      protocol: TCP
+    metrics:
+      externalPort: 9090
+      internalPort: 9090
+      protocol: TCP
+
+# Health checks - tcpSocket for Connect/HTTP service
+livenessProbe:
+  enabled: true
+  mode: tcpSocket
+  tcpSocket:
+    port: 8081
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  enabled: true
+  mode: tcpSocket
+  tcpSocket:
+    port: 8081
+  initialDelaySeconds: 3
+  periodSeconds: 5
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+args:
+  - "-port=8081"
+  - "-metrics-port=9090"
+
+# Environment via configmap
+configmap:
+  REDIS_ADDR: ""
+
+serviceMonitor:
+  enabled: true
+  port: "metrics"
+  path: "/metrics"
+  interval: 30s
