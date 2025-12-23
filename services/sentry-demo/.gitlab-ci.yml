@@ -1,23 +1,28 @@
 # GitLab CI/CD for sentry-demo monorepo
-# Uses rules:changes to only build services that have changed
+# Pull-based GitOps with ArgoCD + Semantic Versioning
+#
+# Flow:
+#   main branch changes  → build changed services → dev (auto)
+#   v*-rc.*/beta/alpha tags → build ALL services → staging (auto)
+#   v*.*.* release tags → build ALL services → staging (auto) → prod (manual)
 #
 # Required CI/CD Variables:
-#   CI_PUSH_TOKEN    - Group Access Token with write_repository scope
-#   ARGOCD_SERVER    - ArgoCD server URL (e.g., argocd.example.com)
-#   ARGOCD_AUTH_TOKEN - ArgoCD API token (Project -> Settings -> Accounts)
+#   CI_PUSH_TOKEN     - Group Access Token with write_repository scope
+#   ARGOCD_SERVER     - ArgoCD server URL (e.g., argocd.example.com)
+#   ARGOCD_AUTH_TOKEN - ArgoCD API token
 
 stages:
   - build
+  - update-manifests
   - release
 
 variables:
   DOCKER_TLS_CERTDIR: "/certs"
-  RELEASE_TIMEOUT: "300"      # 5 minutes timeout for release
+  RELEASE_TIMEOUT: "300"
 
 # =============================================================================
 # Release Template - Waits for ArgoCD deployment
 # =============================================================================
-# Uses REST API instead of gRPC (CloudFlare compatible)
 .release-template:
   stage: release
   image: alpine:3.19
@@ -32,10 +37,8 @@ variables:
       ARGOCD_API="https://${ARGOCD_SERVER}/api/v1/applications/${ARGOCD_APP_NAME}"
       AUTH_HEADER="Authorization: Bearer ${ARGOCD_AUTH_TOKEN}"
 
-      # Trigger refresh
       curl -sf "${ARGOCD_API}?refresh=normal" -H "${AUTH_HEADER}" > /dev/null || true
 
-      # Wait for sync and health
       start_time=$(date +%s)
       while true; do
         response=$(curl -sf "${ARGOCD_API}" -H "${AUTH_HEADER}" 2>/dev/null)
@@ -53,28 +56,21 @@ variables:
           echo ""
           echo "=== RELEASE SUCCESSFUL ==="
           echo "Application: ${ARGOCD_APP_NAME}"
-          echo "Sync: ${sync_status}"
-          echo "Health: ${health_status}"
           exit 0
         fi
 
         elapsed=$(($(date +%s) - start_time))
         if [ $elapsed -ge ${RELEASE_TIMEOUT} ]; then
           echo "ERROR: Timeout after ${RELEASE_TIMEOUT}s"
-          echo "Final status: sync=${sync_status}, health=${health_status}"
           exit 1
         fi
 
         sleep 5
       done
-  environment:
-    name: dev
-    action: start
 
 # =============================================================================
 # Build Template (base)
 # =============================================================================
-# Requires CI_PUSH_TOKEN (Group Access Token with write_repository scope)
 .build-template:
   stage: build
   image: docker:24
@@ -87,162 +83,175 @@ variables:
     - apk add --no-cache git yq
     - git config --global user.email "ci@gitlab.com"
     - git config --global user.name "GitLab CI"
-    # Clone with push token (CI_JOB_TOKEN doesn't have push rights)
     - git remote set-url origin "https://oauth2:${CI_PUSH_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
-    - git fetch origin $CI_COMMIT_REF_NAME
-    - git checkout $CI_COMMIT_REF_NAME
+    - git fetch origin ${CI_DEFAULT_BRANCH}
+    - git checkout ${CI_DEFAULT_BRANCH}
+    - git pull origin ${CI_DEFAULT_BRANCH}
 
 # =============================================================================
-# Build Template with Proto Packages
+# Build Template with Proto Packages (for services with private deps)
 # =============================================================================
-# For services that use generated proto packages from GitLab
-# Uses BuildKit secrets with .netrc for unified authentication
-# See docs/DOCKER_AUTH.md for details
 .build-with-proto-template:
   extends: .build-template
   script:
-    - echo "Building $SERVICE_NAME..."
-    # Create token file for BuildKit secret (uses .netrc in Dockerfile)
-    - echo "$CI_PUSH_TOKEN" > /tmp/gitlab_token
-    - >
-      docker build
-      --secret id=gitlab_token,src=/tmp/gitlab_token
-      ${DOCKER_BUILD_ARGS:-}
-      -t $CI_REGISTRY_IMAGE/$SERVICE_NAME:$CI_COMMIT_SHORT_SHA
-      $SERVICE_PATH
-    - rm -f /tmp/gitlab_token
-    - docker push $CI_REGISTRY_IMAGE/$SERVICE_NAME:$CI_COMMIT_SHORT_SHA
-    - docker tag $CI_REGISTRY_IMAGE/$SERVICE_NAME:$CI_COMMIT_SHORT_SHA $CI_REGISTRY_IMAGE/$SERVICE_NAME:$IMAGE_TAG_ALIAS
-    - docker push $CI_REGISTRY_IMAGE/$SERVICE_NAME:$IMAGE_TAG_ALIAS
-    # Also tag with branch name for preview environments
-    - BRANCH_TAG=$(echo "$CI_COMMIT_REF_NAME" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9-]/-/g')
-    - docker tag $CI_REGISTRY_IMAGE/$SERVICE_NAME:$CI_COMMIT_SHORT_SHA $CI_REGISTRY_IMAGE/$SERVICE_NAME:$BRANCH_TAG
-    - docker push $CI_REGISTRY_IMAGE/$SERVICE_NAME:$BRANCH_TAG
-    # Update image tag in .cicd/dev.yaml
     - |
-      echo "Updating dev environment to ${CI_COMMIT_SHORT_SHA}"
+      echo "Building $SERVICE_NAME..."
+
+      # Determine image tag
+      if [ -n "$CI_COMMIT_TAG" ]; then
+        IMAGE_TAG="${CI_COMMIT_TAG}"
+        echo "Building release image with tag: ${IMAGE_TAG}"
+      else
+        IMAGE_TAG="${CI_COMMIT_SHORT_SHA}"
+        echo "Building dev image with SHA: ${IMAGE_TAG}"
+      fi
+
+      # Create token file for BuildKit secret
+      echo "$CI_PUSH_TOKEN" > /tmp/gitlab_token
+
+      docker build \
+        --secret id=gitlab_token,src=/tmp/gitlab_token \
+        ${DOCKER_BUILD_ARGS:-} \
+        -t $CI_REGISTRY_IMAGE/$SERVICE_NAME:$IMAGE_TAG \
+        $SERVICE_PATH
+
+      rm -f /tmp/gitlab_token
+
+      docker push $CI_REGISTRY_IMAGE/$SERVICE_NAME:$IMAGE_TAG
+
+      # Tag as latest for main branch
+      if [ "$CI_COMMIT_BRANCH" == "$CI_DEFAULT_BRANCH" ]; then
+        docker tag $CI_REGISTRY_IMAGE/$SERVICE_NAME:$IMAGE_TAG $CI_REGISTRY_IMAGE/$SERVICE_NAME:latest
+        docker push $CI_REGISTRY_IMAGE/$SERVICE_NAME:latest
+      fi
+
+# =============================================================================
+# Update Manifest Templates
+# =============================================================================
+.update-dev-template:
+  stage: update-manifests
+  image: alpine:3.19
+  before_script:
+    - apk add --no-cache git yq
+    - git config --global user.email "ci@gitlab.com"
+    - git config --global user.name "GitLab CI"
+    - git remote set-url origin "https://oauth2:${CI_PUSH_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
+    - git fetch origin ${CI_DEFAULT_BRANCH}
+    - git checkout ${CI_DEFAULT_BRANCH}
+    - git pull origin ${CI_DEFAULT_BRANCH}
+  script:
+    - |
+      echo "Updating dev environment for $SERVICE_NAME to ${CI_COMMIT_SHORT_SHA}"
       yq -i '.image.tag = "'${CI_COMMIT_SHORT_SHA}'"' $SERVICE_PATH/.cicd/dev.yaml
       yq -i '.image.repository = "'${CI_REGISTRY_IMAGE}/${SERVICE_NAME}'"' $SERVICE_PATH/.cicd/dev.yaml
 
       git add $SERVICE_PATH/.cicd/dev.yaml
-      git commit -m "ci($SERVICE_NAME): update image to ${CI_COMMIT_SHORT_SHA} [skip ci]"
-      git push origin $CI_COMMIT_REF_NAME
+      git commit -m "ci($SERVICE_NAME): update dev to ${CI_COMMIT_SHORT_SHA} [skip ci]" || true
+      git push origin ${CI_DEFAULT_BRANCH} || true
+
+.update-staging-template:
+  stage: update-manifests
+  image: alpine:3.19
+  before_script:
+    - apk add --no-cache git yq
+    - git config --global user.email "ci@gitlab.com"
+    - git config --global user.name "GitLab CI"
+    - git remote set-url origin "https://oauth2:${CI_PUSH_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
+    - git fetch origin ${CI_DEFAULT_BRANCH}
+    - git checkout ${CI_DEFAULT_BRANCH}
+    - git pull origin ${CI_DEFAULT_BRANCH}
+  script:
+    - |
+      echo "Updating staging environment for $SERVICE_NAME to ${CI_COMMIT_TAG}"
+      yq -i '.image.tag = "'${CI_COMMIT_TAG}'"' $SERVICE_PATH/.cicd/staging.yaml
+      yq -i '.image.repository = "'${CI_REGISTRY_IMAGE}/${SERVICE_NAME}'"' $SERVICE_PATH/.cicd/staging.yaml
+
+      git add $SERVICE_PATH/.cicd/staging.yaml
+      git commit -m "ci($SERVICE_NAME): update staging to ${CI_COMMIT_TAG} [skip ci]" || true
+      git push origin ${CI_DEFAULT_BRANCH} || true
 
 # =============================================================================
-# Service Build Jobs
+# Frontend (Angular)
 # =============================================================================
-# All services use .build-with-proto-template for unified BuildKit auth
-# Only variables are set per-service, no script duplication
-
-# Frontend (Angular) - Dev builds on branch commits
 build:frontend:
   extends: .build-with-proto-template
   variables:
     SERVICE_NAME: frontend
     SERVICE_PATH: frontend
-    IMAGE_TAG_ALIAS: latest
     DOCKER_BUILD_ARGS: "--build-arg APP_VERSION=$CI_COMMIT_SHORT_SHA"
   rules:
-    - if: $CI_COMMIT_TAG
-      when: never
-    - changes:
+    - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+.*$/
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      changes:
         - frontend/**/*
 
-# Frontend (Angular) - Prod builds on git tags (e.g., v1.2.3)
-build:frontend:prod:
-  extends: .build-with-proto-template
+update:frontend:dev:
+  extends: .update-dev-template
   variables:
     SERVICE_NAME: frontend
     SERVICE_PATH: frontend
-    IMAGE_TAG_ALIAS: stable
-    DOCKER_BUILD_ARGS: "--build-arg APP_VERSION=$CI_COMMIT_TAG"
-  script:
-    - echo "Building $SERVICE_NAME PROD with version $CI_COMMIT_TAG..."
-    - echo "$CI_PUSH_TOKEN" > /tmp/gitlab_token
-    - >
-      docker build
-      --secret id=gitlab_token,src=/tmp/gitlab_token
-      --build-arg APP_VERSION=$CI_COMMIT_TAG
-      -t $CI_REGISTRY_IMAGE/$SERVICE_NAME:$CI_COMMIT_TAG
-      $SERVICE_PATH
-    - rm -f /tmp/gitlab_token
-    - docker push $CI_REGISTRY_IMAGE/$SERVICE_NAME:$CI_COMMIT_TAG
-    - docker tag $CI_REGISTRY_IMAGE/$SERVICE_NAME:$CI_COMMIT_TAG $CI_REGISTRY_IMAGE/$SERVICE_NAME:stable
-    - docker push $CI_REGISTRY_IMAGE/$SERVICE_NAME:stable
-    # Update image tag in .cicd/prod.yaml (if exists)
-    - |
-      if [ -f "$SERVICE_PATH/.cicd/prod.yaml" ]; then
-        echo "Updating prod environment to ${CI_COMMIT_TAG}"
-        yq -i '.image.tag = "'${CI_COMMIT_TAG}'"' $SERVICE_PATH/.cicd/prod.yaml
-        yq -i '.image.repository = "'${CI_REGISTRY_IMAGE}/${SERVICE_NAME}'"' $SERVICE_PATH/.cicd/prod.yaml
-
-        git add $SERVICE_PATH/.cicd/prod.yaml
-        git commit -m "ci($SERVICE_NAME): release ${CI_COMMIT_TAG} [skip ci]"
-        git push origin $CI_COMMIT_REF_NAME
-      fi
+  needs:
+    - job: build:frontend
+      optional: true
   rules:
-    - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      changes:
+        - frontend/**/*
 
+update:frontend:staging:
+  extends: .update-staging-template
+  variables:
+    SERVICE_NAME: frontend
+    SERVICE_PATH: frontend
+  needs:
+    - job: build:frontend
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+.*$/
+
+release:frontend:dev:
+  extends: .release-template
+  variables:
+    ARGOCD_APP_NAME: sentry-frontend-dev
+  environment:
+    name: dev
+  needs:
+    - job: update:frontend:dev
+      optional: true
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      changes:
+        - frontend/**/*
+
+release:frontend:staging:
+  extends: .release-template
+  variables:
+    ARGOCD_APP_NAME: sentry-frontend-staging
+  environment:
+    name: staging
+  needs:
+    - job: update:frontend:staging
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+.*$/
+
+# =============================================================================
 # Game Engine (Python/Tornado)
+# =============================================================================
 build:game-engine:
   extends: .build-with-proto-template
   variables:
     SERVICE_NAME: game-engine
     SERVICE_PATH: game-engine
-    IMAGE_TAG_ALIAS: latest
   rules:
+    - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+.*$/
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
       changes:
         - game-engine/**/*
 
-# Payment Service (Node.js/Express)
-build:payment-service:
-  extends: .build-with-proto-template
+update:game-engine:dev:
+  extends: .update-dev-template
   variables:
-    SERVICE_NAME: payment-service
-    SERVICE_PATH: payment-service
-    IMAGE_TAG_ALIAS: latest
-  rules:
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-      changes:
-        - payment-service/**/*
-
-# Wager Service (PHP/Symfony)
-build:wager-service:
-  extends: .build-with-proto-template
-  variables:
-    SERVICE_NAME: wager-service
-    SERVICE_PATH: wager-service
-    IMAGE_TAG_ALIAS: latest
-  rules:
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-      changes:
-        - wager-service/**/*
-
-# =============================================================================
-# Release Stage - Wait for ArgoCD deployments
-# =============================================================================
-# Each release job waits for the corresponding ArgoCD application to sync
-# and become healthy. This gives developers visibility into deployment status.
-
-release:frontend:
-  extends: .release-template
-  variables:
-    ARGOCD_APP_NAME: sentry-frontend-dev
-  needs:
-    - job: build:frontend
-      optional: true
-  rules:
-    - if: $CI_COMMIT_TAG
-      when: never
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-      changes:
-        - frontend/**/*
-
-release:game-engine:
-  extends: .release-template
-  variables:
-    ARGOCD_APP_NAME: sentry-game-engine-dev
+    SERVICE_NAME: game-engine
+    SERVICE_PATH: game-engine
   needs:
     - job: build:game-engine
       optional: true
@@ -251,10 +260,60 @@ release:game-engine:
       changes:
         - game-engine/**/*
 
-release:payment-service:
+update:game-engine:staging:
+  extends: .update-staging-template
+  variables:
+    SERVICE_NAME: game-engine
+    SERVICE_PATH: game-engine
+  needs:
+    - job: build:game-engine
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+.*$/
+
+release:game-engine:dev:
   extends: .release-template
   variables:
-    ARGOCD_APP_NAME: sentry-payment-dev
+    ARGOCD_APP_NAME: sentry-game-engine-dev
+  environment:
+    name: dev
+  needs:
+    - job: update:game-engine:dev
+      optional: true
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      changes:
+        - game-engine/**/*
+
+release:game-engine:staging:
+  extends: .release-template
+  variables:
+    ARGOCD_APP_NAME: sentry-game-engine-staging
+  environment:
+    name: staging
+  needs:
+    - job: update:game-engine:staging
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+.*$/
+
+# =============================================================================
+# Payment Service (Node.js/Express)
+# =============================================================================
+build:payment-service:
+  extends: .build-with-proto-template
+  variables:
+    SERVICE_NAME: payment-service
+    SERVICE_PATH: payment-service
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+.*$/
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      changes:
+        - payment-service/**/*
+
+update:payment-service:dev:
+  extends: .update-dev-template
+  variables:
+    SERVICE_NAME: payment-service
+    SERVICE_PATH: payment-service
   needs:
     - job: build:payment-service
       optional: true
@@ -263,10 +322,60 @@ release:payment-service:
       changes:
         - payment-service/**/*
 
-release:wager-service:
+update:payment-service:staging:
+  extends: .update-staging-template
+  variables:
+    SERVICE_NAME: payment-service
+    SERVICE_PATH: payment-service
+  needs:
+    - job: build:payment-service
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+.*$/
+
+release:payment-service:dev:
   extends: .release-template
   variables:
-    ARGOCD_APP_NAME: sentry-wager-dev
+    ARGOCD_APP_NAME: sentry-payment-dev
+  environment:
+    name: dev
+  needs:
+    - job: update:payment-service:dev
+      optional: true
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      changes:
+        - payment-service/**/*
+
+release:payment-service:staging:
+  extends: .release-template
+  variables:
+    ARGOCD_APP_NAME: sentry-payment-staging
+  environment:
+    name: staging
+  needs:
+    - job: update:payment-service:staging
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+.*$/
+
+# =============================================================================
+# Wager Service (PHP/Symfony)
+# =============================================================================
+build:wager-service:
+  extends: .build-with-proto-template
+  variables:
+    SERVICE_NAME: wager-service
+    SERVICE_PATH: wager-service
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+.*$/
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      changes:
+        - wager-service/**/*
+
+update:wager-service:dev:
+  extends: .update-dev-template
+  variables:
+    SERVICE_NAME: wager-service
+    SERVICE_PATH: wager-service
   needs:
     - job: build:wager-service
       optional: true
@@ -274,3 +383,38 @@ release:wager-service:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
       changes:
         - wager-service/**/*
+
+update:wager-service:staging:
+  extends: .update-staging-template
+  variables:
+    SERVICE_NAME: wager-service
+    SERVICE_PATH: wager-service
+  needs:
+    - job: build:wager-service
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+.*$/
+
+release:wager-service:dev:
+  extends: .release-template
+  variables:
+    ARGOCD_APP_NAME: sentry-wager-dev
+  environment:
+    name: dev
+  needs:
+    - job: update:wager-service:dev
+      optional: true
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      changes:
+        - wager-service/**/*
+
+release:wager-service:staging:
+  extends: .release-template
+  variables:
+    ARGOCD_APP_NAME: sentry-wager-staging
+  environment:
+    name: staging
+  needs:
+    - job: update:wager-service:staging
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+.*$/

@@ -1,7 +1,10 @@
 # GitLab CI/CD Pipeline for user-service
-# Pull-based GitOps with ArgoCD
+# Pull-based GitOps with ArgoCD + Semantic Versioning
 #
-# Flow: CI builds image → updates .cicd/{env}.yaml → ArgoCD syncs
+# Flow:
+#   main branch  → build → dev (auto)
+#   v*-rc.*/beta/alpha tags → build → staging (auto)
+#   v*.*.* release tags → build → staging (auto) → prod (manual)
 #
 # Required CI/CD Variables (set at Group level):
 #   CI_PUSH_TOKEN     - Group Access Token with write_repository scope
@@ -31,22 +34,39 @@ build:
   before_script:
     - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
   script:
-    # Build with CI_PUSH_TOKEN for private GitLab dependencies (cross-group access)
-    - docker build --build-arg GITLAB_TOKEN=${CI_PUSH_TOKEN} -t ${IMAGE_NAME}:${CI_COMMIT_SHORT_SHA} .
-    - docker push ${IMAGE_NAME}:${CI_COMMIT_SHORT_SHA}
     - |
+      # Determine image tag based on trigger type
+      if [ -n "$CI_COMMIT_TAG" ]; then
+        # Tag pipeline: use semver tag (e.g., v1.0.0, v1.0.0-rc.1)
+        IMAGE_TAG="${CI_COMMIT_TAG}"
+        echo "Building release image: ${IMAGE_NAME}:${IMAGE_TAG}"
+      else
+        # Branch pipeline: use short SHA
+        IMAGE_TAG="${CI_COMMIT_SHORT_SHA}"
+        echo "Building dev image: ${IMAGE_NAME}:${IMAGE_TAG}"
+      fi
+
+      # Build and push with determined tag
+      docker build --build-arg GITLAB_TOKEN=${CI_PUSH_TOKEN} -t ${IMAGE_NAME}:${IMAGE_TAG} .
+      docker push ${IMAGE_NAME}:${IMAGE_TAG}
+
+      # Also tag as 'latest' for main branch
       if [ "$CI_COMMIT_BRANCH" == "$CI_DEFAULT_BRANCH" ]; then
-        docker tag ${IMAGE_NAME}:${CI_COMMIT_SHORT_SHA} ${IMAGE_NAME}:latest
+        docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${IMAGE_NAME}:latest
         docker push ${IMAGE_NAME}:latest
       fi
   rules:
+    # Main branch → dev
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    # Semver tags (v1.0.0, v1.0.0-rc.1, etc.) → staging/prod
+    - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+.*$/
+    # MR for testing
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
 
 # ============================================
 # Update manifests (Pull-based GitOps)
 # ============================================
-.update-manifest:
+.update-manifest-branch:
   stage: update-manifests
   image: alpine:3.19
   before_script:
@@ -54,13 +74,25 @@ build:
     - git config --global user.email "ci@gitlab.com"
     - git config --global user.name "GitLab CI"
     - git remote set-url origin "https://oauth2:${CI_PUSH_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
-    - git fetch origin ${CI_COMMIT_BRANCH}
-    - git checkout ${CI_COMMIT_BRANCH}
-  rules:
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - git fetch origin ${CI_DEFAULT_BRANCH}
+    - git checkout ${CI_DEFAULT_BRANCH}
 
+.update-manifest-tag:
+  stage: update-manifests
+  image: alpine:3.19
+  before_script:
+    - apk add --no-cache git yq
+    - git config --global user.email "ci@gitlab.com"
+    - git config --global user.name "GitLab CI"
+    - git remote set-url origin "https://oauth2:${CI_PUSH_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
+    # For tags, we need to checkout the default branch to push changes
+    - git fetch origin ${CI_DEFAULT_BRANCH}
+    - git checkout ${CI_DEFAULT_BRANCH}
+    - git pull origin ${CI_DEFAULT_BRANCH}
+
+# Dev: triggered by main branch commits
 update:dev:
-  extends: .update-manifest
+  extends: .update-manifest-branch
   script:
     - |
       echo "Updating dev environment to ${CI_COMMIT_SHORT_SHA}"
@@ -69,11 +101,50 @@ update:dev:
 
       git add .cicd/dev.yaml
       git commit -m "ci(dev): update image to ${CI_COMMIT_SHORT_SHA} [skip ci]"
-      git push origin ${CI_COMMIT_BRANCH}
+      git push origin ${CI_DEFAULT_BRANCH}
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+# Staging: triggered by ANY semver tag (pre-release OR release)
+update:staging:
+  extends: .update-manifest-tag
+  script:
+    - |
+      echo "Updating staging environment to ${CI_COMMIT_TAG}"
+      yq -i '.image.tag = "'${CI_COMMIT_TAG}'"' .cicd/staging.yaml
+      yq -i '.image.repository = "'${IMAGE_NAME}'"' .cicd/staging.yaml
+
+      git add .cicd/staging.yaml
+      git commit -m "ci(staging): update image to ${CI_COMMIT_TAG} [skip ci]"
+      git push origin ${CI_DEFAULT_BRANCH}
+  rules:
+    # All semver tags go to staging (rc, beta, alpha, AND releases)
+    - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+.*$/
+
+# Prod: triggered ONLY by release tags (no -rc, -beta, -alpha suffix)
+# Manual approval required - uses the SAME image already validated in staging
+update:prod:
+  extends: .update-manifest-tag
+  script:
+    - |
+      echo "Updating prod environment to ${CI_COMMIT_TAG}"
+      echo "NOTE: This is the same image that was deployed to staging"
+      yq -i '.image.tag = "'${CI_COMMIT_TAG}'"' .cicd/prod.yaml
+      yq -i '.image.repository = "'${IMAGE_NAME}'"' .cicd/prod.yaml
+
+      git add .cicd/prod.yaml
+      git commit -m "ci(prod): update image to ${CI_COMMIT_TAG} [skip ci]"
+      git push origin ${CI_DEFAULT_BRANCH}
+  rules:
+    # Only clean release tags (v1.0.0, NOT v1.0.0-rc.1)
+    - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/
+  when: manual
+  needs:
+    - job: update:staging
+    - job: release:staging
 
 # ============================================
 # Release Stage: Wait for ArgoCD deployment
-# Uses REST API instead of gRPC (CloudFlare compatible)
 # ============================================
 .release-template:
   stage: release
@@ -133,6 +204,28 @@ release:dev:
     name: dev
   needs:
     - job: update:dev
-      optional: true
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+release:staging:
+  extends: .release-template
+  variables:
+    ARGOCD_APP_NAME: ${SERVICE_NAME}-staging
+  environment:
+    name: staging
+  needs:
+    - job: update:staging
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+.*$/
+
+release:prod:
+  extends: .release-template
+  variables:
+    ARGOCD_APP_NAME: ${SERVICE_NAME}-prod
+  environment:
+    name: production
+  needs:
+    - job: update:prod
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/
+  when: manual

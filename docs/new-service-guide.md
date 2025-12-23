@@ -99,8 +99,10 @@ my-service/
 │   └── ...
 ├── .cicd/
 │   ├── default.yaml     # Настройки сервиса (минимальные!)
-│   └── dev.yaml         # Переопределения для dev
-├── .gitlab-ci.yml
+│   ├── dev.yaml         # Переопределения для dev
+│   ├── staging.yaml     # Переопределения для staging
+│   └── prod.yaml        # Переопределения для prod (опционально)
+├── .gitlab-ci.yml       # CI с семантическим версионированием
 ├── Dockerfile
 ├── go.mod
 └── go.sum
@@ -259,11 +261,36 @@ ENTRYPOINT ["/server"]
 
 ## Шаг 6: GitLab CI/CD
 
+### Семантическое версионирование
+
+Платформа использует **семантическое версионирование** для управления релизами:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  main commit   →  build (sha)    →  dev (auto)                  │
+│  v1.0.0-rc.1   →  build (tag)    →  staging (auto)              │
+│  v1.0.0        →  build (tag)    →  staging (auto) → prod (manual)│
+└─────────────────────────────────────────────────────────────────┘
+```
+
+| Триггер | Образ | Окружение | Режим |
+|---------|-------|-----------|-------|
+| `main` commit | `sha-abc123` | dev | auto |
+| `v1.0.0-rc.1` | `v1.0.0-rc.1` | staging | auto |
+| `v1.0.0` | `v1.0.0` | staging → prod | auto → **manual** |
+
+**Важно:** При релизном теге `v1.0.0` образ сначала деплоится на staging, и только после успешной проверки доступна кнопка для деплоя на prod. Один артефакт проходит через все окружения!
+
 ### .gitlab-ci.yml
 
 ```yaml
 # GitLab CI/CD Pipeline
-# Pull-based GitOps with ArgoCD
+# Pull-based GitOps with ArgoCD + Semantic Versioning
+#
+# Flow:
+#   main branch  → build → dev (auto)
+#   v*-rc.*/beta/alpha tags → build → staging (auto)
+#   v*.*.* release tags → build → staging (auto) → prod (manual)
 #
 # Required CI/CD Variables (set at Group level):
 #   CI_PUSH_TOKEN     - Group Access Token with write_repository scope
@@ -293,22 +320,33 @@ build:
   before_script:
     - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
   script:
-    # Для приватных Go зависимостей добавьте --build-arg GITLAB_TOKEN=${CI_PUSH_TOKEN}
-    - docker build -t ${IMAGE_NAME}:${CI_COMMIT_SHORT_SHA} .
-    - docker push ${IMAGE_NAME}:${CI_COMMIT_SHORT_SHA}
     - |
+      # Determine image tag based on trigger type
+      if [ -n "$CI_COMMIT_TAG" ]; then
+        IMAGE_TAG="${CI_COMMIT_TAG}"
+        echo "Building release image: ${IMAGE_NAME}:${IMAGE_TAG}"
+      else
+        IMAGE_TAG="${CI_COMMIT_SHORT_SHA}"
+        echo "Building dev image: ${IMAGE_NAME}:${IMAGE_TAG}"
+      fi
+
+      # Для приватных Go зависимостей: --build-arg GITLAB_TOKEN=${CI_PUSH_TOKEN}
+      docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .
+      docker push ${IMAGE_NAME}:${IMAGE_TAG}
+
       if [ "$CI_COMMIT_BRANCH" == "$CI_DEFAULT_BRANCH" ]; then
-        docker tag ${IMAGE_NAME}:${CI_COMMIT_SHORT_SHA} ${IMAGE_NAME}:latest
+        docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${IMAGE_NAME}:latest
         docker push ${IMAGE_NAME}:latest
       fi
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+.*$/
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
 
 # ============================================
 # Update manifests (Pull-based GitOps)
 # ============================================
-update:dev:
+.update-manifest-branch:
   stage: update-manifests
   image: alpine:3.19
   before_script:
@@ -316,8 +354,23 @@ update:dev:
     - git config --global user.email "ci@gitlab.com"
     - git config --global user.name "GitLab CI"
     - git remote set-url origin "https://oauth2:${CI_PUSH_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
-    - git fetch origin ${CI_COMMIT_BRANCH}
-    - git checkout ${CI_COMMIT_BRANCH}
+    - git fetch origin ${CI_DEFAULT_BRANCH}
+    - git checkout ${CI_DEFAULT_BRANCH}
+
+.update-manifest-tag:
+  stage: update-manifests
+  image: alpine:3.19
+  before_script:
+    - apk add --no-cache git yq
+    - git config --global user.email "ci@gitlab.com"
+    - git config --global user.name "GitLab CI"
+    - git remote set-url origin "https://oauth2:${CI_PUSH_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
+    - git fetch origin ${CI_DEFAULT_BRANCH}
+    - git checkout ${CI_DEFAULT_BRANCH}
+    - git pull origin ${CI_DEFAULT_BRANCH}
+
+update:dev:
+  extends: .update-manifest-branch
   script:
     - |
       echo "Updating dev environment to ${CI_COMMIT_SHORT_SHA}"
@@ -326,69 +379,119 @@ update:dev:
 
       git add .cicd/dev.yaml
       git commit -m "ci(dev): update image to ${CI_COMMIT_SHORT_SHA} [skip ci]"
-      git push origin ${CI_COMMIT_BRANCH}
+      git push origin ${CI_DEFAULT_BRANCH}
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
 
+update:staging:
+  extends: .update-manifest-tag
+  script:
+    - |
+      echo "Updating staging environment to ${CI_COMMIT_TAG}"
+      yq -i '.image.tag = "'${CI_COMMIT_TAG}'"' .cicd/staging.yaml
+      yq -i '.image.repository = "'${IMAGE_NAME}'"' .cicd/staging.yaml
+
+      git add .cicd/staging.yaml
+      git commit -m "ci(staging): update image to ${CI_COMMIT_TAG} [skip ci]"
+      git push origin ${CI_DEFAULT_BRANCH}
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+.*$/
+
+update:prod:
+  extends: .update-manifest-tag
+  script:
+    - |
+      echo "Updating prod environment to ${CI_COMMIT_TAG}"
+      yq -i '.image.tag = "'${CI_COMMIT_TAG}'"' .cicd/prod.yaml
+      yq -i '.image.repository = "'${IMAGE_NAME}'"' .cicd/prod.yaml
+
+      git add .cicd/prod.yaml
+      git commit -m "ci(prod): update image to ${CI_COMMIT_TAG} [skip ci]"
+      git push origin ${CI_DEFAULT_BRANCH}
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/
+  when: manual
+  needs:
+    - job: update:staging
+    - job: release:staging
+
 # ============================================
 # Release Stage: Wait for ArgoCD deployment
-# Uses REST API (CloudFlare Tunnel compatible)
 # ============================================
-release:dev:
+.release-template:
   stage: release
   image: alpine:3.19
-  variables:
-    ARGOCD_APP_NAME: ${SERVICE_NAME}-dev
   before_script:
     - apk add --no-cache curl jq
   script:
     - |
-      echo "Waiting for ${ARGOCD_APP_NAME} to sync and become healthy..."
-      echo "ArgoCD Server: https://${ARGOCD_SERVER}"
-      echo "Timeout: ${RELEASE_TIMEOUT}s"
-
+      echo "Waiting for ${ARGOCD_APP_NAME} to sync..."
       ARGOCD_API="https://${ARGOCD_SERVER}/api/v1/applications/${ARGOCD_APP_NAME}"
       AUTH_HEADER="Authorization: Bearer ${ARGOCD_AUTH_TOKEN}"
 
-      # Trigger refresh
       curl -sf "${ARGOCD_API}?refresh=normal" -H "${AUTH_HEADER}" > /dev/null || true
 
-      # Wait for sync and health
       start_time=$(date +%s)
       while true; do
         response=$(curl -sf "${ARGOCD_API}" -H "${AUTH_HEADER}" 2>/dev/null)
-        if [ $? -ne 0 ]; then
-          echo "ERROR: Failed to get application status"
-          exit 1
-        fi
+        [ $? -ne 0 ] && { echo "ERROR: Failed to get status"; exit 1; }
 
-        sync_status=$(echo "$response" | jq -r '.status.sync.status // "Unknown"')
-        health_status=$(echo "$response" | jq -r '.status.health.status // "Unknown"')
+        sync=$(echo "$response" | jq -r '.status.sync.status // "Unknown"')
+        health=$(echo "$response" | jq -r '.status.health.status // "Unknown"')
+        echo "Status: sync=${sync}, health=${health}"
 
-        echo "Status: sync=${sync_status}, health=${health_status}"
+        [ "$sync" = "Synced" ] && [ "$health" = "Healthy" ] && {
+          echo "=== RELEASE SUCCESSFUL ==="; exit 0;
+        }
 
-        if [ "$sync_status" = "Synced" ] && [ "$health_status" = "Healthy" ]; then
-          echo ""
-          echo "=== RELEASE SUCCESSFUL ==="
-          echo "Application: ${ARGOCD_APP_NAME}"
-          exit 0
-        fi
-
-        elapsed=$(($(date +%s) - start_time))
-        if [ $elapsed -ge ${RELEASE_TIMEOUT} ]; then
-          echo "ERROR: Timeout after ${RELEASE_TIMEOUT}s"
-          exit 1
-        fi
-
+        [ $(($(date +%s) - start_time)) -ge ${RELEASE_TIMEOUT} ] && {
+          echo "ERROR: Timeout"; exit 1;
+        }
         sleep 5
       done
+
+release:dev:
+  extends: .release-template
+  variables:
+    ARGOCD_APP_NAME: ${SERVICE_NAME}-dev
   environment:
     name: dev
-  needs:
-    - job: update:dev
-      optional: true
+  needs: [update:dev]
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+release:staging:
+  extends: .release-template
+  variables:
+    ARGOCD_APP_NAME: ${SERVICE_NAME}-staging
+  environment:
+    name: staging
+  needs: [update:staging]
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+.*$/
+
+release:prod:
+  extends: .release-template
+  variables:
+    ARGOCD_APP_NAME: ${SERVICE_NAME}-prod
+  environment:
+    name: production
+  needs: [update:prod]
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/
+  when: manual
+```
+
+### Как создавать релизы
+
+```bash
+# Pre-release (staging only)
+git tag v1.0.0-rc.1
+git push origin v1.0.0-rc.1
+
+# Release (staging + prod button)
+git tag v1.0.0
+git push origin v1.0.0
 ```
 
 ## Шаг 7: Создание секретов в Vault
@@ -622,11 +725,14 @@ import (
 - [ ] Выбран подходящий Dockerfile (distroless для Go/Node.js)
 - [ ] Создан .cicd/default.yaml (минимальный, без inherited полей)
 - [ ] Создан .cicd/dev.yaml
-- [ ] Создан .gitlab-ci.yml
+- [ ] Создан .cicd/staging.yaml
+- [ ] Создан .cicd/prod.yaml (опционально)
+- [ ] Создан .gitlab-ci.yml (с семантическим версионированием)
 - [ ] Созданы секреты в Vault
 - [ ] (gRPC) Создан proto репозиторий
 - [ ] (gRPC) Дождались генерации кода
 - [ ] Проверен деплой в dev окружении
+- [ ] Протестирован релизный flow: `git tag v0.1.0-rc.1 && git push origin v0.1.0-rc.1`
 
 ## Полезные команды
 

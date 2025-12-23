@@ -1,7 +1,10 @@
 # GitLab CI/CD Pipeline for api-gateway
-# Pull-based GitOps with ArgoCD
+# Pull-based GitOps with ArgoCD + Semantic Versioning
 #
-# Flow: CI builds image → updates .cicd/{env}.yaml → ArgoCD syncs
+# Flow:
+#   main branch  → build → dev (auto)
+#   v*-rc.*/beta/alpha tags → build → staging (auto)
+#   v*.*.* release tags → build → staging (auto) → prod (manual)
 #
 # Required CI/CD Variables (set at Group level):
 #   CI_PUSH_TOKEN     - Group Access Token with write_repository scope
@@ -19,8 +22,114 @@ stages:
   - release
 
 # ============================================
-# Release Template: Wait for ArgoCD deployment
-# Uses REST API instead of gRPC (CloudFlare compatible)
+# Build Stage
+# ============================================
+build:
+  stage: build
+  image: docker:24
+  services:
+    - docker:24-dind
+  variables:
+    DOCKER_TLS_CERTDIR: "/certs"
+  before_script:
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+  script:
+    - |
+      # Determine image tag based on trigger type
+      if [ -n "$CI_COMMIT_TAG" ]; then
+        IMAGE_TAG="${CI_COMMIT_TAG}"
+        echo "Building release image: ${IMAGE_NAME}:${IMAGE_TAG}"
+      else
+        IMAGE_TAG="${CI_COMMIT_SHORT_SHA}"
+        echo "Building dev image: ${IMAGE_NAME}:${IMAGE_TAG}"
+      fi
+
+      docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .
+      docker push ${IMAGE_NAME}:${IMAGE_TAG}
+
+      if [ "$CI_COMMIT_BRANCH" == "$CI_DEFAULT_BRANCH" ]; then
+        docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${IMAGE_NAME}:latest
+        docker push ${IMAGE_NAME}:latest
+      fi
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+.*$/
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+
+# ============================================
+# Update manifests (Pull-based GitOps)
+# ============================================
+.update-manifest-branch:
+  stage: update-manifests
+  image: alpine:3.19
+  before_script:
+    - apk add --no-cache git yq
+    - git config --global user.email "ci@gitlab.com"
+    - git config --global user.name "GitLab CI"
+    - git remote set-url origin "https://oauth2:${CI_PUSH_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
+    - git fetch origin ${CI_DEFAULT_BRANCH}
+    - git checkout ${CI_DEFAULT_BRANCH}
+
+.update-manifest-tag:
+  stage: update-manifests
+  image: alpine:3.19
+  before_script:
+    - apk add --no-cache git yq
+    - git config --global user.email "ci@gitlab.com"
+    - git config --global user.name "GitLab CI"
+    - git remote set-url origin "https://oauth2:${CI_PUSH_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
+    - git fetch origin ${CI_DEFAULT_BRANCH}
+    - git checkout ${CI_DEFAULT_BRANCH}
+    - git pull origin ${CI_DEFAULT_BRANCH}
+
+update:dev:
+  extends: .update-manifest-branch
+  script:
+    - |
+      echo "Updating dev environment to ${CI_COMMIT_SHORT_SHA}"
+      yq -i '.image.tag = "'${CI_COMMIT_SHORT_SHA}'"' .cicd/dev.yaml
+      yq -i '.image.repository = "'${IMAGE_NAME}'"' .cicd/dev.yaml
+
+      git add .cicd/dev.yaml
+      git commit -m "ci(dev): update image to ${CI_COMMIT_SHORT_SHA} [skip ci]"
+      git push origin ${CI_DEFAULT_BRANCH}
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+update:staging:
+  extends: .update-manifest-tag
+  script:
+    - |
+      echo "Updating staging environment to ${CI_COMMIT_TAG}"
+      yq -i '.image.tag = "'${CI_COMMIT_TAG}'"' .cicd/staging.yaml
+      yq -i '.image.repository = "'${IMAGE_NAME}'"' .cicd/staging.yaml
+
+      git add .cicd/staging.yaml
+      git commit -m "ci(staging): update image to ${CI_COMMIT_TAG} [skip ci]"
+      git push origin ${CI_DEFAULT_BRANCH}
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+.*$/
+
+update:prod:
+  extends: .update-manifest-tag
+  script:
+    - |
+      echo "Updating prod environment to ${CI_COMMIT_TAG}"
+      yq -i '.image.tag = "'${CI_COMMIT_TAG}'"' .cicd/prod.yaml
+      yq -i '.image.repository = "'${IMAGE_NAME}'"' .cicd/prod.yaml
+
+      git add .cicd/prod.yaml
+      git commit -m "ci(prod): update image to ${CI_COMMIT_TAG} [skip ci]"
+      git push origin ${CI_DEFAULT_BRANCH}
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/
+  when: manual
+  needs:
+    - job: update:staging
+    - job: release:staging
+
+# ============================================
+# Release Stage: Wait for ArgoCD deployment
 # ============================================
 .release-template:
   stage: release
@@ -36,10 +145,8 @@ stages:
       ARGOCD_API="https://${ARGOCD_SERVER}/api/v1/applications/${ARGOCD_APP_NAME}"
       AUTH_HEADER="Authorization: Bearer ${ARGOCD_AUTH_TOKEN}"
 
-      # Trigger refresh
       curl -sf "${ARGOCD_API}?refresh=normal" -H "${AUTH_HEADER}" > /dev/null || true
 
-      # Wait for sync and health
       start_time=$(date +%s)
       while true; do
         response=$(curl -sf "${ARGOCD_API}" -H "${AUTH_HEADER}" 2>/dev/null)
@@ -57,106 +164,18 @@ stages:
           echo ""
           echo "=== RELEASE SUCCESSFUL ==="
           echo "Application: ${ARGOCD_APP_NAME}"
-          echo "Sync: ${sync_status}"
-          echo "Health: ${health_status}"
           exit 0
         fi
 
         elapsed=$(($(date +%s) - start_time))
         if [ $elapsed -ge ${RELEASE_TIMEOUT} ]; then
           echo "ERROR: Timeout after ${RELEASE_TIMEOUT}s"
-          echo "Final status: sync=${sync_status}, health=${health_status}"
           exit 1
         fi
 
         sleep 5
       done
 
-# ============================================
-# Build Stage
-# ============================================
-build:
-  stage: build
-  image: docker:24
-  services:
-    - docker:24-dind
-  variables:
-    DOCKER_TLS_CERTDIR: "/certs"
-  before_script:
-    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
-  script:
-    - docker build -t ${IMAGE_NAME}:${CI_COMMIT_SHORT_SHA} .
-    - docker push ${IMAGE_NAME}:${CI_COMMIT_SHORT_SHA}
-    - |
-      if [ "$CI_COMMIT_BRANCH" == "$CI_DEFAULT_BRANCH" ]; then
-        docker tag ${IMAGE_NAME}:${CI_COMMIT_SHORT_SHA} ${IMAGE_NAME}:latest
-        docker push ${IMAGE_NAME}:latest
-      fi
-  rules:
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-
-# ============================================
-# Update manifests (Pull-based GitOps)
-# ============================================
-.update-manifest:
-  stage: update-manifests
-  image: alpine:3.19
-  before_script:
-    - apk add --no-cache git yq
-    - git config --global user.email "ci@gitlab.com"
-    - git config --global user.name "GitLab CI"
-    - git remote set-url origin "https://oauth2:${CI_PUSH_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
-    - git fetch origin ${CI_COMMIT_BRANCH}
-    - git checkout ${CI_COMMIT_BRANCH}
-  rules:
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-
-update:dev:
-  extends: .update-manifest
-  script:
-    - |
-      echo "Updating dev environment to ${CI_COMMIT_SHORT_SHA}"
-      yq -i '.image.tag = "'${CI_COMMIT_SHORT_SHA}'"' .cicd/dev.yaml
-      yq -i '.image.repository = "'${IMAGE_NAME}'"' .cicd/dev.yaml
-
-      git add .cicd/dev.yaml
-      git commit -m "ci(dev): update image to ${CI_COMMIT_SHORT_SHA} [skip ci]"
-      git push origin ${CI_COMMIT_BRANCH}
-
-update:staging:
-  extends: .update-manifest
-  script:
-    - |
-      echo "Updating staging environment to ${CI_COMMIT_SHORT_SHA}"
-      yq -i '.image.tag = "'${CI_COMMIT_SHORT_SHA}'"' .cicd/staging.yaml
-      yq -i '.image.repository = "'${IMAGE_NAME}'"' .cicd/staging.yaml
-
-      git add .cicd/staging.yaml
-      git commit -m "ci(staging): update image to ${CI_COMMIT_SHORT_SHA} [skip ci]"
-      git push origin ${CI_COMMIT_BRANCH}
-  when: manual
-  needs:
-    - update:dev
-
-update:prod:
-  extends: .update-manifest
-  script:
-    - |
-      echo "Updating prod environment to ${CI_COMMIT_SHORT_SHA}"
-      yq -i '.image.tag = "'${CI_COMMIT_SHORT_SHA}'"' .cicd/prod.yaml
-      yq -i '.image.repository = "'${IMAGE_NAME}'"' .cicd/prod.yaml
-
-      git add .cicd/prod.yaml
-      git commit -m "ci(prod): update image to ${CI_COMMIT_SHORT_SHA} [skip ci]"
-      git push origin ${CI_COMMIT_BRANCH}
-  when: manual
-  needs:
-    - update:staging
-
-# ============================================
-# Release Stage: Wait for ArgoCD deployment
-# ============================================
 release:dev:
   extends: .release-template
   variables:
@@ -165,7 +184,6 @@ release:dev:
     name: dev
   needs:
     - job: update:dev
-      optional: true
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
 
@@ -177,10 +195,8 @@ release:staging:
     name: staging
   needs:
     - job: update:staging
-      optional: true
   rules:
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-  when: manual
+    - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+.*$/
 
 release:prod:
   extends: .release-template
@@ -190,7 +206,6 @@ release:prod:
     name: production
   needs:
     - job: update:prod
-      optional: true
   rules:
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/
   when: manual

@@ -1,7 +1,10 @@
 # GitLab CI/CD Pipeline Template for {{SERVICE_NAME}}
-# Pull-based GitOps with ArgoCD
+# Pull-based GitOps with ArgoCD + Semantic Versioning
 #
-# Flow: CI builds image → updates .cicd/{env}.yaml → ArgoCD syncs
+# Flow:
+#   main branch  → build → dev (auto)
+#   v*-rc.*/beta/alpha tags → build → staging (auto)
+#   v*.*.* release tags → build → staging (auto) → prod (manual)
 #
 # Replace all {{SERVICE_NAME}} with your actual service name
 #
@@ -12,17 +15,7 @@
 
 variables:
   SERVICE_NAME: "{{SERVICE_NAME}}"
-
-  # Docker registry (GitLab Container Registry)
-  REGISTRY: ${CI_REGISTRY}
   IMAGE_NAME: ${CI_REGISTRY_IMAGE}
-
-  # Helm chart
-  HELM_CHART: "k8app/app"
-  HELM_REPO: "https://d7561985.github.io/k8app"
-
-  # ArgoCD settings for release tracking
-  ARGOCD_OPTS: "--grpc-web"
   RELEASE_TIMEOUT: "300"
 
 stages:
@@ -31,45 +24,16 @@ stages:
   - release
 
 # ============================================
-# Release Template: Wait for ArgoCD deployment
-# ============================================
-.release-template:
-  stage: release
-  image: alpine:3.19
-  variables:
-    ARGOCD_VERSION: "v2.13.2"
-  before_script:
-    - apk add --no-cache curl
-    - |
-      echo "Downloading ArgoCD ${ARGOCD_VERSION}..."
-      curl -fsSL --retry 3 --retry-delay 5 -o /usr/local/bin/argocd \
-        "https://github.com/argoproj/argo-cd/releases/download/${ARGOCD_VERSION}/argocd-linux-amd64"
-      chmod +x /usr/local/bin/argocd
-      # Verify it's a valid binary
-      argocd version --client --short || { echo "ERROR: ArgoCD binary is invalid"; exit 1; }
-  script:
-    - echo "Waiting for ${ARGOCD_APP_NAME} to sync and become healthy..."
-    - echo "ArgoCD Server - ${ARGOCD_SERVER}"
-    - echo "Timeout - ${RELEASE_TIMEOUT}s"
-    - argocd app get ${ARGOCD_APP_NAME} --refresh ${ARGOCD_OPTS} > /dev/null
-    - argocd app wait ${ARGOCD_APP_NAME} --timeout ${RELEASE_TIMEOUT} --health --sync ${ARGOCD_OPTS}
-    - echo "RELEASE SUCCESSFUL"
-    - argocd app get ${ARGOCD_APP_NAME} ${ARGOCD_OPTS} || true
-
-# ============================================
 # Build Stage
 # ============================================
 # For Go services with private modules:
 #   docker build --build-arg GITLAB_TOKEN=${CI_PUSH_TOKEN} ...
 #
 # For Angular/Node.js with private npm git dependencies (BuildKit secrets):
-#   IMPORTANT: Use CI_PUSH_TOKEN, not CI_JOB_TOKEN!
-#   CI_JOB_TOKEN doesn't have cross-project access to api/gen/* repos.
 #   echo "$CI_PUSH_TOKEN" > /tmp/gitlab_token
 #   docker build --secret id=gitlab_token,src=/tmp/gitlab_token ...
 #   rm -f /tmp/gitlab_token
 # ============================================
-
 build:
   stage: build
   image: docker:24
@@ -81,47 +45,71 @@ build:
   before_script:
     - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
   script:
-    # For services with private dependencies, uncomment one of:
-    # Go: docker build --build-arg GITLAB_TOKEN=${CI_PUSH_TOKEN} -t ${IMAGE_NAME}:${CI_COMMIT_SHORT_SHA} .
-    # Angular/Node.js (use CI_PUSH_TOKEN for cross-project access):
-    #   echo "$CI_PUSH_TOKEN" > /tmp/gitlab_token
-    #   docker build --secret id=gitlab_token,src=/tmp/gitlab_token -t ${IMAGE_NAME}:${CI_COMMIT_SHORT_SHA} .
-    #   rm -f /tmp/gitlab_token
-    - docker build -t ${IMAGE_NAME}:${CI_COMMIT_SHORT_SHA} .
-    - docker push ${IMAGE_NAME}:${CI_COMMIT_SHORT_SHA}
-    # Tag as latest for main branch
     - |
+      # Determine image tag based on trigger type
+      if [ -n "$CI_COMMIT_TAG" ]; then
+        # Tag pipeline: use semver tag (e.g., v1.0.0, v1.0.0-rc.1)
+        IMAGE_TAG="${CI_COMMIT_TAG}"
+        echo "Building release image: ${IMAGE_NAME}:${IMAGE_TAG}"
+      else
+        # Branch pipeline: use short SHA
+        IMAGE_TAG="${CI_COMMIT_SHORT_SHA}"
+        echo "Building dev image: ${IMAGE_NAME}:${IMAGE_TAG}"
+      fi
+
+      # Build and push with determined tag
+      # Uncomment for private dependencies:
+      # Go: docker build --build-arg GITLAB_TOKEN=${CI_PUSH_TOKEN} -t ${IMAGE_NAME}:${IMAGE_TAG} .
+      # Angular/Node.js:
+      #   echo "$CI_PUSH_TOKEN" > /tmp/gitlab_token
+      #   docker build --secret id=gitlab_token,src=/tmp/gitlab_token -t ${IMAGE_NAME}:${IMAGE_TAG} .
+      #   rm -f /tmp/gitlab_token
+      docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .
+      docker push ${IMAGE_NAME}:${IMAGE_TAG}
+
+      # Also tag as 'latest' for main branch
       if [ "$CI_COMMIT_BRANCH" == "$CI_DEFAULT_BRANCH" ]; then
-        docker tag ${IMAGE_NAME}:${CI_COMMIT_SHORT_SHA} ${IMAGE_NAME}:latest
+        docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${IMAGE_NAME}:latest
         docker push ${IMAGE_NAME}:latest
       fi
   rules:
+    # Main branch → dev
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    # Semver tags (v1.0.0, v1.0.0-rc.1, etc.) → staging/prod
+    - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+.*$/
+    # MR for testing
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
 
 # ============================================
-# Pull-based GitOps: Update manifests
+# Update manifests (Pull-based GitOps)
 # ============================================
-
-# Pull-based: Update .cicd/*.yaml and push back to repo
-# Requires CI_PUSH_TOKEN (Group Access Token with write_repository scope)
-# See README.md for setup instructions
-.update-manifest:
+.update-manifest-branch:
   stage: update-manifests
   image: alpine:3.19
   before_script:
     - apk add --no-cache git yq
     - git config --global user.email "ci@gitlab.com"
     - git config --global user.name "GitLab CI"
-    # Clone with push token (CI_JOB_TOKEN doesn't have push rights)
     - git remote set-url origin "https://oauth2:${CI_PUSH_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
-    - git fetch origin ${CI_COMMIT_BRANCH}
-    - git checkout ${CI_COMMIT_BRANCH}
-  rules:
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - git fetch origin ${CI_DEFAULT_BRANCH}
+    - git checkout ${CI_DEFAULT_BRANCH}
 
+.update-manifest-tag:
+  stage: update-manifests
+  image: alpine:3.19
+  before_script:
+    - apk add --no-cache git yq
+    - git config --global user.email "ci@gitlab.com"
+    - git config --global user.name "GitLab CI"
+    - git remote set-url origin "https://oauth2:${CI_PUSH_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
+    # For tags, checkout default branch to push changes
+    - git fetch origin ${CI_DEFAULT_BRANCH}
+    - git checkout ${CI_DEFAULT_BRANCH}
+    - git pull origin ${CI_DEFAULT_BRANCH}
+
+# Dev: triggered by main branch commits
 update:dev:
-  extends: .update-manifest
+  extends: .update-manifest-branch
   script:
     - |
       echo "Updating dev environment to ${CI_COMMIT_SHORT_SHA}"
@@ -130,43 +118,101 @@ update:dev:
 
       git add .cicd/dev.yaml
       git commit -m "ci(dev): update image to ${CI_COMMIT_SHORT_SHA} [skip ci]"
-      git push origin ${CI_COMMIT_BRANCH}
+      git push origin ${CI_DEFAULT_BRANCH}
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
 
-      echo "ArgoCD will detect this change and deploy automatically"
-
+# Staging: triggered by ANY semver tag (pre-release OR release)
 update:staging:
-  extends: .update-manifest
+  extends: .update-manifest-tag
   script:
     - |
-      echo "Updating staging environment to ${CI_COMMIT_SHORT_SHA}"
-      yq -i '.image.tag = "'${CI_COMMIT_SHORT_SHA}'"' .cicd/staging.yaml
+      echo "Updating staging environment to ${CI_COMMIT_TAG}"
+      yq -i '.image.tag = "'${CI_COMMIT_TAG}'"' .cicd/staging.yaml
       yq -i '.image.repository = "'${IMAGE_NAME}'"' .cicd/staging.yaml
 
       git add .cicd/staging.yaml
-      git commit -m "ci(staging): update image to ${CI_COMMIT_SHORT_SHA} [skip ci]"
-      git push origin ${CI_COMMIT_BRANCH}
-  when: manual
-  needs:
-    - update:dev
+      git commit -m "ci(staging): update image to ${CI_COMMIT_TAG} [skip ci]"
+      git push origin ${CI_DEFAULT_BRANCH}
+  rules:
+    # All semver tags go to staging (rc, beta, alpha, AND releases)
+    - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+.*$/
 
+# Prod: triggered ONLY by release tags (no -rc, -beta, -alpha suffix)
+# Manual approval required - uses the SAME image already validated in staging
 update:prod:
-  extends: .update-manifest
+  extends: .update-manifest-tag
   script:
     - |
-      echo "Updating prod environment to ${CI_COMMIT_SHORT_SHA}"
-      yq -i '.image.tag = "'${CI_COMMIT_SHORT_SHA}'"' .cicd/prod.yaml
+      echo "Updating prod environment to ${CI_COMMIT_TAG}"
+      echo "NOTE: This is the same image that was deployed to staging"
+      yq -i '.image.tag = "'${CI_COMMIT_TAG}'"' .cicd/prod.yaml
       yq -i '.image.repository = "'${IMAGE_NAME}'"' .cicd/prod.yaml
 
       git add .cicd/prod.yaml
-      git commit -m "ci(prod): update image to ${CI_COMMIT_SHORT_SHA} [skip ci]"
-      git push origin ${CI_COMMIT_BRANCH}
+      git commit -m "ci(prod): update image to ${CI_COMMIT_TAG} [skip ci]"
+      git push origin ${CI_DEFAULT_BRANCH}
+  rules:
+    # Only clean release tags (v1.0.0, NOT v1.0.0-rc.1)
+    - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/
   when: manual
   needs:
-    - update:staging
+    - job: update:staging
+    - job: release:staging
 
 # ============================================
 # Release Stage: Wait for ArgoCD deployment
+# Uses REST API (CloudFlare Tunnel compatible)
 # ============================================
+.release-template:
+  stage: release
+  image: alpine:3.19
+  before_script:
+    - apk add --no-cache curl jq
+  script:
+    - |
+      echo "Waiting for ${ARGOCD_APP_NAME} to sync and become healthy..."
+      echo "ArgoCD Server: https://${ARGOCD_SERVER}"
+      echo "Timeout: ${RELEASE_TIMEOUT}s"
+
+      ARGOCD_API="https://${ARGOCD_SERVER}/api/v1/applications/${ARGOCD_APP_NAME}"
+      AUTH_HEADER="Authorization: Bearer ${ARGOCD_AUTH_TOKEN}"
+
+      # Trigger refresh
+      curl -sf "${ARGOCD_API}?refresh=normal" -H "${AUTH_HEADER}" > /dev/null || true
+
+      # Wait for sync and health
+      start_time=$(date +%s)
+      while true; do
+        response=$(curl -sf "${ARGOCD_API}" -H "${AUTH_HEADER}" 2>/dev/null)
+        if [ $? -ne 0 ]; then
+          echo "ERROR: Failed to get application status"
+          exit 1
+        fi
+
+        sync_status=$(echo "$response" | jq -r '.status.sync.status // "Unknown"')
+        health_status=$(echo "$response" | jq -r '.status.health.status // "Unknown"')
+
+        echo "Status: sync=${sync_status}, health=${health_status}"
+
+        if [ "$sync_status" = "Synced" ] && [ "$health_status" = "Healthy" ]; then
+          echo ""
+          echo "=== RELEASE SUCCESSFUL ==="
+          echo "Application: ${ARGOCD_APP_NAME}"
+          echo "Sync: ${sync_status}"
+          echo "Health: ${health_status}"
+          exit 0
+        fi
+
+        elapsed=$(($(date +%s) - start_time))
+        if [ $elapsed -ge ${RELEASE_TIMEOUT} ]; then
+          echo "ERROR: Timeout after ${RELEASE_TIMEOUT}s"
+          echo "Final status: sync=${sync_status}, health=${health_status}"
+          exit 1
+        fi
+
+        sleep 5
+      done
 
 release:dev:
   extends: .release-template
@@ -176,7 +222,6 @@ release:dev:
     name: dev
   needs:
     - job: update:dev
-      optional: true
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
 
@@ -188,10 +233,8 @@ release:staging:
     name: staging
   needs:
     - job: update:staging
-      optional: true
   rules:
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-  when: manual
+    - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+.*$/
 
 release:prod:
   extends: .release-template
@@ -201,7 +244,6 @@ release:prod:
     name: production
   needs:
     - job: update:prod
-      optional: true
   rules:
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/
   when: manual
