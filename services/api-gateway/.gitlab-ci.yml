@@ -38,10 +38,10 @@ stages:
     - echo "Waiting for ${ARGOCD_APP_NAME} to sync and become healthy..."
     - echo "ArgoCD Server - ${ARGOCD_SERVER}"
     - echo "Timeout - ${RELEASE_TIMEOUT}s"
-    - argocd app get ${ARGOCD_APP_NAME} --refresh ${ARGOCD_OPTS} > /dev/null
-    - argocd app wait ${ARGOCD_APP_NAME} --timeout ${RELEASE_TIMEOUT} --health --sync ${ARGOCD_OPTS}
+    - argocd app get ${ARGOCD_APP_NAME} --server ${ARGOCD_SERVER} --auth-token ${ARGOCD_AUTH_TOKEN} --refresh ${ARGOCD_OPTS} --insecure > /dev/null
+    - argocd app wait ${ARGOCD_APP_NAME} --server ${ARGOCD_SERVER} --auth-token ${ARGOCD_AUTH_TOKEN} --timeout ${RELEASE_TIMEOUT} --health --sync ${ARGOCD_OPTS} --insecure
     - echo "RELEASE SUCCESSFUL"
-    - argocd app get ${ARGOCD_APP_NAME} ${ARGOCD_OPTS} || true
+    - argocd app get ${ARGOCD_APP_NAME} --server ${ARGOCD_SERVER} --auth-token ${ARGOCD_AUTH_TOKEN} ${ARGOCD_OPTS} --insecure || true
 
 # ============================================
 # Build Stage
