@@ -31,9 +31,14 @@ environments:
     autoSync: true
     domain: "app.demo-poc-01.work"
     infraNamespace: "infra-dev"
-    mirrors:
-      - domain: "demo-poc-02.work"
-        zoneId: "76d0dce2fd263121a17a36a188081b99"
+    # mirrors:
+    #   - domain: "demo-poc-02.work"
+    #     zoneId: "76d0dce2fd263121a17a36a188081b99"
+  staging:
+    enabled: true
+    autoSync: true
+    domain: "stage.demo-poc-01.work"
+    infraNamespace: "infra-staging"
 
 # -----------------------------------------------------------------------------
 # Vault Configuration

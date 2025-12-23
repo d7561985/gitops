@@ -43,3 +43,9 @@ hpa:
   minReplicas: 2
   maxReplicas: 4
   targetCPUUtilizationPercentage: 70
+
+# =============================================================================
+# Secrets Configuration (k8app v3.4.0+)
+# =============================================================================
+secrets:
+  API_KEY: "/gitops-poc-dzha/api-gateway/staging/config"

@@ -3,6 +3,7 @@ kind: Kustomization
 
 resources:
   - namespace.yaml
+  - namespace-staging.yaml
   # MongoDB with Prometheus exporter sidecar
   - mongodb/deployment.yaml
   - mongodb/service.yaml

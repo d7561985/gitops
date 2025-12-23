@@ -58,12 +58,12 @@ clusters:
       interval_seconds: 10
 
   # Analytics Service - Business metrics and analytics (Connect protocol)
-  - name: analytics-service
-    addr: "analytics-service-sv:8081"
-    type: "http"
-    health_check:
-      path: "/health"
-      interval_seconds: 10
+  # - name: analytics-service
+  #   addr: "analytics-service-sv:8081"
+  #   type: "http"
+  #   health_check:
+  #     path: "/health"
+  #     interval_seconds: 10
 
 apis:
   # gRPC-Web тестирование
@@ -234,30 +234,30 @@ apis:
 
   # Analytics Service - REST API (for frontend metrics dashboard)
   # Routes: /api/analytics/* → analytics-service /api/v1/business-metrics/*
-  - name: analytics
-    cluster: analytics-service
-    auth: {policy: no-need}
-    methods:
-      - name: api/v1/business-metrics/rtp
-        auth: {policy: no-need}
-      - name: api/v1/business-metrics/sessions
-        auth: {policy: no-need}
-      - name: api/v1/business-metrics/financial
-        auth: {policy: no-need}
+  # - name: analytics
+  #   cluster: analytics-service
+  #   auth: {policy: no-need}
+    # methods:
+    #   - name: api/v1/business-metrics/rtp
+    #     auth: {policy: no-need}
+    #   - name: api/v1/business-metrics/sessions
+    #     auth: {policy: no-need}
+    #   - name: api/v1/business-metrics/financial
+    #     auth: {policy: no-need}
 
   # Analytics Service - Connect Protocol
   # Routes: /api/analyticsconnect/analytics.v1.AnalyticsService/* → analytics-service /analytics.v1.AnalyticsService/*
-  - name: analyticsconnect
-    cluster: analytics-service
-    auth: {policy: no-need}
-    methods:
-      - name: analytics.v1.AnalyticsService/GetRTPMetrics
-        auth: {policy: no-need}
-      - name: analytics.v1.AnalyticsService/GetSessionMetrics
-        auth: {policy: no-need}
-      - name: analytics.v1.AnalyticsService/GetFinancialMetrics
-        auth: {policy: no-need}
-      - name: analytics.v1.AnalyticsService/RecordGameResult
-        auth: {policy: no-need}
-      - name: analytics.v1.AnalyticsService/RecordTransaction
-        auth: {policy: no-need}
+  # - name: analyticsconnect
+  #   cluster: analytics-service
+  #   auth: {policy: no-need}
+    # methods:
+    #   - name: analytics.v1.AnalyticsService/GetRTPMetrics
+    #     auth: {policy: no-need}
+    #   - name: analytics.v1.AnalyticsService/GetSessionMetrics
+    #     auth: {policy: no-need}
+    #   - name: analytics.v1.AnalyticsService/GetFinancialMetrics
+    #     auth: {policy: no-need}
+    #   - name: analytics.v1.AnalyticsService/RecordGameResult
+    #     auth: {policy: no-need}
+    #   - name: analytics.v1.AnalyticsService/RecordTransaction
+    #     auth: {policy: no-need}

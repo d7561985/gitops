@@ -2,7 +2,7 @@
 
 image:
   repository: registry.gitlab.com/gitops-poc-dzha/services/sentry-demo/frontend
-  tag: b785b788
+  tag: 8a4fbd61
 replicaCount: 1
 # Vault (environment-specific)
 vault:

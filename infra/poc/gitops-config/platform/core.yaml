@@ -44,14 +44,14 @@ services:
   api-gateway:
     syncWave: "0"
 
-  web-grpc:
-    syncWave: "0"
+  # web-grpc:
+  #   syncWave: "0"
 
-  web-http:
-    syncWave: "0"
+  # web-http:
+  #   syncWave: "0"
 
-  health-demo:
-    syncWave: "0"
+  # health-demo:
+  #   syncWave: "0"
 
   user-service:
     syncWave: "0"
@@ -78,10 +78,10 @@ services:
     repoURL: https://gitlab.com/gitops-poc-dzha/services/sentry-demo.git
     path: wager-service/.cicd
 
-  analytics-service:
-    syncWave: "0"
-    repoURL: https://gitlab.com/gitops-poc-dzha/services/analytics-service.git
-    path: .cicd
+  # analytics-service:
+  #   syncWave: "0"
+  #   # repoURL: https://gitlab.com/gitops-poc-dzha/services/analytics-service.git
+  #   path: .cicd
 
 # ApplicationSet for services
 applicationSet:
