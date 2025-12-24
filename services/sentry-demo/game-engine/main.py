@@ -116,6 +116,15 @@ mongo_url = os.environ.get('MONGODB_URL', 'mongodb://admin:password@localhost:27
 mongo_client = MongoClient(mongo_url)
 db = mongo_client.sentry_poc
 
+# Create indexes on startup (idempotent - safe to run every time)
+try:
+    from pymongo import DESCENDING
+    db.games.create_index([("timestamp", DESCENDING)], background=True)
+    db.games.create_index([("user_id", 1), ("timestamp", DESCENDING)], background=True)
+    logger.info("MongoDB indexes ensured for 'games' collection")
+except Exception as e:
+    logger.warning(f"Failed to create indexes: {e}")
+
 # Balance management configuration
 # Set USE_EXTERNAL_BALANCE=true to use external user-service for balance
 USE_EXTERNAL_BALANCE = os.environ.get('USE_EXTERNAL_BALANCE', 'false').lower() == 'true'
