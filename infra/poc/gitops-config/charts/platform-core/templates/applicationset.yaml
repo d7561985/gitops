@@ -18,21 +18,29 @@ spec:
           # Services from values.yaml
           - list:
               elements:
+                {{- $serviceList := list }}
                 {{- range $serviceName, $service := .Values.services }}
-                - service: {{ $serviceName }}
-                  repoURL: {{ $service.repoURL | default (printf "https://gitlab.com/%s/%s.git" $.Values.global.gitlabGroup $serviceName) }}
-                  syncWave: {{ $service.syncWave | default "0" | quote }}
-                  path: {{ $service.path | default ".cicd" | quote }}
+                {{- $serviceList = append $serviceList (dict "service" $serviceName "repoURL" ($service.repoURL | default (printf "https://gitlab.com/%s/%s.git" $.Values.global.gitlabGroup $serviceName)) "syncWave" ($service.syncWave | default "0") "path" ($service.path | default ".cicd")) }}
+                {{- end }}
+                {{- if $serviceList }}
+                {{- toYaml $serviceList | nindent 16 }}
+                {{- else }}
+                []
                 {{- end }}
 
           # Environments from values.yaml
           - list:
               elements:
+                {{- $envList := list }}
                 {{- range $envName, $env := .Values.environments }}
                 {{- if $env.enabled }}
-                - env: {{ $envName }}
-                  autoSync: {{ $env.autoSync | default true | quote }}
+                {{- $envList = append $envList (dict "env" $envName "autoSync" ($env.autoSync | default true)) }}
                 {{- end }}
+                {{- end }}
+                {{- if $envList }}
+                {{- toYaml $envList | nindent 16 }}
+                {{- else }}
+                []
                 {{- end }}
 
   template:
