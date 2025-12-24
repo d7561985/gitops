@@ -178,7 +178,7 @@ build:frontend:
   variables:
     SERVICE_NAME: frontend
     SERVICE_PATH: frontend
-    DOCKER_BUILD_ARGS: "--build-arg APP_VERSION=$CI_COMMIT_SHORT_SHA"
+    DOCKER_BUILD_ARGS: "--build-arg APP_VERSION=${CI_COMMIT_TAG:-$CI_COMMIT_SHORT_SHA}"
   rules:
     - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+.*$/
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
