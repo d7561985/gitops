@@ -127,8 +127,6 @@ update:prod:
   needs:
     - job: update:staging
       optional: true
-    - job: release:staging
-      optional: true
 
 # ============================================
 # Release Stage: Wait for ArgoCD deployment

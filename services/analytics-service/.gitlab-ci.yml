@@ -43,7 +43,7 @@ build:
         echo "Building dev image: ${IMAGE_NAME}:${IMAGE_TAG}"
       fi
 
-      docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .
+      docker build --build-arg GITLAB_TOKEN=${CI_PUSH_TOKEN} -t ${IMAGE_NAME}:${IMAGE_TAG} .
       docker push ${IMAGE_NAME}:${IMAGE_TAG}
 
       if [ "$CI_COMMIT_BRANCH" == "$CI_DEFAULT_BRANCH" ]; then
@@ -125,8 +125,6 @@ update:prod:
   when: manual
   needs:
     - job: update:staging
-      optional: true
-    - job: release:staging
       optional: true
 
 # ============================================
