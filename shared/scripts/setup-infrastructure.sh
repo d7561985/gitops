@@ -123,14 +123,58 @@ chmod +x "$ROOT_DIR/shared/infrastructure/vault/setup.sh"
 "$ROOT_DIR/shared/infrastructure/vault/setup.sh"
 
 # ============================================
-# Setup Registry Secrets (BEFORE ArgoCD)
+# Setup Registry Credentials in Vault
 # ============================================
-# Creates imagePullSecrets in each namespace for GitLab Container Registry.
-# Services use these via imagePullSecrets in their k8app values.
+# Registry credentials are now managed via Vault + VSO.
+# VaultStaticSecret in platform-core syncs to all namespaces automatically.
 
-echo_header "Setting up Registry Secrets"
-chmod +x "$SCRIPT_DIR/setup-registry-secret.sh"
-"$SCRIPT_DIR/setup-registry-secret.sh"
+echo_header "Setting up Registry Credentials (Vault)"
+
+# Check for credentials
+if [ -z "$GITLAB_DEPLOY_TOKEN_USER" ] || [ -z "$GITLAB_DEPLOY_TOKEN" ]; then
+    echo_warn "GITLAB_DEPLOY_TOKEN_USER and GITLAB_DEPLOY_TOKEN not set"
+    echo ""
+    echo "To create a Deploy Token:"
+    echo "  1. Go to GitLab Group: Settings → Repository → Deploy tokens"
+    echo "  2. Create token with 'read_registry' scope"
+    echo "  3. Add to .env:"
+    echo ""
+    echo "     GITLAB_DEPLOY_TOKEN_USER='gitlab+deploy-token-xxxxx'"
+    echo "     GITLAB_DEPLOY_TOKEN='gldt-xxxxxxxxxxxx'"
+    echo ""
+    echo_warn "Skipping registry credentials setup. Configure manually later."
+    echo_info "See: docs/PREFLIGHT-CHECKLIST.md 'Этап 5: Registry Credentials в Vault'"
+else
+    REGISTRY="registry.gitlab.com"
+
+    # Start port-forward
+    kubectl port-forward svc/vault -n vault 8200:8200 &
+    PF_PID=$!
+    sleep 3
+
+    export VAULT_ADDR='http://127.0.0.1:8200'
+
+    # Get token
+    if [ -f "$ROOT_DIR/shared/infrastructure/vault/.vault-keys" ]; then
+        source "$ROOT_DIR/shared/infrastructure/vault/.vault-keys"
+        export VAULT_TOKEN="$VAULT_ROOT_TOKEN"
+    else
+        export VAULT_TOKEN=$(kubectl get secret vault-keys -n vault -o jsonpath='{.data.root-token}' 2>/dev/null | base64 -d || echo "root")
+    fi
+
+    # Create dockerconfigjson
+    AUTH_STRING=$(echo -n "${GITLAB_DEPLOY_TOKEN_USER}:${GITLAB_DEPLOY_TOKEN}" | base64)
+    DOCKER_CONFIG="{\"auths\":{\"${REGISTRY}\":{\"username\":\"${GITLAB_DEPLOY_TOKEN_USER}\",\"password\":\"${GITLAB_DEPLOY_TOKEN}\",\"auth\":\"${AUTH_STRING}\"}}}"
+
+    # Store in Vault
+    VAULT_PATH="${VAULT_PATH_PREFIX:-gitops-poc-dzha}/platform/registry"
+    vault kv put secret/${VAULT_PATH} ".dockerconfigjson=${DOCKER_CONFIG}" 2>/dev/null && \
+        echo_info "Registry credentials stored in Vault: secret/${VAULT_PATH}" || \
+        echo_warn "Failed to store registry credentials. Configure manually later."
+
+    # Cleanup
+    kill $PF_PID 2>/dev/null || true
+fi
 
 # ============================================
 # Install ArgoCD
@@ -204,7 +248,7 @@ echo "  - Gateway API CRDs v1.2.0"
 echo "  - cert-manager (namespace: cert-manager)"
 echo "  - Vault (namespace: vault)"
 echo "  - Vault Secrets Operator (namespace: vault-secrets-operator-system)"
-echo "  - Registry secrets (poc-dev, poc-staging, poc-prod)"
+echo "  - Registry credentials in Vault (auto-synced to namespaces via VSO)"
 echo "  - ArgoCD (namespace: argocd)"
 echo "  - Prometheus + Grafana (namespace: monitoring)"
 if [ -n "$CLOUDFLARE_API_TOKEN" ]; then

@@ -50,6 +50,24 @@ serviceMonitor:
 
 **Не нужно указывать в сервисе:** `serviceAccountName`, `imagePullSecrets`, `secretsProvider`, `serviceMonitor`.
 
+### Registry Credentials (автоматическое управление)
+
+Secret `regsecret` для pull из GitLab Container Registry создаётся **автоматически** через Vault Secrets Operator:
+
+1. **Один раз:** Credentials сохраняются в Vault: `secret/gitops-poc-dzha/platform/registry`
+2. **Автоматически:** VaultStaticSecret синхронизирует в каждый namespace (`poc-dev`, `poc-staging`, etc.)
+3. **При перезапуске:** Secrets пересоздаются автоматически (переживают удаление namespace)
+
+**Конфигурация** в `platform/base.yaml`:
+```yaml
+registry:
+  enabled: true
+  secretName: regsecret
+  vaultPath: gitops-poc-dzha/platform/registry
+```
+
+**Важно:** Никаких ручных действий для registry secrets не требуется после начальной настройки.
+
 ## Шаг 1: Регистрация сервиса
 
 Добавьте сервис в `infra/poc/gitops-config/platform/core.yaml`:

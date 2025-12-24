@@ -202,12 +202,38 @@ argocd account generate-token --account ci-readonly
 
 ---
 
-## Этап 5: Запуск сервисов
+## Этап 5: Registry Credentials в Vault
+
+> **Важно:** Registry credentials теперь управляются через Vault + VSO.
+> Secret `regsecret` автоматически синхронизируется во все namespace через VaultStaticSecret.
 
 ```bash
-# Registry secrets для GitLab Container Registry
-./shared/scripts/setup-registry-secret.sh
+# Подключиться к Vault
+kubectl port-forward svc/vault -n vault 8200:8200 &
+export VAULT_ADDR='http://127.0.0.1:8200'
+export VAULT_TOKEN=$(kubectl get secret vault-keys -n vault -o jsonpath='{.data.root-token}' | base64 -d)
 
+# Сохранить registry credentials в Vault
+# Формат: dockerconfigjson для kubernetes.io/dockerconfigjson secret
+REGISTRY="registry.gitlab.com"
+USERNAME="gitlab+deploy-token-xxxxx"  # Из GitLab Deploy Token
+PASSWORD="gldt-xxxxxxxxxxxx"          # Из GitLab Deploy Token
+
+# Создать .dockerconfigjson и сохранить в Vault
+vault kv put secret/gitops-poc-dzha/platform/registry \
+  .dockerconfigjson="{\"auths\":{\"${REGISTRY}\":{\"username\":\"${USERNAME}\",\"password\":\"${PASSWORD}\",\"auth\":\"$(echo -n ${USERNAME}:${PASSWORD} | base64)\"}}}"
+```
+
+После сохранения в Vault, platform-core создаст VaultStaticSecret который автоматически:
+- Синхронизирует `regsecret` в каждый namespace (`poc-dev`, `poc-staging`, etc.)
+- Переживает удаление namespace (пересоздаётся при ресинхронизации)
+- Обновляет credentials при изменении в Vault
+
+---
+
+## Этап 6: Запуск GitOps
+
+```bash
 # Запушить gitops-config в GitLab
 cd infra/poc/gitops-config
 git init
@@ -223,11 +249,15 @@ kubectl apply -f infra/poc/gitops-config/argocd/bootstrap-app.yaml
 
 ---
 
-## Этап 6: Проверка
+## Этап 7: Проверка
 
 ```bash
 # Статус ArgoCD applications
 kubectl get applications -n argocd
+
+# Проверить что regsecret создался во всех namespace
+kubectl get secret regsecret -n poc-dev
+kubectl get secret regsecret -n poc-staging
 
 # Статус pods
 kubectl get pods -n poc-dev

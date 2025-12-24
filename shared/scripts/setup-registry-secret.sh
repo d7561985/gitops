@@ -1,8 +1,45 @@
 #!/bin/bash
+# =============================================================================
+# DEPRECATED: This script is deprecated!
+# =============================================================================
+# Registry credentials are now managed via Vault + VSO (VaultStaticSecret).
+#
+# New approach:
+#   1. Store credentials in Vault: secret/gitops-poc-dzha/platform/registry
+#   2. platform-core chart creates VaultStaticSecret for each namespace
+#   3. Secrets automatically sync and survive namespace deletion
+#
+# See: docs/PREFLIGHT-CHECKLIST.md "Этап 5: Registry Credentials в Vault"
+#
+# This script is kept for backwards compatibility only.
+# =============================================================================
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+# Show deprecation warning
+echo ""
+echo "========================================"
+echo "  DEPRECATED SCRIPT"
+echo "========================================"
+echo ""
+echo "Registry secrets are now managed via Vault + VSO."
+echo "See: docs/PREFLIGHT-CHECKLIST.md 'Этап 5: Registry Credentials в Vault'"
+echo ""
+echo "To migrate:"
+echo "  1. Store credentials in Vault:"
+echo "     vault kv put secret/gitops-poc-dzha/platform/registry \\"
+echo "       .dockerconfigjson='{...}'"
+echo ""
+echo "  2. platform-core will auto-create VaultStaticSecret"
+echo ""
+read -p "Continue with legacy approach anyway? (y/N): " LEGACY
+if [[ ! "$LEGACY" =~ ^[Yy]$ ]]; then
+    echo "Aborted. Use Vault-based approach instead."
+    exit 0
+fi
+echo ""
 
 # Load .env (handles single-quoted values)
 if [ -f "$ROOT_DIR/.env" ]; then

@@ -441,12 +441,24 @@ helm install mongodb bitnami/mongodb -n infra-staging
 helm install rabbitmq bitnami/rabbitmq -n infra-staging
 ```
 
-### Step 4: Create Registry Secret
+### Step 4: Registry Credentials (Automatic)
+
+Registry credentials (`regsecret`) are now managed automatically via Vault + VSO.
+
+**What happens automatically:**
+- `platform-core` creates VaultStaticSecret for each enabled environment
+- VSO syncs `regsecret` from Vault to all namespace (`poc-dev`, `poc-staging`, etc.)
+- Secrets survive namespace deletion (recreated on sync)
+
+**If not already configured**, add credentials to Vault:
 
 ```bash
-# Add new namespace to the list
-NAMESPACES="poc-dev poc-staging poc-prod" ./shared/scripts/setup-registry-secret.sh
+# Store registry credentials in Vault (one-time setup)
+vault kv put secret/gitops-poc-dzha/platform/registry \
+  .dockerconfigjson='{"auths":{"registry.gitlab.com":{"username":"...","password":"..."}}}'
 ```
+
+See: `docs/PREFLIGHT-CHECKLIST.md` "Этап 5: Registry Credentials в Vault"
 
 ### Step 5: Create Service Overlays
 

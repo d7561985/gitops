@@ -241,25 +241,46 @@ Kubernetes требует `imagePullSecrets` для доступа к прива
    - **Scopes:** `read_registry`
 4. Сохранить username и token
 
-#### Настройка секретов
+#### Настройка через Vault (рекомендуется)
+
+Registry credentials хранятся в Vault и автоматически синхронизируются через VSO:
 
 ```bash
-# Вариант 1: Добавить в .env (рекомендуется)
+# 1. Добавить credentials в .env
 echo 'GITLAB_DEPLOY_TOKEN_USER="gitlab+deploy-token-xxxxx"' >> .env
 echo 'GITLAB_DEPLOY_TOKEN="gldt-xxxxxxxxxxxx"' >> .env
-./shared/scripts/setup-registry-secret.sh
 
-# Вариант 2: Интерактивный режим (скрипт запросит credentials)
-./shared/scripts/setup-registry-secret.sh
+# 2. setup-infrastructure.sh автоматически сохранит их в Vault
+./shared/scripts/setup-infrastructure.sh
 ```
 
-Скрипт создаёт:
-1. Namespace для каждого окружения: `poc-dev`, `poc-staging`, `poc-prod`
-2. Секрет `regsecret` в каждом namespace
+**Как это работает:**
+- Credentials хранятся в Vault: `secret/gitops-poc-dzha/platform/registry`
+- `platform-core` создаёт VaultStaticSecret для каждого namespace
+- VSO синхронизирует `regsecret` автоматически во все namespace
+- При удалении/пересоздании namespace — secret восстанавливается
 
-> **Important:** Каждый сервис должен объявить `imagePullSecrets` в своих values:
+**Ручная настройка (если нужно обновить credentials):**
+
+```bash
+# Подключиться к Vault
+kubectl port-forward svc/vault -n vault 8200:8200 &
+export VAULT_ADDR='http://127.0.0.1:8200'
+export VAULT_TOKEN=$(kubectl get secret vault-keys -n vault -o jsonpath='{.data.root-token}' | base64 -d)
+
+# Сохранить credentials
+REGISTRY="registry.gitlab.com"
+USERNAME="gitlab+deploy-token-xxxxx"
+PASSWORD="gldt-xxxxxxxxxxxx"
+AUTH=$(echo -n "${USERNAME}:${PASSWORD}" | base64)
+
+vault kv put secret/gitops-poc-dzha/platform/registry \
+  .dockerconfigjson="{\"auths\":{\"${REGISTRY}\":{\"username\":\"${USERNAME}\",\"password\":\"${PASSWORD}\",\"auth\":\"${AUTH}\"}}}"
+```
+
+> **Important:** Каждый сервис должен объявить `imagePullSecrets` в своих values (автоматически через k8app-defaults.yaml):
 > ```yaml
-> # .cicd/default.yaml
+> # .cicd/default.yaml или k8app-defaults.yaml
 > imagePullSecrets:
 >   - name: regsecret
 > ```
@@ -432,11 +453,11 @@ gitops/                            # Монорепо
 │   │   ├── external-dns/          # DNS automation
 │   │   └── cloudflare-tunnel/     # Tunnel setup
 │   ├── scripts/                   # → GitLab: shared/scripts
-│   │   ├── setup-infrastructure.sh    # Install all infrastructure
+│   │   ├── setup-infrastructure.sh    # Install all infrastructure + Vault registry
 │   │   ├── setup-pull-based.sh        # Configure ArgoCD
 │   │   ├── init-project.sh            # Initialize new project
 │   │   ├── setup-vault-secrets.sh     # Create Vault policies
-│   │   └── setup-registry-secret.sh   # Create registry secrets
+│   │   └── setup-registry-secret.sh   # DEPRECATED (use Vault instead)
 │   └── templates/                 # → GitLab: shared/templates
 │       ├── service-repo/          # Template for new services
 │       └── proto-service/         # Template for proto repos
@@ -837,8 +858,8 @@ kubectl get secret regsecret -n poc-dev
 # Проверить конфигурацию секрета
 kubectl get secret regsecret -n poc-dev -o jsonpath='{.data.\.dockerconfigjson}' | base64 -d | jq
 
-# Если секрета нет - перезапустить
-./shared/scripts/setup-registry-secret.sh
+# Проверить VaultStaticSecret статус
+kubectl get vaultstaticsecret -n poc-dev
 
 # Проверить что сервис объявляет imagePullSecrets
 kubectl get deployment api-gateway -n poc-dev -o yaml | grep -A3 imagePullSecrets
@@ -848,13 +869,16 @@ kubectl describe pod -n poc-dev -l app=api-gateway
 ```
 
 **Частые причины:**
-- Deploy Token истёк или отозван → создать новый
-- Неверный scope токена → должен быть `read_registry`
-- Сервис не объявляет `imagePullSecrets` → добавить в `.cicd/default.yaml`:
-  ```yaml
-  imagePullSecrets:
-    - name: regsecret
-  ```
+- Deploy Token истёк или отозван → обновить в Vault
+- Credentials не сохранены в Vault → см. секцию "GitLab Container Registry"
+- VaultStaticSecret в ошибке → проверить `kubectl describe vaultstaticsecret regsecret -n poc-dev`
+- Сервис не объявляет `imagePullSecrets` → наследуется из k8app-defaults.yaml
+
+**Обновить credentials в Vault:**
+```bash
+vault kv put secret/gitops-poc-dzha/platform/registry \
+  .dockerconfigjson='{"auths":{"registry.gitlab.com":{"username":"...","password":"..."}}}'
+```
 
 ---
 
