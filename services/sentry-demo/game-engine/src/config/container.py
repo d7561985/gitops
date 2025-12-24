@@ -1,13 +1,17 @@
 """Dependency Injection Container"""
 import os
-from pymongo import MongoClient
+import logging
+from pymongo import MongoClient, DESCENDING
 
 from src.infrastructure.persistence.mongo_game_repository import MongoGameRepository
 from src.infrastructure.persistence.mongo_balance_repository import MongoBalanceRepository
+
 from src.infrastructure.messaging.rabbitmq_message_publisher import RabbitMQMessagePublisher
 from src.infrastructure.external.http_wager_service import HttpWagerService
 from src.application.use_cases.calculate_game_result_use_case import CalculateGameResultUseCase
 from src.application.use_cases.track_business_metrics_use_case import TrackBusinessMetricsUseCase
+
+logger = logging.getLogger(__name__)
 
 
 class Container:
@@ -27,6 +31,9 @@ class Container:
         mongo_url = os.environ.get('MONGODB_URL', 'mongodb://admin:password@localhost:27017')
         self.mongo_client = MongoClient(mongo_url)
         self.db = self.mongo_client.sentry_poc
+
+        # Create indexes on startup (idempotent - safe to run every time)
+        self._ensure_indexes()
 
         # Repositories
         self.game_repository = MongoGameRepository(self.db)
@@ -48,6 +55,24 @@ class Container:
         )
 
         self.metrics_use_case = TrackBusinessMetricsUseCase()
+
+    def _ensure_indexes(self):
+        """Create MongoDB indexes on startup (idempotent operation)"""
+        try:
+            games = self.db.games
+
+            # Index for rolling stats aggregation (timestamp-based queries)
+            games.create_index([("timestamp", DESCENDING)], background=True)
+
+            # Compound index for session stats (user + timestamp)
+            games.create_index(
+                [("user_id", 1), ("timestamp", DESCENDING)],
+                background=True
+            )
+
+            logger.info("MongoDB indexes ensured for 'games' collection")
+        except Exception as e:
+            logger.warning(f"Failed to create indexes (non-fatal): {e}")
 
     @classmethod
     def get_instance(cls) -> 'Container':
