@@ -161,8 +161,6 @@ release:dev:
   extends: .release-template
   variables:
     ARGOCD_APP_NAME: ${SERVICE_NAME}-dev
-  environment:
-    name: dev
   needs:
     - job: update:dev
       optional: true
@@ -173,8 +171,6 @@ release:staging:
   extends: .release-template
   variables:
     ARGOCD_APP_NAME: ${SERVICE_NAME}-staging
-  environment:
-    name: staging
   needs:
     - job: update:staging
       optional: true
@@ -186,8 +182,6 @@ release:prod:
   extends: .release-template
   variables:
     ARGOCD_APP_NAME: ${SERVICE_NAME}-prod
-  environment:
-    name: production
   needs:
     - job: update:prod
       optional: true

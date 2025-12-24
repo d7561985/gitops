@@ -141,7 +141,9 @@ update:prod:
   when: manual
   needs:
     - job: update:staging
+      optional: true
     - job: release:staging
+      optional: true
 
 # ============================================
 # Release Stage: Wait for ArgoCD deployment
@@ -200,8 +202,6 @@ release:dev:
   extends: .release-template
   variables:
     ARGOCD_APP_NAME: ${SERVICE_NAME}-dev
-  environment:
-    name: dev
   needs:
     - job: update:dev
   rules:
@@ -211,8 +211,6 @@ release:staging:
   extends: .release-template
   variables:
     ARGOCD_APP_NAME: ${SERVICE_NAME}-staging
-  environment:
-    name: staging
   needs:
     - job: update:staging
   rules:
@@ -222,10 +220,9 @@ release:prod:
   extends: .release-template
   variables:
     ARGOCD_APP_NAME: ${SERVICE_NAME}-prod
-  environment:
-    name: production
   needs:
     - job: update:prod
+      optional: true
   rules:
     - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/
   when: manual

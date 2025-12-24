@@ -212,8 +212,6 @@ release:frontend:dev:
   extends: .release-template
   variables:
     ARGOCD_APP_NAME: sentry-frontend-dev
-  environment:
-    name: dev
   needs:
     - job: update:frontend:dev
       optional: true
@@ -226,10 +224,9 @@ release:frontend:staging:
   extends: .release-template
   variables:
     ARGOCD_APP_NAME: sentry-frontend-staging
-  environment:
-    name: staging
   needs:
     - job: update:frontend:staging
+      optional: true
   rules:
     - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+.*$/
 
@@ -274,8 +271,6 @@ release:game-engine:dev:
   extends: .release-template
   variables:
     ARGOCD_APP_NAME: sentry-game-engine-dev
-  environment:
-    name: dev
   needs:
     - job: update:game-engine:dev
       optional: true
@@ -288,10 +283,9 @@ release:game-engine:staging:
   extends: .release-template
   variables:
     ARGOCD_APP_NAME: sentry-game-engine-staging
-  environment:
-    name: staging
   needs:
     - job: update:game-engine:staging
+      optional: true
   rules:
     - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+.*$/
 
@@ -336,8 +330,6 @@ release:payment-service:dev:
   extends: .release-template
   variables:
     ARGOCD_APP_NAME: sentry-payment-dev
-  environment:
-    name: dev
   needs:
     - job: update:payment-service:dev
       optional: true
@@ -350,10 +342,9 @@ release:payment-service:staging:
   extends: .release-template
   variables:
     ARGOCD_APP_NAME: sentry-payment-staging
-  environment:
-    name: staging
   needs:
     - job: update:payment-service:staging
+      optional: true
   rules:
     - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+.*$/
 
@@ -398,8 +389,6 @@ release:wager-service:dev:
   extends: .release-template
   variables:
     ARGOCD_APP_NAME: sentry-wager-dev
-  environment:
-    name: dev
   needs:
     - job: update:wager-service:dev
       optional: true
@@ -412,9 +401,8 @@ release:wager-service:staging:
   extends: .release-template
   variables:
     ARGOCD_APP_NAME: sentry-wager-staging
-  environment:
-    name: staging
   needs:
     - job: update:wager-service:staging
+      optional: true
   rules:
     - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+.*$/
