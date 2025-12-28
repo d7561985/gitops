@@ -1,0 +1,61 @@
+# Minimal ArgoCD values for bootstrap
+# Full configuration managed by ArgoCD self-manage after bootstrap
+
+global:
+  logging:
+    level: info
+    format: text
+
+# Minimal resources for bootstrap
+server:
+  replicas: 1
+  extraArgs:
+    - --insecure  # Disable TLS for initial setup
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+  service:
+    type: ClusterIP
+
+controller:
+  replicas: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+repoServer:
+  replicas: 1
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+applicationSet:
+  enabled: true
+  replicas: 1
+
+redis:
+  enabled: true
+
+# Disable optional components for bootstrap
+dex:
+  enabled: false
+
+notifications:
+  enabled: false
+
+configs:
+  cm:
+    # Fast reconciliation for bootstrap
+    timeout.reconciliation: 30s

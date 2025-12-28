@@ -1,0 +1,15 @@
+apiVersion: v2
+name: layer-0
+description: Infrastructure layer - CNI, Gateway API, cert-manager, ArgoCD self-manage
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+
+# Layer-0 components (sync wave order):
+# -100: Gateway API CRDs (must exist before any Gateway resources)
+# -99:  Cilium CNI (networking must work before apps)
+# -98:  cert-manager (TLS certificates)
+# -97:  external-dns (DNS automation)
+# -96:  ArgoCD self-manage (takes over from bootstrap)
+#
+# After layer-0, platform-core runs at wave -10

@@ -1,0 +1,30 @@
+{{- if .Values.components.gatewayAPI }}
+# Gateway API CRDs - must be installed first before any Gateway resources
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: gateway-api-crds
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-100"
+  labels:
+    {{- include "layer-0.labels" . | nindent 4 }}
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: {{ .Values.project }}
+
+  source:
+    repoURL: https://github.com/kubernetes-sigs/gateway-api
+    targetRevision: {{ .Values.versions.gatewayAPI }}
+    path: config/crd
+    directory:
+      recurse: true
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: default
+
+  syncPolicy:
+    {{- include "layer-0.syncPolicy" . | nindent 4 }}
+{{- end }}

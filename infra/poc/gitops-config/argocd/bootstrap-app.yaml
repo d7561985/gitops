@@ -1,13 +1,20 @@
 # Bootstrap Application - "App of Apps" pattern
 # This Application watches gitops-config repo and applies all ArgoCD resources
 #
+# Prerequisites:
+#   kubectl apply -k shared/bootstrap/  # One-time: Cilium, Gateway API CRDs, ArgoCD
+#
 # Apply once manually:
 #   kubectl apply -f bootstrap-app.yaml
 #
 # After that, ArgoCD will:
 # 1. Apply project.yaml (ArgoCD Project with allowed destinations)
-# 2. Apply platform-modules.yaml (platform-core, service-groups, preview-envs, ingress)
-#    - platform-core generates: namespaces, gateways, infra apps, applicationset
+# 2. Apply platform-modules.yaml:
+#    - layer-0: Takes over infrastructure (Cilium, cert-manager, external-dns, ArgoCD self-manage)
+#    - platform-core: namespaces, gateways, infra apps, applicationset
+#    - service-groups: infrastructure access (ArgoCD, Grafana, Vault)
+#    - preview-environments: MR-based previews
+#    - ingress-cloudflare: tunnel routing
 
 apiVersion: argoproj.io/v1alpha1
 kind: Application

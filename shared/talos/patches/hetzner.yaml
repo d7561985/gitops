@@ -1,0 +1,45 @@
+# Hetzner Cloud specific Talos patches
+#
+# These patches configure Talos for optimal operation
+# on Hetzner Cloud infrastructure.
+
+machine:
+  # Install Hetzner-specific extensions
+  install:
+    extensions:
+      # QEMU guest agent for better VM integration
+      - image: ghcr.io/siderolabs/qemu-guest-agent:0.1.0
+
+  # Kubelet configuration for external cloud provider
+  kubelet:
+    extraArgs:
+      cloud-provider: external
+    # Hetzner private network range
+    nodeIP:
+      validSubnets:
+        - 10.0.0.0/8
+
+  # Network configuration
+  network:
+    # Use Hetzner DNS
+    nameservers:
+      - 185.12.64.1
+      - 185.12.64.2
+
+# Cluster-level configuration
+cluster:
+  # Enable external cloud provider (Hetzner CCM)
+  externalCloudProvider:
+    enabled: true
+    manifests:
+      # Hetzner Cloud Controller Manager
+      - https://github.com/hetznercloud/hcloud-cloud-controller-manager/releases/latest/download/ccm.yaml
+
+  # Do not schedule workloads on control plane in production
+  allowSchedulingOnControlPlanes: false
+
+  # Etcd configuration for Hetzner
+  etcd:
+    # Use private network IP for etcd
+    advertisedSubnets:
+      - 10.0.0.0/8

@@ -16,3 +16,5 @@
 # Vault keys - NEVER COMMIT
 .vault-keys
 infrastructure/vault/.vault-keys
+node_modules/
+.pulumi/

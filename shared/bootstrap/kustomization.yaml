@@ -1,0 +1,37 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# One-time bootstrap for Talos Kubernetes cluster
+#
+# RECOMMENDED: Use bootstrap.sh script
+#   ./shared/bootstrap/bootstrap.sh
+#
+# Alternative (requires Helm v3 + kustomize):
+#   kustomize build --enable-helm shared/bootstrap/ | kubectl apply -f -
+#
+# Note: kubectl apply -k does NOT support helmCharts (known limitation)
+#
+# After bootstrap, ArgoCD manages everything including itself.
+
+resources:
+  - namespace.yaml
+  # Gateway API CRDs (standard channel)
+  - https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.2.0/standard-install.yaml
+
+# Cilium and ArgoCD via Helm
+# Requires: kustomize build --enable-helm (not kubectl apply -k)
+# Requires: Helm v3 (not v4 - incompatible with kustomize)
+helmCharts:
+  - name: cilium
+    repo: https://helm.cilium.io/
+    version: 1.18.5
+    releaseName: cilium
+    namespace: kube-system
+    valuesFile: cilium/values.yaml
+
+  - name: argo-cd
+    repo: https://argoproj.github.io/argo-helm
+    version: 9.2.3
+    releaseName: argocd
+    namespace: argocd
+    valuesFile: argocd/values.yaml

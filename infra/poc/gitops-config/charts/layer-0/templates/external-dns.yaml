@@ -1,0 +1,36 @@
+{{- if .Values.components.externalDns }}
+# external-dns - DNS automation
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: external-dns
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-97"
+  labels:
+    {{- include "layer-0.labels" . | nindent 4 }}
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: {{ .Values.project }}
+
+  sources:
+    # Values from git repo
+    - repoURL: {{ .Values.gitRepo }}
+      targetRevision: {{ .Values.gitRevision }}
+      ref: values
+    # external-dns Helm chart
+    - repoURL: https://kubernetes-sigs.github.io/external-dns/
+      chart: external-dns
+      targetRevision: {{ .Values.versions.externalDns }}
+      helm:
+        valueFiles:
+          - $values/shared/infrastructure/external-dns/helm-values.yaml
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: external-dns
+
+  syncPolicy:
+    {{- include "layer-0.syncPolicy" . | nindent 4 }}
+{{- end }}

@@ -1,0 +1,16 @@
+# Docker-specific Talos patches for local development
+#
+# Use with: talosctl cluster create --config-patch @shared/talos/patches/docker.yaml
+
+cluster:
+  network:
+    cni:
+      name: none      # Cilium installed via bootstrap kustomization
+  proxy:
+    disabled: true    # Cilium replaces kube-proxy
+
+machine:
+  features:
+    hostDNS:
+      enabled: true
+      forwardKubeDNSToHost: true  # Required for Docker DNS resolution

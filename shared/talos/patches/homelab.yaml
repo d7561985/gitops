@@ -1,0 +1,80 @@
+# Homelab specific Talos patches
+#
+# Optimized for bare metal servers in a homelab environment.
+# Includes Tailscale VPN and iSCSI for Longhorn storage.
+
+machine:
+  # Install extensions
+  install:
+    disk: /dev/sda  # Override per-node if different
+    wipe: true
+    extensions:
+      # iSCSI tools for Longhorn distributed storage
+      - image: ghcr.io/siderolabs/iscsi-tools:v0.1.4
+      # Tailscale for secure remote access
+      - image: ghcr.io/siderolabs/tailscale:1.56.1
+
+  # Kubelet configuration
+  kubelet:
+    extraArgs:
+      rotate-server-certificates: "true"
+    # Enable local storage
+    extraMounts:
+      - destination: /var/local-path-provisioner
+        type: bind
+        source: /var/local-path-provisioner
+        options:
+          - bind
+          - rshared
+          - rw
+
+  # Network configuration
+  network:
+    # Use local DNS resolvers as fallback
+    nameservers:
+      - 1.1.1.1
+      - 8.8.8.8
+
+  # Time synchronization
+  time:
+    servers:
+      - time.cloudflare.com
+      - pool.ntp.org
+
+  # Sysctls for performance
+  sysctls:
+    # Enable IP forwarding
+    net.ipv4.ip_forward: "1"
+    net.ipv6.conf.all.forwarding: "1"
+    # Increase connection tracking
+    net.netfilter.nf_conntrack_max: "131072"
+    # iSCSI tuning for Longhorn
+    vm.nr_hugepages: "1024"
+
+# Cluster-level configuration
+cluster:
+  # Allow scheduling on control plane for small clusters
+  allowSchedulingOnControlPlanes: true
+
+  # API server configuration
+  apiServer:
+    extraArgs:
+      # Enable aggregation layer for metrics-server
+      enable-aggregator-routing: "true"
+
+  # etcd configuration
+  etcd:
+    # Use local network for etcd
+    advertisedSubnets:
+      - 192.168.0.0/16
+      - 10.0.0.0/8
+
+  # Scheduler configuration
+  scheduler:
+    extraArgs:
+      bind-address: "0.0.0.0"
+
+  # Controller manager configuration
+  controllerManager:
+    extraArgs:
+      bind-address: "0.0.0.0"

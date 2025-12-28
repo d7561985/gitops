@@ -1,0 +1,25 @@
+# Layer-0 values
+# Override in platform/layer-0.yaml
+
+# Git repository for values
+gitRepo: https://gitlab.com/gitops-poc-dzha/infra/poc/gitops-config.git
+gitRevision: main
+
+# ArgoCD project
+project: gitops-poc-dzha
+
+# Component versions (verified December 2024)
+versions:
+  gatewayAPI: v1.2.0    # Required by Cilium 1.18.x
+  cilium: 1.18.5        # Latest stable
+  certManager: v1.16.2  # Latest stable
+  externalDns: 1.15.0   # Latest stable
+  argocd: 9.2.3         # Latest stable - ArgoCD v3.0
+
+# Enable/disable components
+components:
+  gatewayAPI: true
+  cilium: true
+  certManager: true
+  externalDns: true
+  argocd: true

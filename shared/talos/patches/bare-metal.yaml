@@ -1,0 +1,52 @@
+# Bare-metal specific Talos patches
+#
+# Use with: talosctl gen config my-cluster https://VIP:6443 \
+#             --config-patch @shared/talos/patches/common.yaml \
+#             --config-patch @shared/talos/patches/bare-metal.yaml
+
+cluster:
+  network:
+    cni:
+      name: none      # Cilium installed via bootstrap
+  proxy:
+    disabled: true    # Cilium replaces kube-proxy
+
+machine:
+  # Install disk configuration (adjust for your hardware)
+  install:
+    disk: /dev/sda    # Change to your disk
+    image: ghcr.io/siderolabs/installer:v1.9.1
+    bootloader: true
+    wipe: false
+
+  # Network configuration example (adjust for your network)
+  # Uncomment and modify as needed:
+  # network:
+  #   hostname: node-1
+  #   interfaces:
+  #     - interface: eth0
+  #       dhcp: true
+  #       # Or static:
+  #       # addresses:
+  #       #   - 192.168.1.10/24
+  #       # routes:
+  #       #   - network: 0.0.0.0/0
+  #       #     gateway: 192.168.1.1
+  #       # VIP for HA control plane:
+  #       # vip:
+  #       #   ip: 192.168.1.100
+
+  # System extensions (optional)
+  # install:
+  #   extensions:
+  #     - image: ghcr.io/siderolabs/qemu-guest-agent:9.2.0
+
+# For control plane nodes with VIP (HA setup)
+# Uncomment for HA:
+# machine:
+#   network:
+#     interfaces:
+#       - interface: eth0
+#         dhcp: true
+#         vip:
+#           ip: 192.168.1.100  # Shared VIP for all control planes
