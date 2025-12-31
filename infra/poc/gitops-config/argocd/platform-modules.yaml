@@ -1,13 +1,17 @@
 # =============================================================================
-# Platform Modular Charts - ArgoCD Applications
+# Platform Modular Charts - ArgoCD Applications (Layer 4)
 # =============================================================================
-# Deploys modular platform charts as separate ArgoCD Applications.
-# Each chart visible individually in ArgoCD UI for better observability.
+# ArgoCD manages ONLY Layer 4 - Applications.
+# Infrastructure (Layer 0-3) is managed by scripts, NOT ArgoCD.
 #
-# Charts (sync order):
-# - layer-0: Infrastructure (CNI, Gateway API, cert-manager, ArgoCD) (sync-wave: -100 to -96)
+# Architecture:
+#   Layer 0: Talos cluster (setup-talos.sh)
+#   Layer 1-3: Infrastructure (setup-infrastructure.sh)
+#   Layer 4: Applications (ArgoCD - this file)
+#
+# Applications (sync order):
 # - platform-core: Namespaces, Gateway, ApplicationSet, Vault (sync-wave: -10)
-# - service-groups: Infrastructure access (ArgoCD, Grafana, Vault) (sync-wave: -5)
+# - service-groups: Infrastructure access routes (sync-wave: -5)
 # - preview-environments: Feature branch previews (sync-wave: -4)
 # - ingress-cloudflare: CloudFlare Tunnel routing (sync-wave: -3)
 #
@@ -15,54 +19,6 @@
 # - base.yaml: Shared settings (global, dns, ingress, vault, environments)
 # - {chart}.yaml: Chart-specific configuration
 # =============================================================================
-
----
-# =============================================================================
-# Layer-0 - Infrastructure Foundation
-# =============================================================================
-# Infrastructure layer that manages:
-# - Gateway API CRDs (sync-wave: -100)
-# - Cilium CNI (sync-wave: -99)
-# - cert-manager (sync-wave: -98)
-# - external-dns (sync-wave: -97)
-# - ArgoCD self-manage (sync-wave: -96)
-#
-# This takes over from bootstrap kustomization and manages infra via GitOps.
-# =============================================================================
-apiVersion: argoproj.io/v1alpha1
-kind: Application
-metadata:
-  name: layer-0
-  namespace: argocd
-  annotations:
-    argocd.argoproj.io/sync-wave: "-100"
-  finalizers:
-    - resources-finalizer.argocd.argoproj.io
-spec:
-  project: gitops-poc-dzha
-
-  sources:
-    - repoURL: https://gitlab.com/gitops-poc-dzha/infra/poc/gitops-config.git
-      targetRevision: main
-      ref: values
-    - repoURL: https://gitlab.com/gitops-poc-dzha/infra/poc/gitops-config.git
-      targetRevision: main
-      path: charts/layer-0
-      helm:
-        valueFiles:
-          - $values/platform/layer-0.yaml
-
-  destination:
-    server: https://kubernetes.default.svc
-    namespace: argocd
-
-  syncPolicy:
-    automated:
-      prune: true
-      selfHeal: true
-    syncOptions:
-      - CreateNamespace=true
-      - ServerSideApply=true
 
 ---
 # =============================================================================

@@ -1,0 +1,118 @@
+# OpenEBS Helm Values - Full Installation with Mayastor (Chart v4.4.0)
+# =============================================================================
+# For production / bare metal / QEMU where Mayastor is available.
+# Provides replicated storage with high performance.
+#
+# Prerequisites:
+#   - vm.nr_hugepages=1024 configured on nodes
+#   - Minimum 3 worker nodes for replication
+#   - Unpartitioned disks for DiskPools
+#
+# Features:
+#   - Mayastor replicated storage (NVMe-oF)
+#   - LocalPV Hostpath for non-replicated workloads
+#   - High performance with low latency
+#
+# =============================================================================
+
+# Enable only LocalPV Hostpath and Mayastor
+engines:
+  local:
+    lvm:
+      enabled: false
+    zfs:
+      enabled: false
+    rawfile:
+      enabled: false
+  replicated:
+    mayastor:
+      enabled: true
+
+# LocalPV Hostpath Provisioner configuration (fallback for non-replicated storage)
+localpv-provisioner:
+  rbac:
+    create: true
+
+  hostpathClass:
+    enabled: true
+    name: openebs-hostpath
+    isDefaultClass: true
+    basePath: "/var/openebs/local"
+    reclaimPolicy: Delete
+    xfsQuota:
+      enabled: false
+
+  analytics:
+    enabled: false
+
+  localpv:
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 200m
+        memory: 128Mi
+
+# Mayastor configuration
+mayastor:
+  enabled: true
+
+  csi:
+    node:
+      initContainers:
+        enabled: true
+    controller:
+      resources:
+        requests:
+          cpu: 50m
+          memory: 64Mi
+        limits:
+          cpu: 200m
+          memory: 256Mi
+
+  io_engine:
+    resources:
+      requests:
+        cpu: 500m
+        memory: 1Gi
+        hugepages-2Mi: 2Gi
+      limits:
+        cpu: 2
+        memory: 2Gi
+        hugepages-2Mi: 2Gi
+
+  # Disable Mayastor's internal localpv-provisioner (we use the main one)
+  localpv-provisioner:
+    enabled: false
+
+  # Disable Mayastor's observability stack
+  loki:
+    enabled: false
+  alloy:
+    enabled: false
+
+  etcd:
+    clusterDomain: cluster.local
+
+# Disable unused engines
+lvm-localpv:
+  enabled: false
+
+zfs-localpv:
+  enabled: false
+
+rawfile-localpv:
+  enabled: false
+
+# Disable Loki observability stack
+loki:
+  enabled: false
+
+# Disable Alloy log collector
+alloy:
+  enabled: false
+
+# Pre-upgrade hooks
+preUpgradeHook:
+  enabled: true

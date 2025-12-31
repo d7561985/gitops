@@ -1,0 +1,79 @@
+# OpenEBS Helm Values - LocalPV Only (Chart v4.4.0)
+# =============================================================================
+# For local development (Docker Talos) where Mayastor is not available.
+# Uses LocalPV Hostpath for simple persistent storage.
+#
+# Features:
+#   - LocalPV Hostpath provisioner
+#   - No replication (single node)
+#   - Proper fsGroup support
+#   - Minimal resource usage
+#
+# =============================================================================
+
+# Disable all engines except LocalPV Hostpath
+engines:
+  local:
+    lvm:
+      enabled: false
+    zfs:
+      enabled: false
+    rawfile:
+      enabled: false
+  replicated:
+    mayastor:
+      enabled: false
+
+# LocalPV Hostpath Provisioner configuration
+localpv-provisioner:
+  rbac:
+    create: true
+
+  hostpathClass:
+    enabled: true
+    name: openebs-hostpath
+    isDefaultClass: true
+    basePath: "/var/openebs/local"
+    reclaimPolicy: Delete
+    xfsQuota:
+      enabled: false
+
+  analytics:
+    enabled: false
+
+  localpv:
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 200m
+        memory: 128Mi
+
+# Disable LVM LocalPV
+lvm-localpv:
+  enabled: false
+
+# Disable ZFS LocalPV
+zfs-localpv:
+  enabled: false
+
+# Disable Rawfile LocalPV
+rawfile-localpv:
+  enabled: false
+
+# Disable Mayastor
+mayastor:
+  enabled: false
+
+# Disable Loki observability stack (requires PVCs and 3 replicas)
+loki:
+  enabled: false
+
+# Disable Alloy log collector
+alloy:
+  enabled: false
+
+# Pre-upgrade hooks
+preUpgradeHook:
+  enabled: true

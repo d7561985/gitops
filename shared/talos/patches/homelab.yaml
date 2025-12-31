@@ -1,7 +1,7 @@
 # Homelab specific Talos patches
 #
 # Optimized for bare metal servers in a homelab environment.
-# Includes Tailscale VPN and iSCSI for Longhorn storage.
+# Includes Tailscale VPN and iSCSI for OpenEBS Mayastor.
 
 machine:
   # Install extensions
@@ -9,7 +9,7 @@ machine:
     disk: /dev/sda  # Override per-node if different
     wipe: true
     extensions:
-      # iSCSI tools for Longhorn distributed storage
+      # iSCSI tools for OpenEBS Mayastor NVMe-oF
       - image: ghcr.io/siderolabs/iscsi-tools:v0.1.4
       # Tailscale for secure remote access
       - image: ghcr.io/siderolabs/tailscale:1.56.1
@@ -18,11 +18,12 @@ machine:
   kubelet:
     extraArgs:
       rotate-server-certificates: "true"
-    # Enable local storage
+    # Enable OpenEBS storage paths
     extraMounts:
-      - destination: /var/local-path-provisioner
+      # OpenEBS LocalPV Hostpath
+      - destination: /var/openebs/local
         type: bind
-        source: /var/local-path-provisioner
+        source: /var/openebs/local
         options:
           - bind
           - rshared

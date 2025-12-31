@@ -1,5 +1,16 @@
 # Cilium Helm values for GitOps POC
 # https://docs.cilium.io/en/stable/helm-reference/
+#
+# IMPORTANT: Talos Linux Compatibility
+# =====================================
+# Talos uses forwardKubeDNSToHost=true (required for Docker provider).
+# Cilium 1.16.5+ uses BPF Host Routing by default, which conflicts with this.
+# Solution: Set bpf.hostLegacyRouting=true
+#
+# References:
+# - https://github.com/siderolabs/talos/issues/10002
+# - https://github.com/cilium/cilium/pull/36852
+# - https://docs.siderolabs.com/kubernetes-guides/cni/deploying-cilium
 
 # IPAM mode - let Kubernetes manage IPs
 ipam:
@@ -7,6 +18,14 @@ ipam:
 
 # Replace kube-proxy entirely
 kubeProxyReplacement: true
+
+# =============================================================================
+# BPF Settings for Talos Compatibility
+# =============================================================================
+# CRITICAL: Required when Talos has forwardKubeDNSToHost=true (default for Docker)
+# Without this, CoreDNS fails to resolve DNS queries and hubble components won't start
+bpf:
+  hostLegacyRouting: true
 
 # Enable Gateway API support
 gatewayAPI:
@@ -103,6 +122,7 @@ hubble:
     # Create ServiceMonitor for Prometheus Operator
     serviceMonitor:
       enabled: true
+      trustCRDsExist: true
       labels:
         release: kube-prometheus-stack
 
@@ -122,6 +142,8 @@ prometheus:
   # Create ServiceMonitor for Prometheus Operator
   serviceMonitor:
     enabled: true
+    # Trust that CRDs exist (monitoring installed later in bootstrap)
+    trustCRDsExist: true
     labels:
       release: kube-prometheus-stack
     # Scrape interval
@@ -143,6 +165,7 @@ operator:
     enabled: true
     serviceMonitor:
       enabled: true
+      trustCRDsExist: true
       labels:
         release: kube-prometheus-stack
   # Operator Grafana dashboards

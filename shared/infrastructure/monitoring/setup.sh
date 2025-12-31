@@ -53,16 +53,22 @@ echo_info "Adding prometheus-community Helm repository..."
 helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
 helm repo update
 
-# Create namespace
+# Create namespace with privileged PodSecurity (node-exporter requires hostPath, hostNetwork)
 echo_info "Creating monitoring namespace..."
 kubectl create namespace monitoring --dry-run=client -o yaml | kubectl apply -f -
+kubectl label namespace monitoring \
+    pod-security.kubernetes.io/audit=privileged \
+    pod-security.kubernetes.io/enforce=privileged \
+    pod-security.kubernetes.io/warn=privileged \
+    --overwrite 2>/dev/null || true
 
-# Install kube-prometheus-stack
+# Install kube-prometheus-stack (CRDs already installed in Layer 1.2)
 echo_info "Installing kube-prometheus-stack..."
 helm upgrade --install kube-prometheus-stack prometheus-community/kube-prometheus-stack \
     --namespace monitoring \
     --version 80.4.1 \
     --values "$SCRIPT_DIR/helm-values.yaml" \
+    --skip-crds \
     --wait \
     --timeout 10m
 

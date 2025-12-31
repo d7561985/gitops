@@ -1,8 +1,19 @@
 #!/bin/bash
+# =============================================================================
+# Cilium CNI Installation for Talos Linux
+# =============================================================================
+# Based on official documentation:
+# - https://docs.siderolabs.com/kubernetes-guides/cni/deploying-cilium
+# - https://docs.cilium.io/en/stable/installation/k8s-install-helm/
+#
+# Prerequisites:
+# - Talos cluster with CNI: none and proxy: disabled
+# - Gateway API CRDs installed
+# =============================================================================
+
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 # Colors
 RED='\033[0;31m'
@@ -28,11 +39,12 @@ fi
 
 # Add Cilium Helm repo
 echo_info "Adding Cilium Helm repository..."
-helm repo add cilium https://helm.cilium.io/
+helm repo add cilium https://helm.cilium.io/ 2>/dev/null || true
 helm repo update
 
 # Install Cilium
 echo_info "Installing Cilium with Gateway API support..."
+echo_info "Using bpf.hostLegacyRouting=true for Talos compatibility"
 
 helm upgrade --install cilium cilium/cilium \
   --namespace kube-system \
@@ -40,15 +52,10 @@ helm upgrade --install cilium cilium/cilium \
   --timeout 10m \
   -f "$SCRIPT_DIR/helm-values.yaml"
 
-# Wait for Cilium to be ready
-echo_info "Waiting for Cilium to be ready..."
-kubectl wait --for=condition=Ready pods -l k8s-app=cilium \
-  -n kube-system --timeout=180s
-
 # Verify Cilium status
 if command -v cilium &> /dev/null; then
     echo_info "Checking Cilium status..."
-    cilium status --wait || true
+    cilium status --wait 2>/dev/null || cilium status 2>/dev/null || true
 fi
 
 # Verify GatewayClass was created

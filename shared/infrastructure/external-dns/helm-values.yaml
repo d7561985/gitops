@@ -33,7 +33,7 @@ policy: sync
 # Это глобальный default. Отдельные записи могут переопределить через аннотацию:
 #   external-dns.alpha.kubernetes.io/cloudflare-proxied: "false"
 extraArgs:
-  cloudflare-proxied: ""  # Пустое значение = флаг включён
+  - --cloudflare-proxied
 
 # Секрет с CloudFlare API Token
 env:

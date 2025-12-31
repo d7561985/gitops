@@ -15,39 +15,23 @@
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                        Layer 4: Applications                            │
 │  ArgoCD ApplicationSets → Services (api-gateway, frontend, etc.)       │
-│  Управление: ArgoCD + Git                                              │
+│  Управление: ArgoCD + Git (gitops-config)                              │
 └─────────────────────────────────────────────────────────────────────────┘
                                    ▲
-                                   │ Sync
+                                   │ ArgoCD Sync
                                    │
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                    Layer 3: Platform Services                           │
-│  ArgoCD Apps → Vault, Monitoring, CloudFlare Tunnel                    │
-│  Управление: ArgoCD + Helm Charts                                      │
+│                    Layer 1-3: Infrastructure                            │
+│  Cilium, Gateway API, cert-manager, Vault, ArgoCD, Monitoring          │
+│  Управление: setup-infrastructure.sh (Helm)                            │
 └─────────────────────────────────────────────────────────────────────────┘
                                    ▲
-                                   │ ArgoCD
+                                   │ Helm install
                                    │
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                    Layer 2: Layer-0 (Infrastructure)                    │
-│  Cilium CNI, Gateway API, cert-manager, external-dns, ArgoCD           │
-│  Управление: ArgoCD layer-0 (self-manage)                              │
-└─────────────────────────────────────────────────────────────────────────┘
-                                   ▲
-                                   │ ONE-TIME Bootstrap
-                                   │
-┌─────────────────────────────────────────────────────────────────────────┐
-│                    Layer 1: Bootstrap                                   │
-│  kubectl apply -k shared/bootstrap/ (Cilium, Gateway API CRDs, ArgoCD) │
-│  Управление: kubectl (один раз)                                        │
-└─────────────────────────────────────────────────────────────────────────┘
-                                   ▲
-                                   │ Provision
-                                   │
-┌─────────────────────────────────────────────────────────────────────────┐
-│                Layer 0: Infrastructure (Talos Linux)                    │
-│  VMs/Containers, Networks, Storage                                     │
-│  Управление: talosctl (вручную)                                        │
+│                Layer 0: Talos Kubernetes Cluster                        │
+│  VMs/Containers, etcd, K8s API                                         │
+│  Управление: setup-talos.sh (talosctl)                                 │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -55,11 +39,11 @@
 
 | Слой | Инструмент | Ресурсы |
 |------|-----------|---------|
-| **Layer 0** | talosctl | Talos ноды, machine config |
-| **Layer 1** | kubectl apply -k | Bootstrap: Cilium, Gateway API, ArgoCD |
-| **Layer 2** | ArgoCD layer-0 | Cilium, cert-manager, external-dns, ArgoCD self-manage |
-| **Layer 3** | ArgoCD | Vault, Monitoring, CloudFlare Tunnel |
-| **Layer 4** | ArgoCD ApplicationSets | Микросервисы, приложения |
+| **Layer 0** | `setup-talos.sh` | Talos кластер, kubeconfig |
+| **Layer 1** | `setup-infrastructure.sh` | Gateway API CRDs, Cilium CNI |
+| **Layer 2** | `setup-infrastructure.sh` | cert-manager, Vault + VSO |
+| **Layer 3** | `setup-infrastructure.sh` | ArgoCD, Monitoring, External-DNS |
+| **Layer 4** | ArgoCD | Applications (bootstrap-app.yaml → gitops-config)
 
 ## Компоненты
 
@@ -88,17 +72,18 @@ GitOps controller:
 - **App of Apps** — иерархия приложений
 - **ApplicationSets** — генерация приложений из шаблонов
 - **Sync Waves** — порядок деплоя
-- **Self-manage** — ArgoCD управляет собой через layer-0
+- **Layer 4 Only** — ArgoCD управляет только приложениями, не инфраструктурой
 
-### Layer-0 (ArgoCD)
+### Infrastructure (setup-infrastructure.sh)
 
-Infrastructure management via GitOps:
+Инфраструктура устанавливается скриптом (не через ArgoCD):
 
-- **Gateway API CRDs** (wave -100)
-- **Cilium** (wave -99)
-- **cert-manager** (wave -98)
-- **external-dns** (wave -97)
-- **ArgoCD self-manage** (wave -96)
+- **Gateway API CRDs** — API для ingress/routing
+- **Cilium CNI** — eBPF-based сетевой стек
+- **cert-manager** — автоматические TLS сертификаты
+- **Vault + VSO** — управление секретами
+- **ArgoCD** — GitOps controller
+- **Monitoring** — Prometheus + Grafana
 
 ### Vault
 
@@ -113,34 +98,34 @@ Secrets management:
 ### Bootstrap Flow
 
 ```
-talosctl cluster create
+./shared/scripts/setup-talos.sh
          │
-         ▼
-   Talos Nodes Ready (no CNI)
-         │
-         ▼
-kubectl apply -k shared/bootstrap/
-         │
-         ├── Gateway API CRDs
-         ├── Cilium CNI
-         └── ArgoCD
+         └── Talos cluster + kubeconfig (talosctl)
                 │
                 ▼
-kubectl apply -f bootstrap-app.yaml
+./shared/scripts/setup-infrastructure.sh
                 │
-                ▼
-         ArgoCD syncs layer-0
-                │
-                ├── Cilium (takes over from bootstrap)
+                ├── Gateway API CRDs
+                ├── Cilium CNI
                 ├── cert-manager
-                ├── external-dns
-                └── ArgoCD (self-manage)
+                ├── Vault + VSO
+                ├── ArgoCD
+                ├── Monitoring
+                └── External-DNS
                         │
                         ▼
-                 Platform Apps
+kubectl apply -f bootstrap-app.yaml
                         │
                         ▼
-                 Applications
+                 ArgoCD syncs gitops-config
+                        │
+                        ├── platform-core
+                        ├── service-groups
+                        ├── preview-environments
+                        └── ingress-cloudflare
+                                │
+                                ▼
+                         Applications
 ```
 
 ### GitOps Flow

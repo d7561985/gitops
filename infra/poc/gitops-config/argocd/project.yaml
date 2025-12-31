@@ -6,17 +6,32 @@ kind: AppProject
 metadata:
   name: gitops-poc-dzha
   namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-100"
 spec:
   description: "GitOps POC project for gitops-poc-dzha"
 
   sourceRepos:
     - 'https://d7561985.github.io/k8app'
     - 'https://gitlab.com/gitops-poc-dzha/**'
+    # Layer-0 Helm repos
+    - 'https://helm.cilium.io/'
+    - 'https://argoproj.github.io/argo-helm'
+    - 'https://charts.jetstack.io'
+    - 'https://kubernetes-sigs.github.io/external-dns/'
+    # Gateway API CRDs
+    - 'https://github.com/kubernetes-sigs/gateway-api'
+    # Monitoring
+    - 'https://prometheus-community.github.io/helm-charts'
 
   destinations:
     - namespace: 'vault'
       server: https://kubernetes.default.svc
     - namespace: 'argocd'
+      server: https://kubernetes.default.svc
+    - namespace: 'cert-manager'
+      server: https://kubernetes.default.svc
+    - namespace: 'monitoring'
       server: https://kubernetes.default.svc
     - namespace: 'poc-dev'
       server: https://kubernetes.default.svc

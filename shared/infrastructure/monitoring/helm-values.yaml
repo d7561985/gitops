@@ -27,15 +27,21 @@ prometheus:
   enabled: true
 
   prometheusSpec:
+    # Security context - required for PVC permissions with local-path-provisioner
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 65534
+      runAsGroup: 65534
+      fsGroup: 65534
+
     # Retention period
     retention: 7d
     retentionSize: "5GB"
 
-    # Storage (persistent)
+    # Storage (persistent) - uses cluster's default StorageClass
     storageSpec:
       volumeClaimTemplate:
         spec:
-          storageClassName: standard
           accessModes: ["ReadWriteOnce"]
           resources:
             requests:
@@ -184,10 +190,17 @@ alertmanager:
   enabled: true
 
   alertmanagerSpec:
+    # Security context - required for PVC permissions with local-path-provisioner
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 65534
+      runAsGroup: 65534
+      fsGroup: 65534
+
+    # Storage - uses cluster's default StorageClass
     storage:
       volumeClaimTemplate:
         spec:
-          storageClassName: standard
           accessModes: ["ReadWriteOnce"]
           resources:
             requests:

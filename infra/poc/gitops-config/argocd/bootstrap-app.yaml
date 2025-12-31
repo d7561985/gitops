@@ -1,20 +1,29 @@
 # Bootstrap Application - "App of Apps" pattern
-# This Application watches gitops-config repo and applies all ArgoCD resources
+# =============================================================================
+# This is the ONLY file you need to apply manually after infrastructure setup.
+# It automatically pulls in project.yaml and all platform modules.
+# =============================================================================
+#
+# Architecture:
+#   Layer 0: Talos cluster - setup-talos.sh
+#   Layer 1-3: Infrastructure - setup-infrastructure.sh (NOT managed by ArgoCD)
+#   Layer 4: Applications - ArgoCD (this file triggers everything)
 #
 # Prerequisites:
-#   kubectl apply -k shared/bootstrap/  # One-time: Cilium, Gateway API CRDs, ArgoCD
+#   1. ./shared/scripts/setup-talos.sh           # Create Talos cluster
+#   2. export KUBECONFIG=~/.kube/talos-local.yaml
+#   3. ./shared/scripts/setup-infrastructure.sh  # Install infrastructure
 #
-# Apply once manually:
-#   kubectl apply -f bootstrap-app.yaml
+# Bootstrap (one command):
+#   kubectl apply -f infra/poc/gitops-config/argocd/bootstrap-app.yaml
 #
-# After that, ArgoCD will:
-# 1. Apply project.yaml (ArgoCD Project with allowed destinations)
-# 2. Apply platform-modules.yaml:
-#    - layer-0: Takes over infrastructure (Cilium, cert-manager, external-dns, ArgoCD self-manage)
-#    - platform-core: namespaces, gateways, infra apps, applicationset
-#    - service-groups: infrastructure access (ArgoCD, Grafana, Vault)
-#    - preview-environments: MR-based previews
-#    - ingress-cloudflare: tunnel routing
+# This automatically applies:
+#   - project.yaml: ArgoCD Project with allowed destinations
+#   - platform-modules.yaml:
+#     - platform-core: namespaces, gateways, applicationset, vault
+#     - service-groups: infrastructure access (ArgoCD, Grafana, Vault)
+#     - preview-environments: MR-based previews
+#     - ingress-cloudflare: tunnel routing
 
 apiVersion: argoproj.io/v1alpha1
 kind: Application

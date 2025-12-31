@@ -22,11 +22,11 @@
 
 ## Что изменяется
 
-1. **Способ создания кластера** — talosctl вместо minikube
-2. **Bootstrap** — `kubectl apply -k shared/bootstrap/` вместо bash скриптов
+1. **Способ создания кластера** — `setup-talos.sh` вместо minikube
+2. **Infrastructure** — `setup-infrastructure.sh` вместо отдельных скриптов
 3. **CNI** — Cilium вместо minikube CNI
 4. **Ingress** — Gateway API вместо Ingress
-5. **Management** — ArgoCD layer-0 управляет инфраструктурой
+5. **ArgoCD** — управляет только приложениями (Layer 4)
 
 ## Пошаговая миграция
 
@@ -90,19 +90,14 @@ kubectl cp ./vault-backup.snap vault/vault-0:/vault/data/backup.snap
 kubectl exec -n vault vault-0 -- vault operator raft snapshot restore /vault/data/backup.snap
 ```
 
-## Pure GitOps Architecture
+## Architecture After Migration
 
-После миграции:
-
-| Компонент | Управление |
-|-----------|------------|
-| Talos ноды | talosctl (вручную) |
-| Gateway API CRDs | ArgoCD layer-0 |
-| Cilium CNI | ArgoCD layer-0 |
-| cert-manager | ArgoCD layer-0 |
-| ArgoCD | ArgoCD layer-0 (self-manage) |
-| Platform services | ArgoCD platform-core |
-| Applications | ArgoCD ApplicationSets |
+| Слой | Компонент | Управление |
+|------|-----------|------------|
+| Layer 0 | Talos кластер | `setup-talos.sh` |
+| Layer 1-3 | Cilium, Vault, ArgoCD | `setup-infrastructure.sh` |
+| Layer 4 | Platform services | ArgoCD (gitops-config) |
+| Layer 4 | Applications | ArgoCD ApplicationSets |
 
 ## Troubleshooting
 
@@ -123,5 +118,5 @@ kubectl logs -n kube-system -l app.kubernetes.io/name=cilium -c cilium-agent
 kubectl get applications -n argocd
 
 # Синхронизировать вручную
-kubectl patch application layer-0 -n argocd -p '{"operation": {"sync": {}}}' --type=merge
+argocd app sync platform-core
 ```

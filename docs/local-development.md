@@ -10,24 +10,32 @@
 │                         Локальная машина                              │
 ├───────────────────────────────────────────────────────────────────────┤
 │                                                                       │
-│   РУЧНОЙ ЭТАП (talosctl)              РУЧНОЙ ЭТАП (kubectl)          │
-│   ─────────────────────               ─────────────────────           │
+│   LAYER 0 (setup-talos.sh)           LAYER 1-3 (setup-infrastructure.sh)
+│   ────────────────────────           ─────────────────────────────────
 │                                                                       │
 │   ┌─────────────────────┐             ┌─────────────────────────┐    │
-│   │  talosctl cluster   │             │   kubectl apply -k      │    │
-│   │  create             │             │   shared/bootstrap/     │    │
-│   │                     │             │                         │    │
-│   │  Создаёт:           │     ───▶    │  ONE-TIME установка:    │    │
-│   │  • Docker контейнер │             │  • Gateway API CRDs     │    │
-│   │  • Talos OS         │             │  • Cilium CNI           │    │
-│   │  • etcd + K8s API   │             │  • ArgoCD               │    │
-│   └─────────────────────┘             └─────────────────────────┘    │
+│   │  talosctl cluster   │             │  helm install ...       │    │
+│   │  create             │             │                         │    │
+│   │                     │             │  Устанавливает:         │    │
+│   │  Создаёт:           │     ───▶    │  • Gateway API CRDs     │    │
+│   │  • Docker контейнер │             │  • Cilium CNI           │    │
+│   │  • Talos OS         │             │  • cert-manager         │    │
+│   │  • etcd + K8s API   │             │  • Vault + VSO          │    │
+│   │  • kubeconfig       │             │  • ArgoCD               │    │
+│   └─────────────────────┘             │  • Monitoring           │    │
+│              │                        │  • External-DNS         │    │
+│              │                        │  • Cloudflare Tunnel    │    │
+│              │                        └─────────────────────────┘    │
 │              │                                    │                   │
 │              │                                    ▼                   │
 │              │                        ┌─────────────────────────┐    │
-│              │                        │  ArgoCD bootstrap app   │    │
-│              │                        │  layer-0 → self-manage  │    │
-│              │                        │  Всё остальное → GitOps │    │
+│              │                        │  LAYER 4 (ArgoCD)       │    │
+│              │                        │  Управляет только       │    │
+│              │                        │  приложениями:          │    │
+│              │                        │  • platform-core        │    │
+│              │                        │  • service-groups       │    │
+│              │                        │  • preview-envs         │    │
+│              │                        │  • ingress-cloudflare   │    │
 │              │                        └─────────────────────────┘    │
 │              ▼                                                        │
 │   ┌─────────────────────────────────────────────────────────────┐    │
@@ -44,18 +52,17 @@
 └───────────────────────────────────────────────────────────────────────┘
 ```
 
-### Pure GitOps
+### Разделение ответственности
 
-После bootstrap ArgoCD управляет **всем**, включая себя:
+| Layer | Компонент | Управление |
+|-------|-----------|------------|
+| 0 | Talos кластер | `setup-talos.sh` (talosctl) |
+| 1 | Gateway API, Cilium | `setup-infrastructure.sh` (helm) |
+| 2 | cert-manager, Vault | `setup-infrastructure.sh` (helm) |
+| 3 | ArgoCD, Monitoring | `setup-infrastructure.sh` (helm) |
+| 4 | Applications | ArgoCD (GitOps) |
 
-| Компонент | Управление |
-|-----------|------------|
-| Talos ноды | talosctl (вручную) |
-| Gateway API CRDs | ArgoCD layer-0 |
-| Cilium CNI | ArgoCD layer-0 |
-| cert-manager | ArgoCD layer-0 |
-| ArgoCD | ArgoCD layer-0 (self-manage) |
-| Все остальное | ArgoCD |
+ArgoCD **НЕ** управляет инфраструктурой (self-manage отключен).
 
 ## Требования
 
@@ -93,82 +100,79 @@ Docker Desktop имеет встроенный Kubernetes, который мож
 
 ## Запуск кластера
 
-### Шаг 1: Очистить старые контексты (если есть)
-
-При пересоздании кластера talosctl добавляет суффиксы к контекстам (-1, -2, ...).
-Рекомендуется очистить перед созданием:
-
-```bash
-# Удалить старый кластер если есть
-talosctl cluster destroy --name talos-local 2>/dev/null || true
-rm -rf ~/.talos/clusters/talos-local
-rm -f ~/.kube/talos-local.yaml
-```
-
-### Шаг 2: Создать Talos кластер
+### Быстрый старт (рекомендуется)
 
 ```bash
 cd /path/to/gitops
 
-# Создать кластер с Docker-специфичным патчем
-# --wait=false - не ждать Ready (ноды станут Ready после установки Cilium)
-talosctl cluster create \
-  --name talos-local \
-  --config-patch @shared/talos/patches/docker.yaml \
-  --wait=false
+# Шаг 1: Создать Talos кластер (Layer 0)
+./shared/scripts/setup-talos.sh
 
-# Дождаться только API server
-sleep 30  # или talosctl health --wait-timeout 2m
-```
-
-<details>
-<summary>Что делает эта команда?</summary>
-
-1. Скачивает Talos image
-2. Создаёт Docker контейнеры (controlplane + worker)
-3. Генерирует PKI и machine configs
-4. Bootstraps etcd и Kubernetes API
-5. Сохраняет talosconfig в `~/.talos/config`
-
-</details>
-
-### Шаг 3: Настроить kubeconfig
-
-```bash
-# Получить динамический порт
-API_PORT=$(docker port talos-local-controlplane-1 6443 | cut -d: -f2)
-
-# Экспортировать kubeconfig
-talosctl kubeconfig ~/.kube/talos-local.yaml --nodes 10.5.0.2
-
-# Заменить IP на localhost с правильным портом
-sed -i '' "s|server: https://10.5.0.2:6443|server: https://127.0.0.1:$API_PORT|g" ~/.kube/talos-local.yaml
-
+# Шаг 2: Установить инфраструктуру (Layer 1-3)
 export KUBECONFIG=~/.kube/talos-local.yaml
-```
+./shared/scripts/setup-infrastructure.sh
 
-### Шаг 4: ONE-TIME Bootstrap
-
-```bash
-# Установить Gateway API CRDs, Cilium, ArgoCD
-./shared/bootstrap/bootstrap.sh
-
-# Скрипт автоматически:
-# 1. Установит Gateway API CRDs
-# 2. Установит Cilium CNI
-# 3. Установит ArgoCD
-# 4. Дождётся готовности pods
-```
-
-### Шаг 5: Запустить ArgoCD Bootstrap App
-
-```bash
-# ArgoCD теперь управляет всем
+# Шаг 3: Bootstrap ArgoCD (Layer 4) - одна команда!
 kubectl apply -f infra/poc/gitops-config/argocd/bootstrap-app.yaml
 
 # Проверить статус
 kubectl get applications -n argocd
 ```
+
+### Пошагово (для понимания)
+
+<details>
+<summary>Шаг 1: Создать Talos кластер</summary>
+
+```bash
+# Скрипт автоматически:
+# 1. Удалит старый кластер (с подтверждением)
+# 2. Создаст Talos кластер в Docker
+# 3. Настроит kubeconfig
+
+./shared/scripts/setup-talos.sh
+
+# Или вручную:
+talosctl cluster create \
+  --name talos-local \
+  --config-patch @shared/talos/patches/docker.yaml \
+  --wait=false
+
+API_PORT=$(docker port talos-local-controlplane-1 6443 | cut -d: -f2)
+talosctl kubeconfig ~/.kube/talos-local.yaml --nodes 10.5.0.2
+sed -i '' "s|server: https://10.5.0.2:6443|server: https://127.0.0.1:$API_PORT|g" ~/.kube/talos-local.yaml
+```
+
+</details>
+
+<details>
+<summary>Шаг 2: Установить инфраструктуру</summary>
+
+```bash
+export KUBECONFIG=~/.kube/talos-local.yaml
+
+# Скрипт автоматически устанавливает:
+# Layer 1: Gateway API CRDs, Cilium CNI
+# Layer 2: cert-manager, Vault + VSO
+# Layer 3: ArgoCD, Monitoring, External-DNS, Cloudflare Tunnel
+
+./shared/scripts/setup-infrastructure.sh
+```
+
+</details>
+
+<details>
+<summary>Шаг 3: Bootstrap ArgoCD</summary>
+
+```bash
+# Одна команда - автоматически применит project.yaml и все модули
+kubectl apply -f infra/poc/gitops-config/argocd/bootstrap-app.yaml
+
+# Проверить статус
+kubectl get applications -n argocd
+```
+
+</details>
 
 ## Доступ к сервисам
 
@@ -221,22 +225,10 @@ rm -f ~/.kube/talos-local.yaml
 ### Пересоздать с нуля
 
 ```bash
-# Полная очистка
-talosctl cluster destroy --name talos-local
-rm -rf ~/.talos/clusters/talos-local
-rm -f ~/.kube/talos-local.yaml
-
-# Создать заново
-talosctl cluster create --name talos-local \
-  --config-patch @shared/talos/patches/docker.yaml
-
-# Bootstrap
-API_PORT=$(docker port talos-local-controlplane-1 6443 | cut -d: -f2)
-talosctl kubeconfig ~/.kube/talos-local.yaml --nodes 10.5.0.2
-sed -i '' "s|server: https://10.5.0.2:6443|server: https://127.0.0.1:$API_PORT|g" ~/.kube/talos-local.yaml
+# Используйте скрипты - они автоматически очистят и пересоздадут:
+./shared/scripts/setup-talos.sh
 export KUBECONFIG=~/.kube/talos-local.yaml
-
-kubectl apply -k shared/bootstrap/
+./shared/scripts/setup-infrastructure.sh
 kubectl apply -f infra/poc/gitops-config/argocd/bootstrap-app.yaml
 ```
 
@@ -304,10 +296,10 @@ docker port talos-local-controlplane-1 6443
 
 ```bash
 # Синхронизировать вручную
-kubectl patch application layer-0 -n argocd -p '{"operation": {"initiatedBy": {"username": "admin"},"sync": {}}}' --type=merge
+argocd app sync platform-core
 
-# Или через argocd CLI
-argocd app sync layer-0
+# Или через kubectl
+kubectl patch application platform-core -n argocd -p '{"operation": {"sync": {}}}' --type=merge
 ```
 
 ## Сравнение с другими провайдерами

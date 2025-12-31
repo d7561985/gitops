@@ -300,13 +300,9 @@ kubectl logs -n kube-system -l app.kubernetes.io/name=cilium -c cilium-agent
 
 После bootstrap:
 
-| Компонент | Управление |
-|-----------|------------|
-| Talos ноды | talosctl (вручную) |
-| Gateway API CRDs | ArgoCD layer-0 |
-| Cilium CNI | ArgoCD layer-0 |
-| cert-manager | ArgoCD layer-0 |
-| external-dns | ArgoCD layer-0 |
-| ArgoCD | ArgoCD layer-0 (self-manage) |
-| Platform services | ArgoCD platform-core |
-| Applications | ArgoCD ApplicationSets |
+| Слой | Компонент | Управление |
+|------|-----------|------------|
+| Layer 0 | Talos ноды | talosctl (вручную) |
+| Layer 1-3 | Cilium, Vault, ArgoCD | `setup-infrastructure.sh` |
+| Layer 4 | Platform services | ArgoCD platform-core |
+| Layer 4 | Applications | ArgoCD ApplicationSets |
