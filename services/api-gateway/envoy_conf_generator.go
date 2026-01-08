@@ -37,7 +37,7 @@ var (
                   - header:
                       key: "x-forwarded-for"
                       value: "%DOWNSTREAM_REMOTE_ADDRESS%"
-                    append_action: APPEND_IF_ABSENT{{end}}
+                    append_action: APPEND_IF_EXISTS_OR_ADD{{end}}
 {{.RateLimitConfig}}
 `))
 
@@ -60,7 +60,7 @@ var (
                   - header:
                       key: "x-forwarded-for"
                       value: "%DOWNSTREAM_REMOTE_ADDRESS%"
-                    append_action: APPEND_IF_ABSENT{{end}}
+                    append_action: APPEND_IF_EXISTS_OR_ADD{{end}}
 {{.RateLimitConfig}}
 `))
 	envoyGrpcClusterTmpl = template.Must(template.New("grpcClusterTmpl").Parse(`

@@ -93,6 +93,10 @@ apis:
 	if !strings.Contains(statusSection, `OVERWRITE_IF_EXISTS_OR_ADD`) {
 		t.Error("x-forwarded-proto should use OVERWRITE_IF_EXISTS_OR_ADD")
 	}
+	// Check x-forwarded-for uses correct enum
+	if !strings.Contains(statusSection, `APPEND_IF_EXISTS_OR_ADD`) {
+		t.Error("x-forwarded-for should use APPEND_IF_EXISTS_OR_ADD")
+	}
 
 	// Test 4: Check health route also has headers
 	healthRouteIdx := strings.Index(contentStr, "/api/ExternalService/health")
