@@ -113,14 +113,14 @@ spec:
                     namespace: {{ $.Values.previewEnvironments.gateway.namespace }}
                     sectionName: http-preview
                 rules:
-                  # /api → shared backend (api-gateway-sv in same namespace)
+                  # /api → shared backend (api-gw-sv in same namespace)
                   # More specific path takes precedence over catch-all
                   - matches:
                       - path:
                           type: PathPrefix
                           value: /api
                     backendRefs:
-                      - name: api-gateway-sv
+                      - name: api-gw-sv
                         port: 8080
                   # / → preview frontend (unique per JIRA tag)
                   - matches:
@@ -133,7 +133,7 @@ spec:
 
               # Use same namespace backend (no cross-namespace needed)
               configmap:
-                API_URL: "http://api-gateway-sv:8080"
+                API_URL: "http://api-gw-sv:8080"
 
               # Disable Vault for preview (use existing secrets in namespace)
               vault:

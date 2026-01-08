@@ -39,8 +39,9 @@ make stop-proxy        # Остановить все прокси
 ```
 GitLab (gitlab.com/${GITLAB_GROUP}/):
 │
-├── api-gateway/           ← Репо сервиса с кодом + .cicd/
-├── auth-adapter/          ← Репо сервиса
+├── api-gateway-image/     ← Golden image (Envoy + config generator)
+├── api-gw/                ← Config repo (config.yaml + .cicd/)
+├── auth-adapter/          ← Репо сервиса (sidecar)
 ├── web-grpc/              ← Репо сервиса
 ├── web-http/              ← Репо сервиса
 ├── health-demo/           ← Репо сервиса
@@ -68,8 +69,9 @@ service-repo/
 
 | Сервис | Описание | Исходный код | Docker образ |
 |--------|----------|--------------|--------------|
-| api-gateway | Envoy Proxy с Go config generator | [github.com/d7561985/api-gateway](https://github.com/d7561985/api-gateway) | GitLab Registry |
-| auth-adapter | gRPC ext_authz сервис | [github.com/d7561985/api-gateway/envoy/auth-adapter](https://github.com/d7561985/api-gateway) | GitLab Registry |
+| api-gateway-image | Golden image: Envoy + config generator | services/api-gateway-image | GitLab Registry |
+| api-gw | Config repo: config.yaml + deployment | services/api-gw | GitLab Registry (micro-image) |
+| auth-adapter | gRPC ext_authz sidecar | services/auth-adapter | GitLab Registry |
 | health-demo | Простой health check сервис | Локальный | GitLab Registry |
 | web-grpc | gRPC backend (fake-service) | [nicholasjackson/fake-service](https://github.com/nicholasjackson/fake-service) | Docker Hub |
 | web-http | HTTP backend (fake-service) | [nicholasjackson/fake-service](https://github.com/nicholasjackson/fake-service) | Docker Hub |
@@ -289,9 +291,9 @@ vault kv put secret/gitops-poc-dzha/platform/registry \
 
 Все сервисы деплоятся в один namespace на окружение:
 ```
-poc-dev/          ← api-gateway, auth-adapter, web-grpc, web-http, health-demo
-poc-staging/      ← api-gateway, auth-adapter, web-grpc, web-http, health-demo
-poc-prod/         ← api-gateway, auth-adapter, web-grpc, web-http, health-demo
+poc-dev/          ← api-gw, auth-adapter, web-grpc, web-http, health-demo
+poc-staging/      ← api-gw, auth-adapter, web-grpc, web-http, health-demo
+poc-prod/         ← api-gw, auth-adapter, web-grpc, web-http, health-demo
 ```
 
 Настраивается через `NAMESPACE_PREFIX` в `.env`.
@@ -302,7 +304,7 @@ poc-prod/         ← api-gateway, auth-adapter, web-grpc, web-http, health-demo
 # Структура в GitLab:
 # gitlab.com/${GITLAB_GROUP}/
 # ├── gitops-config/     ← этот репозиторий (ApplicationSet живёт здесь)
-# ├── api-gateway/       ← репо сервиса (.cicd/, .gitlab-ci.yml)
+# ├── api-gw/            ← репо сервиса (config.yaml + .cicd/)
 # ├── auth-adapter/
 # ├── web-grpc/
 # ├── web-http/
@@ -315,10 +317,15 @@ poc-prod/         ← api-gateway, auth-adapter, web-grpc, web-http, health-demo
 2. Создать репозиторий `gitops-config` и запушить этот проект
 3. Создать репозитории для сервисов и скопировать туда файлы:
    ```bash
-   # Пример для api-gateway
-   git clone git@gitlab.com:${GITLAB_GROUP}/api-gateway.git
-   cp -r services/api-gateway/* api-gateway/
-   cd api-gateway && git add . && git commit -m "Initial" && git push
+   # Пример для api-gw (config repo)
+   git clone git@gitlab.com:${GITLAB_GROUP}/api-gw.git
+   cp -r services/api-gw/* api-gw/
+   cd api-gw && git add . && git commit -m "Initial" && git push
+
+   # Пример для api-gateway-image (golden image)
+   git clone git@gitlab.com:${GITLAB_GROUP}/api-gateway-image.git
+   cp -r services/api-gateway-image/* api-gateway-image/
+   cd api-gateway-image && git add . && git commit -m "Initial" && git push
    ```
 
 ### 5. Pull-based (ArgoCD)
@@ -552,7 +559,7 @@ secret/data/${GITLAB_GROUP}/{service}/{env}/config
              └── gitops-poc-dzha (группа GitLab)
 
 Примеры:
-  secret/data/gitops-poc-dzha/api-gateway/dev/config
+  secret/data/gitops-poc-dzha/api-gw/dev/config
   secret/data/gitops-poc-dzha/health-demo/dev/config
 ```
 
@@ -561,7 +568,7 @@ secret/data/${GITLAB_GROUP}/{service}/{env}/config
 ```yaml
 secrets:
   # Абсолютный путь (начинается с /) - используется как есть
-  API_KEY: "/gitops-poc-dzha/api-gateway/dev/config"
+  API_KEY: "/gitops-poc-dzha/api-gw/dev/config"
 
   # Относительный путь - становится {namespace}/{appName}/{path}
   DB_URL: "database"  # → poc-dev/api-gateway/database
@@ -609,7 +616,7 @@ export VAULT_ADDR='http://127.0.0.1:8200'
 export VAULT_TOKEN='root'
 
 # Создать секреты для сервиса
-vault kv put secret/gitops-poc-dzha/api-gateway/dev/config \
+vault kv put secret/gitops-poc-dzha/api-gw/dev/config \
   API_KEY="dev-secret-key" \
   DB_PASSWORD="dev-password"
 ```
@@ -618,8 +625,8 @@ vault kv put secret/gitops-poc-dzha/api-gateway/dev/config \
 ```yaml
 # Формат: ENV_VAR_NAME: "vault-path"
 secrets:
-  API_KEY: "/gitops-poc-dzha/api-gateway/dev/config"
-  DB_PASSWORD: "/gitops-poc-dzha/api-gateway/dev/config"
+  API_KEY: "/gitops-poc-dzha/api-gw/dev/config"
+  DB_PASSWORD: "/gitops-poc-dzha/api-gw/dev/config"
 
 secretsProvider:
   provider: "vault"
@@ -677,7 +684,7 @@ kubectl describe vaultstaticsecret <name> -n poc-dev
 kubectl get secret -n poc-dev | grep -v regsecret
 
 # Проверить env vars в поде
-kubectl exec -n poc-dev deploy/api-gateway -- env | grep API_KEY
+kubectl exec -n poc-dev deploy/api-gw -- env | grep API_KEY
 
 # Логи VSO
 kubectl logs -n vault-secrets-operator-system -l control-plane=controller-manager
@@ -816,10 +823,10 @@ Redis exporter автоматически скрейпится через Servic
 ```bash
 # Статус приложений
 argocd app list
-argocd app get api-gateway-dev
+argocd app get api-gw-dev
 
 # Принудительная синхронизация
-argocd app sync api-gateway-dev --force
+argocd app sync api-gw-dev --force
 
 # Логи
 kubectl logs -n argocd -l app.kubernetes.io/name=argocd-application-controller
@@ -841,7 +848,7 @@ kubectl logs -n argocd -l app.kubernetes.io/name=argocd-application-controller
 ```bash
 # Статус VaultStaticSecret
 kubectl get vaultstaticsecret -A
-kubectl describe vaultstaticsecret api-gateway-secrets -n api-gateway-dev
+kubectl describe vaultstaticsecret api-gw-secrets -n poc-dev
 
 # Логи VSO
 kubectl logs -n vault-secrets-operator-system -l app.kubernetes.io/name=vault-secrets-operator
@@ -862,10 +869,10 @@ kubectl get secret regsecret -n poc-dev -o jsonpath='{.data.\.dockerconfigjson}'
 kubectl get vaultstaticsecret -n poc-dev
 
 # Проверить что сервис объявляет imagePullSecrets
-kubectl get deployment api-gateway -n poc-dev -o yaml | grep -A3 imagePullSecrets
+kubectl get deployment api-gw -n poc-dev -o yaml | grep -A3 imagePullSecrets
 
 # Проверить события pod
-kubectl describe pod -n poc-dev -l app=api-gateway
+kubectl describe pod -n poc-dev -l app=api-gw
 ```
 
 **Частые причины:**

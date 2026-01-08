@@ -41,7 +41,7 @@
 │  │  └────────┬────────┘              └────────┬────────┘   │    │
 │  │           ▼                                ▼            │    │
 │  │  ┌─────────────────┐              ┌─────────────────┐   │    │
-│  │  │ api-gateway-sv  │              │sentry-frontend-sv│   │    │
+│  │  │ api-gw-sv  │              │sentry-frontend-sv│   │    │
 │  │  │    :8080        │              │     :4200       │   │    │
 │  │  └─────────────────┘              └─────────────────┘   │    │
 │  └─────────────────────────────────────────────────────────┘    │
@@ -95,7 +95,7 @@ httpRoute:
             type: PathPrefix
             value: /api
       backendRefs:
-        - name: api-gateway-sv
+        - name: api-gw-sv
           port: 8080
 ```
 

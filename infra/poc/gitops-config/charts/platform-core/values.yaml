@@ -54,7 +54,7 @@ domainMirrors:
     - name: api
       path: /api
       pathType: PathPrefix
-      serviceName: api-gateway-sv
+      serviceName: api-gw-sv
       servicePort: 8080
     - name: frontend
       path: /

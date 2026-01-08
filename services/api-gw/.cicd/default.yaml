@@ -1,0 +1,134 @@
+# API Gateway - Default Values (inherited by all environments)
+# Based on k8app/app chart: https://github.com/d7561985/k8app
+# Micro-image: golden image + config.yaml
+
+appName: api-gw
+version: "1.0.0"
+
+# Image configuration
+# Micro-image built from api-gw repo (golden image + config.yaml)
+image:
+  repository: api-gw
+  tag: local
+  pullPolicy: Never  # Change to IfNotPresent for GitLab Registry
+
+# Service configuration
+service:
+  enabled: true
+  type: ClusterIP
+  ports:
+    http:
+      externalPort: 8080
+      internalPort: 8080
+      protocol: TCP
+    admin:
+      externalPort: 8000
+      internalPort: 8000
+      protocol: TCP
+
+# Health checks - Envoy admin endpoint
+livenessProbe:
+  enabled: true
+  mode: httpGet
+  httpGet:
+    port: 8000
+    path: "/ready"
+  initialDelaySeconds: 15
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  enabled: true
+  mode: httpGet
+  httpGet:
+    port: 8000
+    path: "/ready"
+  initialDelaySeconds: 10
+  periodSeconds: 5
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+# Environment variables
+configmap:
+  LOG_LEVEL: "info"
+  AUTH_ADAPTER_HOST: "127.0.0.1"  # Sidecar via localhost
+  OPEN_TELEMETRY_HOST: "127.0.0.1"
+  OPEN_TELEMETRY_PORT: "4317"
+
+# Secrets from Vault
+secrets:
+  API_KEY: "/gitops-poc-dzha/api-gw/dev/config"
+
+# Shared volumes for config
+sharedVolumes:
+  auth-config:
+    type: emptyDir
+    mountPath: "/opt/auth-adapter"
+
+# Init container copies config from image to shared volume
+initContainers:
+  command:
+    - sh
+    - -c
+  args:
+    - cp /opt/config-source/config.yaml /opt/auth-adapter/config.yaml
+
+# Auth-Adapter Sidecar
+extensions:
+  auth-adapter:
+    image:
+      repository: auth-adapter
+      tag: v1.0.2
+    command:
+      - /app/auth-adapter
+    env:
+      OTEL_SERVICE_NAME: "auth-adapter"
+      AUTH_SERVICE_ADDR: "user-service-sv:8081"
+      USE_USER_SERVICE: "false"
+    ports:
+      - name: grpc
+        containerPort: 9000
+        protocol: TCP
+      - name: metrics
+        containerPort: 9090
+        protocol: TCP
+    livenessProbe:
+      tcpSocket:
+        port: 9000
+      initialDelaySeconds: 10
+      periodSeconds: 10
+    readinessProbe:
+      tcpSocket:
+        port: 9000
+      initialDelaySeconds: 5
+      periodSeconds: 5
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 100m
+        memory: 128Mi
+
+# Prometheus ServiceMonitor
+serviceMonitor:
+  enabled: true
+  port: "admin"
+  path: "/stats/prometheus"
+  interval: 30s
+
+# Gateway API HTTPRoute
+httpRoute:
+  enabled: true
+  parentRefs:
+    - name: gateway
+      sectionName: http-app
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /api
+      backendRefs:
+        - name: api-gw-sv
+          port: 8080

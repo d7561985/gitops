@@ -1,0 +1,54 @@
+# API Gateway - Dev Environment Overrides
+# Inherits from default.yaml
+# CI updates image.repository and image.tag on each build
+
+environment: dev
+branch: main
+
+# Image - CI updates these values
+image:
+  repository: registry.gitlab.com/gitops-poc-dzha/services/api-gw
+  tag: latest
+  pullPolicy: IfNotPresent
+
+# Replicas
+replicas: 1
+
+# Resources (minimal for dev)
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 200m
+    memory: 256Mi
+
+# Environment-specific overrides
+configmap:
+  LOG_LEVEL: "debug"
+
+# Labels
+labels:
+  app.kubernetes.io/instance: api-gw-dev
+  environment: dev
+
+# Annotations for ArgoCD
+annotations:
+  argocd.argoproj.io/sync-wave: "1"
+
+# Auth-adapter sidecar - override image from GitLab registry
+extensions:
+  auth-adapter:
+    image:
+      repository: registry.gitlab.com/gitops-poc-dzha/services/auth-adapter
+      tag: 7306e90b
+      pullPolicy: IfNotPresent
+
+# HTTPRoute (environment-specific)
+httpRoute:
+  parentRefs:
+    - name: gateway
+      namespace: poc-dev
+      sectionName: http-app
+  hostnames:
+    - app.demo-poc-01.work

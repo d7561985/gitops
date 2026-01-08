@@ -1,0 +1,53 @@
+# API Gateway - Production Environment Overrides
+# Inherits from default.yaml
+# CI updates image.repository and image.tag on release tags (manual promotion)
+
+environment: prod
+
+# Image - CI updates these values on v*.*.* tags (manual)
+image:
+  repository: registry.gitlab.com/gitops-poc-dzha/services/api-gw
+  tag: latest
+  pullPolicy: IfNotPresent
+
+# Replicas
+replicas: 3
+
+# Resources
+resources:
+  requests:
+    cpu: 500m
+    memory: 512Mi
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+
+# Environment-specific overrides
+configmap:
+  LOG_LEVEL: "warn"
+
+# Labels
+labels:
+  app.kubernetes.io/instance: api-gw-prod
+  environment: prod
+
+# Annotations for ArgoCD
+annotations:
+  argocd.argoproj.io/sync-wave: "1"
+
+# Auth-adapter sidecar
+extensions:
+  auth-adapter:
+    image:
+      repository: registry.gitlab.com/gitops-poc-dzha/services/auth-adapter
+      tag: latest
+      pullPolicy: IfNotPresent
+
+# HTTPRoute (environment-specific)
+httpRoute:
+  parentRefs:
+    - name: gateway
+      namespace: poc-prod
+      sectionName: http-app
+  hostnames:
+    - app.demo-poc-01.work

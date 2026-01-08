@@ -22,7 +22,7 @@
 │  environments:                    domainMirrors:                            │
 │    dev:                             defaultRoutes:                          │
 │      domain: "app.demo-poc-01.work"   - path: /api                         │
-│      mirrors:                           serviceName: api-gateway-sv        │
+│      mirrors:                           serviceName: api-gw-sv        │
 │        - domain: "mirror.example.com"  - path: /                           │
 │          zoneId: "abc123..."            serviceName: sentry-frontend-sv    │
 └─────────────────────────────────────────────────────────────────────────────┘
@@ -53,7 +53,7 @@
 │  ┌─────────────────────────┐   ┌─────────────────────────┐                 │
 │  │ HTTPRoute (k8app)       │   │ HTTPRoute (mirrors)     │                 │
 │  │ hostname: app.demo-...  │   │ hostname: mirror.exam..│                 │
-│  │ /api → api-gateway-sv   │   │ /api → api-gateway-sv   │                 │
+│  │ /api → api-gw-sv   │   │ /api → api-gw-sv   │                 │
 │  │ /    → sentry-frontend  │   │ /    → sentry-frontend  │                 │
 │  └───────────┬─────────────┘   └───────────┬─────────────┘                 │
 │              │                              │                               │
@@ -61,7 +61,7 @@
 │                             ▼                                               │
 │              ┌─────────────────────────────┐                               │
 │              │ Services (существующие)     │                               │
-│              │ - api-gateway-sv:8080       │                               │
+│              │ - api-gw-sv:8080       │                               │
 │              │ - sentry-frontend-sv:4200   │                               │
 │              └─────────────────────────────┘                               │
 └─────────────────────────────────────────────────────────────────────────────┘
@@ -104,7 +104,7 @@ spec:
     - matches:
         - path: {type: PathPrefix, value: "/api"}
       backendRefs:
-        - name: api-gateway-sv      # ← Тот же сервис что и основной
+        - name: api-gw-sv      # ← Тот же сервис что и основной
           port: 8080
 ```
 
@@ -152,9 +152,9 @@ Gateway (Cilium) listener: http-mirror-0
       │
       ▼
 HTTPRoute: mirror-0-api (sectionName: http-mirror-0)
-      │ path: /api → api-gateway-sv:8080
+      │ path: /api → api-gw-sv:8080
       ▼
-Service: api-gateway-sv → Pod
+Service: api-gw-sv → Pod
 ```
 
 ## Единый источник истины (GitOps)
@@ -356,7 +356,7 @@ environments:
           - name: api-only
             path: /api
             pathType: PathPrefix
-            serviceName: api-gateway-sv
+            serviceName: api-gw-sv
             servicePort: 8080
           # Без frontend — только API
 ```
@@ -373,7 +373,7 @@ domainMirrors:
     - name: api
       path: /api
       pathType: PathPrefix
-      serviceName: api-gateway-sv
+      serviceName: api-gw-sv
       servicePort: 8080
 
     # Frontend (catch-all)

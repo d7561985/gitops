@@ -1,0 +1,53 @@
+# API Gateway - Staging Environment Overrides
+# Inherits from default.yaml
+# CI updates image.repository and image.tag on release tags
+
+environment: staging
+
+# Image - CI updates these values on v*-rc.* or v*-beta.* tags
+image:
+  repository: registry.gitlab.com/gitops-poc-dzha/services/api-gw
+  tag: latest
+  pullPolicy: IfNotPresent
+
+# Replicas
+replicas: 2
+
+# Resources
+resources:
+  requests:
+    cpu: 200m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+# Environment-specific overrides
+configmap:
+  LOG_LEVEL: "info"
+
+# Labels
+labels:
+  app.kubernetes.io/instance: api-gw-staging
+  environment: staging
+
+# Annotations for ArgoCD
+annotations:
+  argocd.argoproj.io/sync-wave: "1"
+
+# Auth-adapter sidecar
+extensions:
+  auth-adapter:
+    image:
+      repository: registry.gitlab.com/gitops-poc-dzha/services/auth-adapter
+      tag: latest
+      pullPolicy: IfNotPresent
+
+# HTTPRoute (environment-specific)
+httpRoute:
+  parentRefs:
+    - name: gateway
+      namespace: poc-staging
+      sectionName: http-app
+  hostnames:
+    - staging.demo-poc-01.work

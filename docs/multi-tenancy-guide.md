@@ -58,10 +58,10 @@ This document describes the multi-tenancy architecture for deploying multiple en
 |----------|---------|---------|
 | Application Namespace | `{prefix}-{env}` | `poc-dev`, `poc-staging`, `poc-prod` |
 | Infrastructure Namespace | `infra-{env}` | `infra-dev`, `infra-staging` |
-| Service Name | `{service}-sv` | `api-gateway-sv`, `sentry-frontend-sv` |
-| ArgoCD Application | `{service}-{env}` | `api-gateway-dev`, `sentry-frontend-prod` |
-| Vault Role | `{service}-{env}` | `api-gateway-dev`, `sentry-payment-staging` |
-| Vault Path | `{prefix}/{service}/{env}/config` | `gitops-poc-dzha/api-gateway/dev/config` |
+| Service Name | `{service}-sv` | `api-gw-sv`, `sentry-frontend-sv` |
+| ArgoCD Application | `{service}-{env}` | `api-gw-dev`, `sentry-frontend-prod` |
+| Vault Role | `{service}-{env}` | `api-gw-dev`, `sentry-payment-staging` |
+| Vault Path | `{prefix}/{service}/{env}/config` | `gitops-poc-dzha/api-gw/dev/config` |
 
 ### Multi-Brand Support (Future)
 
@@ -296,7 +296,7 @@ httpRoute:
             type: PathPrefix
             value: /api
       backendRefs:
-        - name: api-gateway-sv
+        - name: api-gw-sv
           port: 8080
 
 # dev.yaml - gateway reference and domain

@@ -11,13 +11,13 @@ HTTPRoute resources for domain mirrors.
   ┌─────────────────────────────────────┐
   │ k8app HTTPRoute (основной домен)    │──┐
   │ hostname: app.demo-poc-01.work      │  │
-  │ /api → api-gateway-sv               │  │
+  │ /api → api-gw-sv               │  │
   └─────────────────────────────────────┘  │
-                                           ├──► api-gateway-sv
+                                           ├──► api-gw-sv
   ┌─────────────────────────────────────┐  │    sentry-frontend-sv
   │ Mirror HTTPRoute (этот template)    │  │
   │ hostname: mirror.example.com        │──┘
-  │ /api → api-gateway-sv               │
+  │ /api → api-gw-sv               │
   └─────────────────────────────────────┘
 */ -}}
 

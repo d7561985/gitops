@@ -1,0 +1,263 @@
+api_route: /api/
+
+clusters:
+  # gRPC сервис (fake-service в gRPC режиме)
+  - name: web
+    addr: "web-grpc-sv:9091"
+    type: "grpc"
+
+  # HTTP сервис (fake-service в HTTP режиме)
+  - name: web-http
+    addr: "web-http-sv:9092"
+    type: "http"
+    health_check:
+      path: "/health"
+      interval_seconds: 10
+
+  # gRPC Health service (for streaming tests)
+  - name: health-demo
+    addr: "health-demo-sv:8081"
+    type: "grpc"
+
+  # Sentry Demo Services
+  - name: sentry-frontend
+    addr: "sentry-frontend-sv:4200"
+    type: "http"
+    health_check:
+      path: "/healthz"
+      interval_seconds: 30
+
+  - name: sentry-game-engine
+    addr: "sentry-game-engine-sv:8082"
+    type: "http"
+    health_check:
+      path: "/health"
+      interval_seconds: 10
+
+  - name: sentry-payment
+    addr: "sentry-payment-sv:8083"
+    type: "http"
+    health_check:
+      path: "/health"
+      interval_seconds: 10
+
+  # Wager/Bonus service (PHP/Symfony)
+  - name: sentry-wager
+    addr: "sentry-wager-sv:8085"
+    type: "http"
+    health_check:
+      path: "/health"
+      interval_seconds: 10
+
+  # User Service - Authentication and user management (Connect protocol)
+  - name: user-service
+    addr: "user-service-sv:8081"
+    type: "http"
+    health_check:
+      path: "/health"
+      interval_seconds: 10
+
+  # Analytics Service - Business metrics and analytics (Connect protocol)
+  # - name: analytics-service
+  #   addr: "analytics-service-sv:8081"
+  #   type: "http"
+  #   health_check:
+  #     path: "/health"
+  #     interval_seconds: 10
+
+apis:
+  # gRPC-Web тестирование
+  - name: FakeService
+    cluster: web
+    auth: {policy: no-need}
+    methods:
+      - name: Handle
+        auth:
+          policy: no-need
+
+  # HTTP REST тестирование (public + protected)
+  - name: HttpService
+    cluster: web-http
+    auth: {policy: no-need}
+    methods:
+      - name: health
+        auth: {policy: no-need}
+      - name: echo
+        auth: {policy: no-need}
+      - name: protected
+        auth: {policy: required}
+
+  # gRPC Health service (streaming test via Watch method)
+  - name: grpc.health.v1.Health
+    cluster: health-demo
+    auth: {policy: no-need}
+    methods:
+      - name: Check
+        auth: {policy: no-need}
+
+  # Sentry Demo - Game Engine API
+  # Routes: /api/game/* → game-engine /*
+  # Example: /api/game/calculate → /calculate
+  - name: game
+    cluster: sentry-game-engine
+    auth: {policy: no-need}
+    methods:
+      - name: health
+        auth: {policy: no-need}
+      - name: calculate
+        auth: {policy: no-need}
+      - name: business-metrics
+        auth: {policy: no-need}
+      - name: debug
+        auth: {policy: no-need}
+
+  # Sentry Demo - Payment API
+  # Routes: /api/payment/* → payment-service /*
+  # Example: /api/payment/process → /process
+  - name: payment
+    cluster: sentry-payment
+    auth: {policy: no-need}
+    methods:
+      - name: health
+        auth: {policy: no-need}
+      - name: process
+        auth: {policy: no-need}
+      - name: financial-metrics
+        auth: {policy: no-need}
+      - name: debug
+        auth: {policy: no-need}
+
+  # Sentry Demo - Wager API
+  # Routes: /api/wager/* → wager-service /wager/*
+  - name: wager
+    cluster: sentry-wager
+    auth: {policy: no-need}
+    methods:
+      - name: validate
+        auth: {policy: no-need}
+      - name: place
+        auth: {policy: no-need}
+      - name: history
+        auth: {policy: no-need}
+      - name: demo
+        auth: {policy: no-need}
+      - name: test
+        auth: {policy: no-need}
+
+  # Sentry Demo - Bonus API
+  # Routes: /api/bonus/* → wager-service /bonus/*
+  - name: bonus
+    cluster: sentry-wager
+    auth: {policy: no-need}
+    methods:
+      - name: claim
+        auth: {policy: no-need}
+      - name: progress
+        auth: {policy: no-need}
+      - name: convert
+        auth: {policy: no-need}
+      - name: demo
+        auth: {policy: no-need}
+
+  # User Service - Connect protocol API
+  # Routes: /api/user/* → user-service /*
+  # Frontend calls: /api/user/user.v1.UserService/Register
+  # Rewritten to: /user.v1.UserService/Register
+  - name: user
+    cluster: user-service
+    auth: {policy: no-need}
+    methods:
+      # Public endpoints (no auth required)
+      - name: user.v1.UserService/Register
+        auth: {policy: no-need}
+      - name: user.v1.UserService/Login
+        auth: {policy: no-need}
+      - name: user.v1.UserService/RefreshToken
+        auth: {policy: no-need}
+      # Protected endpoints (auth required)
+      - name: user.v1.UserService/Logout
+        auth: {policy: required}
+      - name: user.v1.UserService/GetProfile
+        auth: {policy: required}
+
+  # =============================================================================
+  # Connect Protocol APIs (HTTP POST + JSON)
+  # =============================================================================
+
+  # Game Engine - Connect Protocol
+  # Routes: /api/gameconnect/game.v1.GameEngineService/* → game-engine /game.v1.GameEngineService/*
+  - name: gameconnect
+    cluster: sentry-game-engine
+    auth: {policy: no-need}
+    methods:
+      - name: game.v1.GameEngineService/Calculate
+        auth: {policy: no-need}
+      - name: game.v1.GameEngineService/TrackBusinessMetrics
+        auth: {policy: no-need}
+
+  # Payment Service - Connect Protocol
+  # Routes: /api/paymentconnect/payment.v1.PaymentService/* → payment-service /payment.v1.PaymentService/*
+  - name: paymentconnect
+    cluster: sentry-payment
+    auth: {policy: no-need}
+    methods:
+      - name: payment.v1.PaymentService/Process
+        auth: {policy: no-need}
+      - name: payment.v1.PaymentService/TrackFinancialMetrics
+        auth: {policy: no-need}
+
+  # Wager Service - Connect Protocol
+  # Routes: /api/wagerconnect/wager.v1.WagerService/* → wager-service /wager.v1.WagerService/*
+  - name: wagerconnect
+    cluster: sentry-wager
+    auth: {policy: no-need}
+    methods:
+      - name: wager.v1.WagerService/Validate
+        auth: {policy: no-need}
+      - name: wager.v1.WagerService/Place
+        auth: {policy: no-need}
+      - name: wager.v1.WagerService/GetHistory
+        auth: {policy: no-need}
+
+  # Bonus Service - Connect Protocol
+  # Routes: /api/bonusconnect/wager.v1.BonusService/* → wager-service /wager.v1.BonusService/*
+  - name: bonusconnect
+    cluster: sentry-wager
+    auth: {policy: no-need}
+    methods:
+      - name: wager.v1.BonusService/Claim
+        auth: {policy: no-need}
+      - name: wager.v1.BonusService/GetProgress
+        auth: {policy: no-need}
+      - name: wager.v1.BonusService/Convert
+        auth: {policy: no-need}
+
+  # Analytics Service - REST API (for frontend metrics dashboard)
+  # Routes: /api/analytics/* → analytics-service /api/v1/business-metrics/*
+  # - name: analytics
+  #   cluster: analytics-service
+  #   auth: {policy: no-need}
+    # methods:
+    #   - name: api/v1/business-metrics/rtp
+    #     auth: {policy: no-need}
+    #   - name: api/v1/business-metrics/sessions
+    #     auth: {policy: no-need}
+    #   - name: api/v1/business-metrics/financial
+    #     auth: {policy: no-need}
+
+  # Analytics Service - Connect Protocol
+  # Routes: /api/analyticsconnect/analytics.v1.AnalyticsService/* → analytics-service /analytics.v1.AnalyticsService/*
+  # - name: analyticsconnect
+  #   cluster: analytics-service
+  #   auth: {policy: no-need}
+    # methods:
+    #   - name: analytics.v1.AnalyticsService/GetRTPMetrics
+    #     auth: {policy: no-need}
+    #   - name: analytics.v1.AnalyticsService/GetSessionMetrics
+    #     auth: {policy: no-need}
+    #   - name: analytics.v1.AnalyticsService/GetFinancialMetrics
+    #     auth: {policy: no-need}
+    #   - name: analytics.v1.AnalyticsService/RecordGameResult
+    #     auth: {policy: no-need}
+    #   - name: analytics.v1.AnalyticsService/RecordTransaction
+    #     auth: {policy: no-need}

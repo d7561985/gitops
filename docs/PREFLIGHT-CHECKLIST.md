@@ -304,7 +304,7 @@ kubectl port-forward svc/vault -n vault 8200:8200 &
 export VAULT_ADDR='http://127.0.0.1:8200'
 export VAULT_TOKEN=$(kubectl get secret vault-keys -n vault -o jsonpath='{.data.root-token}' | base64 -d)
 
-vault kv put secret/${GITLAB_GROUP}/api-gateway/dev/config \
+vault kv put secret/${GITLAB_GROUP}/api-gw/dev/config \
   API_KEY="real-value" \
   DB_PASSWORD="real-password"
 ```
