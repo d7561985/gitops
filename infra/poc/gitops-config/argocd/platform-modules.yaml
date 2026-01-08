@@ -1,12 +1,16 @@
 # =============================================================================
-# Platform Modular Charts - ArgoCD Applications
+# Platform Modular Charts - ArgoCD Applications (Layer 4)
 # =============================================================================
-# Deploys modular platform charts as separate ArgoCD Applications.
-# Each chart visible individually in ArgoCD UI for better observability.
+# ArgoCD manages ONLY Layer 4 - Applications.
+# Infrastructure (Layer 0-3) is managed by scripts, NOT ArgoCD.
 #
-# Charts (sync order):
+# Architecture:
+#   Layer 0-3: Infrastructure (setup-infrastructure.sh)
+#   Layer 4: Applications (ArgoCD - this file)
+#
+# Applications (sync order):
 # - platform-core: Namespaces, Gateway, ApplicationSet, Vault (sync-wave: -10)
-# - service-groups: Infrastructure access (ArgoCD, Grafana, Vault) (sync-wave: -5)
+# - service-groups: Infrastructure access routes (sync-wave: -5)
 # - preview-environments: Feature branch previews (sync-wave: -4)
 # - ingress-cloudflare: CloudFlare Tunnel routing (sync-wave: -3)
 #

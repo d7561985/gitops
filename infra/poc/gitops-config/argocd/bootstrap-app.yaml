@@ -1,13 +1,27 @@
 # Bootstrap Application - "App of Apps" pattern
-# This Application watches gitops-config repo and applies all ArgoCD resources
+# =============================================================================
+# This is the ONLY file you need to apply manually after infrastructure setup.
+# It automatically pulls in project.yaml and all platform modules.
+# =============================================================================
 #
-# Apply once manually:
-#   kubectl apply -f bootstrap-app.yaml
+# Architecture:
+#   Layer 0-3: Infrastructure - setup-infrastructure.sh (NOT managed by ArgoCD)
+#   Layer 4: Applications - ArgoCD (this file triggers everything)
 #
-# After that, ArgoCD will:
-# 1. Apply project.yaml (ArgoCD Project with allowed destinations)
-# 2. Apply platform-modules.yaml (platform-core, service-groups, preview-envs, ingress)
-#    - platform-core generates: namespaces, gateways, infra apps, applicationset
+# Prerequisites:
+#   1. minikube start (or your cluster)
+#   2. ./shared/scripts/setup-infrastructure.sh  # Install infrastructure
+#
+# Bootstrap (one command):
+#   kubectl apply -f infra/poc/gitops-config/argocd/bootstrap-app.yaml
+#
+# This automatically applies:
+#   - project.yaml: ArgoCD Project with allowed destinations
+#   - platform-modules.yaml:
+#     - platform-core: namespaces, gateways, applicationset, vault
+#     - service-groups: infrastructure access (ArgoCD, Grafana, Vault)
+#     - preview-environments: MR-based previews
+#     - ingress-cloudflare: tunnel routing
 
 apiVersion: argoproj.io/v1alpha1
 kind: Application

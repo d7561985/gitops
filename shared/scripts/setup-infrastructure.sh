@@ -2,7 +2,14 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
+
+# Load .env if exists
+if [ -f "$ROOT_DIR/.env" ]; then
+    set -a
+    source "$ROOT_DIR/.env"
+    set +a
+fi
 
 # Colors
 RED='\033[0;31m'
@@ -93,6 +100,13 @@ minikube addons enable metrics-server 2>/dev/null || true
 echo_header "Installing Gateway API CRDs"
 chmod +x "$ROOT_DIR/shared/infrastructure/gateway-api/setup.sh"
 "$ROOT_DIR/shared/infrastructure/gateway-api/setup.sh"
+
+# ============================================
+# Create monitoring namespace (for Cilium dashboards)
+# ============================================
+
+echo_info "Creating monitoring namespace for Cilium dashboards..."
+kubectl create namespace monitoring --dry-run=client -o yaml | kubectl apply -f -
 
 # ============================================
 # Install Cilium CNI with Gateway API
@@ -191,6 +205,26 @@ chmod +x "$ROOT_DIR/shared/infrastructure/argocd/setup.sh"
 echo_header "Installing Monitoring Stack"
 chmod +x "$ROOT_DIR/shared/infrastructure/monitoring/setup.sh"
 "$ROOT_DIR/shared/infrastructure/monitoring/setup.sh"
+
+# ============================================
+# Enable Cilium ServiceMonitors (now that CRDs exist)
+# ============================================
+
+echo_header "Enabling Cilium ServiceMonitors"
+echo_info "Now that Prometheus CRDs are installed, enabling Cilium metrics collection..."
+
+helm upgrade cilium cilium/cilium \
+  --namespace kube-system \
+  --reuse-values \
+  --set prometheus.serviceMonitor.enabled=true \
+  --set prometheus.serviceMonitor.labels.release=kube-prometheus-stack \
+  --set hubble.metrics.serviceMonitor.enabled=true \
+  --set hubble.metrics.serviceMonitor.labels.release=kube-prometheus-stack \
+  --set operator.prometheus.serviceMonitor.enabled=true \
+  --set operator.prometheus.serviceMonitor.labels.release=kube-prometheus-stack \
+  --wait --timeout 5m
+
+echo_info "Cilium ServiceMonitors enabled"
 
 # ============================================
 # Install External-DNS (optional, for domain mirrors)

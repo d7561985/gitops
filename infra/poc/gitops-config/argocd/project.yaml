@@ -6,6 +6,9 @@ kind: AppProject
 metadata:
   name: gitops-poc-dzha
   namespace: argocd
+  annotations:
+    # Apply project before applications
+    argocd.argoproj.io/sync-wave: "-100"
 spec:
   description: "GitOps POC project for gitops-poc-dzha"
 

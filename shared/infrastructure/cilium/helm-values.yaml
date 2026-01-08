@@ -63,11 +63,11 @@ hubble:
       # httpV2 provides better labels than http (includes status code)
       - httpV2:labelsContext=source_namespace,source_workload,destination_namespace,destination_workload,traffic_direction
 
-    # Create ServiceMonitor for Prometheus Operator
+    # ServiceMonitor disabled - CRDs not available at Cilium install time
+    # Prometheus metrics will be scraped via kube-prometheus-stack additionalScrapeConfigs
+    # or enable ServiceMonitors manually after monitoring stack is installed
     serviceMonitor:
-      enabled: true
-      labels:
-        release: kube-prometheus-stack
+      enabled: false
 
     # Grafana dashboards as ConfigMaps
     dashboards:
@@ -82,12 +82,16 @@ hubble:
 prometheus:
   enabled: true
 
-  # Create ServiceMonitor for Prometheus Operator
+  # ServiceMonitor disabled - CRDs not available at Cilium install time
+  # To enable after monitoring stack is installed, run:
+  #   helm upgrade cilium cilium/cilium -n kube-system -f helm-values.yaml \
+  #     --set prometheus.serviceMonitor.enabled=true \
+  #     --set hubble.metrics.serviceMonitor.enabled=true \
+  #     --set operator.prometheus.serviceMonitor.enabled=true
   serviceMonitor:
-    enabled: true
+    enabled: false
     labels:
       release: kube-prometheus-stack
-    # Scrape interval
     interval: 30s
 
 # Cilium Agent Grafana dashboards
@@ -105,7 +109,7 @@ operator:
   prometheus:
     enabled: true
     serviceMonitor:
-      enabled: true
+      enabled: false
       labels:
         release: kube-prometheus-stack
   # Operator Grafana dashboards
