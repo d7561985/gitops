@@ -67,10 +67,19 @@ type CircuitBreakerConf struct {
 	MaxRetries         int `yaml:"max_retries"`          // Max retries
 }
 
+// TLSConf configures TLS for upstream connections
+// SNI is used both for TLS handshake and Host header rewrite (for ingress routing)
+type TLSConf struct {
+	Enabled bool   `yaml:"enabled"`           // Enable TLS for upstream
+	SNI     string `yaml:"sni,omitempty"`     // SNI for TLS + Host header (auto-detected from addr if empty)
+	CACert  string `yaml:"ca_cert,omitempty"` // Custom CA cert path (uses system CA if empty)
+}
+
 type ClusterConf struct {
 	Name           string              `yaml:"name"`
 	Addr           string              `yaml:"addr"`
 	Type           string              `yaml:"type"`            // "grpc" or "http"
+	TLS            *TLSConf            `yaml:"tls"`             // Optional TLS configuration
 	HealthCheck    *HealthCheckConf    `yaml:"health_check"`    // Optional health check
 	CircuitBreaker *CircuitBreakerConf `yaml:"circuit_breaker"` // Optional circuit breaker
 }
@@ -142,6 +151,42 @@ func (c ClusterConf) IsGRPC() bool {
 
 func (c ClusterConf) IsHTTP() bool {
 	return c.Type == "http"
+}
+
+func (c ClusterConf) IsTLS() bool {
+	return c.TLS != nil && c.TLS.Enabled
+}
+
+// GetSNI returns SNI for TLS and Host header rewrite
+// If not set explicitly, auto-detects from address hostname
+func (c ClusterConf) GetSNI() string {
+	if c.TLS != nil && c.TLS.SNI != "" {
+		return c.TLS.SNI
+	}
+	// Auto-detect from address (strip port)
+	addr := c.Addr
+	if idx := strings.LastIndex(addr, ":"); idx != -1 {
+		addr = addr[:idx]
+	}
+	return addr
+}
+
+func (c ClusterConf) GetCACert() string {
+	if c.TLS != nil && c.TLS.CACert != "" {
+		return c.TLS.CACert
+	}
+	// Try common system CA paths
+	caPaths := []string{
+		"/etc/ssl/certs/ca-certificates.crt", // Debian/Ubuntu
+		"/etc/ssl/cert.pem",                  // Alpine/macOS
+		"/etc/pki/tls/certs/ca-bundle.crt",   // RHEL/CentOS
+	}
+	for _, path := range caPaths {
+		if _, err := os.Stat(path); err == nil {
+			return path
+		}
+	}
+	return "/etc/ssl/certs/ca-certificates.crt"
 }
 
 func (r *RateLimitConf) GetFillIntervalSeconds() string {

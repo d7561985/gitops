@@ -1,0 +1,101 @@
+api_route: /api/
+
+# TLS Example Configuration
+# Demonstrates various TLS scenarios for upstream connections
+
+clusters:
+  # 1. Basic TLS - Public HTTPS endpoint
+  # SNI auto-detected from address hostname
+  - name: example_com
+    addr: "example.com:443"
+    type: "http"
+    tls:
+      enabled: true
+
+  # 2. Cross-cluster routing via Ingress
+  # Connect to ingress IP with custom Host header for routing
+  - name: remote_cluster
+    addr: "10.0.0.50:443"           # Ingress controller IP
+    type: "http"
+    tls:
+      enabled: true
+      sni: "api.remote-cluster.com" # Virtual host for ingress routing
+
+  # 3. gRPC with TLS (uses h2 ALPN)
+  - name: secure_grpc
+    addr: "grpc.example.com:443"
+    type: "grpc"
+    tls:
+      enabled: true
+
+  # 4. Custom CA certificate (internal PKI)
+  - name: internal_service
+    addr: "secure.internal:443"
+    type: "http"
+    tls:
+      enabled: true
+      sni: "secure.internal"
+      ca_cert: "/etc/ssl/internal-ca.crt"
+
+  # 5. Non-TLS service (backward compatibility)
+  - name: legacy_service
+    addr: "old-service:8080"
+    type: "http"
+    # No TLS - plain HTTP
+
+apis:
+  # Example.com public API
+  - name: "Example"
+    cluster: "example_com"
+    auth:
+      policy: "no-need"
+    methods:
+      - name: "Get"
+        auth:
+          policy: "no-need"
+
+  # Remote cluster API (routed via ingress)
+  - name: "RemoteAPI"
+    cluster: "remote_cluster"
+    auth:
+      policy: "required"
+    methods:
+      - name: "GetData"
+        auth:
+          policy: "required"
+      - name: "UpdateData"
+        auth:
+          policy: "required"
+          rate_limit:
+            period: "1m"
+            count: 100
+
+  # Secure gRPC service
+  - name: "SecureService"
+    cluster: "secure_grpc"
+    auth:
+      policy: "required"
+    methods:
+      - name: "Call"
+        auth:
+          policy: "required"
+
+  # Internal service with custom CA
+  - name: "InternalService"
+    cluster: "internal_service"
+    auth:
+      policy: "required"
+    methods:
+      - name: "Process"
+        auth:
+          policy: "required"
+
+  # Legacy non-TLS service
+  - name: "LegacyService"
+    cluster: "legacy_service"
+    auth:
+      policy: "no-need"
+    methods:
+      - name: "OldMethod"
+        auth:
+          policy: "no-need"

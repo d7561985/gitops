@@ -13,7 +13,8 @@ var (
                 route:
                   cluster: {{.ClusterName}}
                   timeout: 0s
-                  prefix_rewrite: "/{{.APIName}}"
+                  prefix_rewrite: "/{{.APIName}}"{{if .HostRewrite}}
+                  host_rewrite_literal: "{{.HostRewrite}}"{{end}}
                   max_stream_duration:
                     max_stream_duration: 600s
                     grpc_timeout_header_max: 0s
@@ -26,7 +27,8 @@ var (
                 route:
                   cluster: {{.ClusterName}}
                   timeout: 30s
-                  prefix_rewrite: "/{{.MethodName}}"
+                  prefix_rewrite: "/{{.MethodName}}"{{if .HostRewrite}}
+                  host_rewrite_literal: "{{.HostRewrite}}"{{end}}
 {{.RateLimitConfig}}
 `))
 
@@ -39,7 +41,8 @@ var (
                   regex_rewrite:
                     pattern:
                       regex: "^{{.APIRoute}}{{.ServiceName}}/(.*)"
-                    substitution: "/\\1"
+                    substitution: "/\\1"{{if .HostRewrite}}
+                  host_rewrite_literal: "{{.HostRewrite}}"{{end}}
 {{.RateLimitConfig}}
 `))
 	envoyGrpcClusterTmpl = template.Must(template.New("grpcClusterTmpl").Parse(`
@@ -63,7 +66,17 @@ var (
               address:
                 socket_address:
                   address: "{{.ClusterAddr}}"
-                  port_value: {{.ClusterPort}}
+                  port_value: {{.ClusterPort}}{{if .TLSEnabled}}
+    transport_socket:
+      name: envoy.transport_sockets.tls
+      typed_config:
+        "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext
+        sni: "{{.TLSSNI}}"
+        common_tls_context:
+          validation_context:
+            trusted_ca:
+              filename: "{{.TLSCACert}}"
+          alpn_protocols: ["h2"]{{end}}
     upstream_connection_options:
         tcp_keepalive:
             keepalive_probes: 2
@@ -84,7 +97,17 @@ var (
               address:
                 socket_address:
                   address: "{{.ClusterAddr}}"
-                  port_value: {{.ClusterPort}}
+                  port_value: {{.ClusterPort}}{{if .TLSEnabled}}
+    transport_socket:
+      name: envoy.transport_sockets.tls
+      typed_config:
+        "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext
+        sni: "{{.TLSSNI}}"
+        common_tls_context:
+          validation_context:
+            trusted_ca:
+              filename: "{{.TLSCACert}}"
+          alpn_protocols: ["http/1.1"]{{end}}
     upstream_connection_options:
         tcp_keepalive:
             keepalive_probes: 2
@@ -267,10 +290,12 @@ static_resources:
 )
 
 func GenerateEnvoyConfig(cfg *APIConf, outFile string) error {
-	// Build cluster type map for quick lookup
+	// Build cluster maps for quick lookup
 	clusterTypes := make(map[string]bool) // true = HTTP, false = gRPC
+	clusterMap := make(map[string]ClusterConf)
 	for _, cl := range cfg.Clusters {
 		clusterTypes[cl.Name] = cl.IsHTTP()
+		clusterMap[cl.Name] = cl
 	}
 
 	routesBuf := new(bytes.Buffer)
@@ -312,6 +337,12 @@ func GenerateEnvoyConfig(cfg *APIConf, outFile string) error {
 				routeTmpl = envoyGrpcRouteTmpl
 			}
 
+			// Get host rewrite for TLS clusters (used by ingress for routing)
+			var hostRewrite string
+			if cluster, ok := clusterMap[api.Cluster]; ok && cluster.IsTLS() {
+				hostRewrite = cluster.GetSNI()
+			}
+
 			routeData := struct {
 				APIRoute        string
 				APIName         string
@@ -319,6 +350,7 @@ func GenerateEnvoyConfig(cfg *APIConf, outFile string) error {
 				ServiceName     string
 				ClusterName     string
 				RateLimitConfig string
+				HostRewrite     string
 			}{
 				APIRoute:        cfg.APIRoute,
 				APIName:         routePath,
@@ -326,6 +358,7 @@ func GenerateEnvoyConfig(cfg *APIConf, outFile string) error {
 				ServiceName:     api.Name,
 				ClusterName:     api.Cluster,
 				RateLimitConfig: rateLimitConfig,
+				HostRewrite:     hostRewrite,
 			}
 
 			err := routeTmpl.Execute(routesBuf, routeData)
@@ -335,6 +368,12 @@ func GenerateEnvoyConfig(cfg *APIConf, outFile string) error {
 		}
 
 		// Also generate route for the API itself (without method) - catch-all for HTTP
+		// Get host rewrite for TLS clusters
+		var hostRewrite string
+		if cluster, ok := clusterMap[api.Cluster]; ok && cluster.IsTLS() {
+			hostRewrite = cluster.GetSNI()
+		}
+
 		if isHTTPCluster {
 			// For HTTP clusters, use regex rewrite to strip service name
 			routeData := struct {
@@ -342,11 +381,13 @@ func GenerateEnvoyConfig(cfg *APIConf, outFile string) error {
 				ServiceName     string
 				ClusterName     string
 				RateLimitConfig string
+				HostRewrite     string
 			}{
 				APIRoute:        cfg.APIRoute,
 				ServiceName:     api.Name,
 				ClusterName:     api.Cluster,
 				RateLimitConfig: "",
+				HostRewrite:     hostRewrite,
 			}
 			err := envoyHttpApiRouteTmpl.Execute(routesBuf, routeData)
 			if err != nil {
@@ -361,6 +402,7 @@ func GenerateEnvoyConfig(cfg *APIConf, outFile string) error {
 				ServiceName     string
 				ClusterName     string
 				RateLimitConfig string
+				HostRewrite     string
 			}{
 				APIRoute:        cfg.APIRoute,
 				APIName:         api.Name,
@@ -368,6 +410,7 @@ func GenerateEnvoyConfig(cfg *APIConf, outFile string) error {
 				ServiceName:     api.Name,
 				ClusterName:     api.Cluster,
 				RateLimitConfig: "",
+				HostRewrite:     hostRewrite,
 			}
 			err := envoyGrpcRouteTmpl.Execute(routesBuf, routeData)
 			if err != nil {
@@ -432,12 +475,18 @@ func GenerateEnvoyConfig(cfg *APIConf, outFile string) error {
 			ClusterPort          string
 			HealthCheckConfig    string
 			CircuitBreakerConfig string
+			TLSEnabled           bool
+			TLSSNI               string
+			TLSCACert            string
 		}{
 			ClusterName:          cl.Name,
 			ClusterAddr:          cl.AddrHost(),
 			ClusterPort:          cl.AddrPort(),
 			HealthCheckConfig:    healthCheckConfig,
 			CircuitBreakerConfig: circuitBreakerConfig,
+			TLSEnabled:           cl.IsTLS(),
+			TLSSNI:               cl.GetSNI(),
+			TLSCACert:            cl.GetCACert(),
 		}
 
 		// Choose template based on cluster type
