@@ -28,7 +28,16 @@ var (
                   cluster: {{.ClusterName}}
                   timeout: 30s
                   prefix_rewrite: "/{{.MethodName}}"{{if .HostRewrite}}
-                  host_rewrite_literal: "{{.HostRewrite}}"{{end}}
+                  host_rewrite_literal: "{{.HostRewrite}}"
+                request_headers_to_add:
+                  - header:
+                      key: "x-forwarded-proto"
+                      value: "https"
+                    append_action: OVERWRITE_IF_EXISTS_OR_ADD
+                  - header:
+                      key: "x-forwarded-for"
+                      value: "%DOWNSTREAM_REMOTE_ADDRESS%"
+                    append_action: APPEND_IF_ABSENT{{end}}
 {{.RateLimitConfig}}
 `))
 
@@ -42,7 +51,16 @@ var (
                     pattern:
                       regex: "^{{.APIRoute}}{{.ServiceName}}/(.*)"
                     substitution: "/\\1"{{if .HostRewrite}}
-                  host_rewrite_literal: "{{.HostRewrite}}"{{end}}
+                  host_rewrite_literal: "{{.HostRewrite}}"
+                request_headers_to_add:
+                  - header:
+                      key: "x-forwarded-proto"
+                      value: "https"
+                    append_action: OVERWRITE_IF_EXISTS_OR_ADD
+                  - header:
+                      key: "x-forwarded-for"
+                      value: "%DOWNSTREAM_REMOTE_ADDRESS%"
+                    append_action: APPEND_IF_ABSENT{{end}}
 {{.RateLimitConfig}}
 `))
 	envoyGrpcClusterTmpl = template.Must(template.New("grpcClusterTmpl").Parse(`
