@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"os"
+	"strconv"
 	"text/template"
 )
 
@@ -28,8 +29,12 @@ var (
                   cluster: {{.ClusterName}}
                   timeout: 30s
                   prefix_rewrite: "/{{.MethodName}}"{{if .HostRewrite}}
-                  host_rewrite_literal: "{{.HostRewrite}}"
+                  host_rewrite_literal: "{{.HostRewrite}}"{{end}}
                 request_headers_to_add:
+                  - header:
+                      key: "x-real-ip"
+                      value: "%DOWNSTREAM_REMOTE_ADDRESS_WITHOUT_PORT%"
+                    append_action: OVERWRITE_IF_EXISTS_OR_ADD{{if .HostRewrite}}
                   - header:
                       key: "x-forwarded-proto"
                       value: "https"
@@ -51,8 +56,12 @@ var (
                     pattern:
                       regex: "^{{.APIRoute}}{{.ServiceName}}/(.*)"
                     substitution: "/\\1"{{if .HostRewrite}}
-                  host_rewrite_literal: "{{.HostRewrite}}"
+                  host_rewrite_literal: "{{.HostRewrite}}"{{end}}
                 request_headers_to_add:
+                  - header:
+                      key: "x-real-ip"
+                      value: "%DOWNSTREAM_REMOTE_ADDRESS_WITHOUT_PORT%"
+                    append_action: OVERWRITE_IF_EXISTS_OR_ADD{{if .HostRewrite}}
                   - header:
                       key: "x-forwarded-proto"
                       value: "https"
@@ -213,7 +222,7 @@ static_resources:
           codec_type: auto
           stat_prefix: ingress_http
           use_remote_address: true
-          xff_num_trusted_hops: 0
+          xff_num_trusted_hops: {{.XffNumTrustedHops}}
           access_log:
             - name: envoy.access_loggers.stdout
               typed_config:
@@ -527,12 +536,14 @@ func GenerateEnvoyConfig(cfg *APIConf, outFile string) error {
 		AuthAdapterHost   string
 		OpenTelemetryHost string
 		OpenTelemetryPort string
+		XffNumTrustedHops int
 	}{
 		Routes:            string(routesBuf.Bytes()),
 		Clusters:          string(clustersBuf.Bytes()),
 		AuthAdapterHost:   "127.0.0.1",
 		OpenTelemetryHost: "127.0.0.1",
 		OpenTelemetryPort: "4317",
+		XffNumTrustedHops: 1, // Default: trust 1 proxy hop (typical K8s ingress setup)
 	}
 
 	if authAdapterHost := os.Getenv("AUTH_ADAPTER_HOST"); authAdapterHost != "" {
@@ -545,6 +556,12 @@ func GenerateEnvoyConfig(cfg *APIConf, outFile string) error {
 
 	if otPort := os.Getenv("OPEN_TELEMETRY_PORT"); otPort != "" {
 		tmplData.OpenTelemetryPort = otPort
+	}
+
+	if xffHops := os.Getenv("XFF_NUM_TRUSTED_HOPS"); xffHops != "" {
+		if hops, err := strconv.Atoi(xffHops); err == nil && hops >= 0 {
+			tmplData.XffNumTrustedHops = hops
+		}
 	}
 
 	outF, err := os.Create(outFile)

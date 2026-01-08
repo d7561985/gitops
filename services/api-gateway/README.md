@@ -9,7 +9,8 @@ Generates optimized Envoy configurations for gRPC and HTTP services with integra
 - Per-method rate limiting
 - Health checks and circuit breakers
 - OpenTelemetry tracing
-- **TLS upstream connections with Host header override**
+- TLS upstream connections with Host header override
+- **Client IP forwarding (X-Real-IP) for services behind proxies**
 
 ## Quick Start
 
@@ -185,6 +186,177 @@ docker run --rm -p 8080:8080 \
 curl http://localhost:8080/api/Example/Get
 ```
 
+## Client IP Forwarding (X-Real-IP)
+
+When Envoy runs behind a load balancer or ingress controller, the direct connection IP is the proxy's IP, not the real client IP. This feature extracts the real client IP from the `X-Forwarded-For` header and forwards it to upstream services.
+
+### How It Works
+
+```
+Client (1.2.3.4) → Ingress (10.0.0.1) → Envoy → Backend
+                   │
+                   └─ adds: X-Forwarded-For: 1.2.3.4
+                                    │
+                                    ▼
+                         xff_num_trusted_hops: 1
+                         extracts: 1.2.3.4 from XFF
+                                    │
+                                    ▼
+                         X-Real-IP: 1.2.3.4 → Backend
+```
+
+### Configuration
+
+The number of trusted proxy hops is controlled by the `XFF_NUM_TRUSTED_HOPS` environment variable:
+
+| Environment Variable | Default | Description |
+|---------------------|---------|-------------|
+| `XFF_NUM_TRUSTED_HOPS` | `1` | Number of trusted proxies in front of Envoy |
+
+### Examples
+
+#### Single Proxy (Kubernetes Ingress)
+
+Most common setup: Client → Ingress → Envoy
+
+```bash
+# Default value (1) works for this setup
+export XFF_NUM_TRUSTED_HOPS=1
+go run . -api-conf=config.yaml -out-envoy-conf=envoy.yaml
+```
+
+#### Multiple Proxies (CloudFlare + Ingress)
+
+Client → CloudFlare → Ingress → Envoy
+
+```bash
+export XFF_NUM_TRUSTED_HOPS=2
+go run . -api-conf=config.yaml -out-envoy-conf=envoy.yaml
+```
+
+#### Direct Client Connection (Edge Deployment)
+
+Client → Envoy (no proxy in front)
+
+```bash
+export XFF_NUM_TRUSTED_HOPS=0
+go run . -api-conf=config.yaml -out-envoy-conf=envoy.yaml
+```
+
+### Example config.yaml
+
+No special configuration needed - X-Real-IP is automatically added to all HTTP routes:
+
+```yaml
+api_route: /api/
+
+clusters:
+  - name: backend-api
+    addr: "backend-service:8080"
+    type: "http"
+    health_check:
+      path: "/health"
+      interval_seconds: 10
+
+apis:
+  - name: myapp
+    cluster: backend-api
+    auth: {policy: no-need}
+    methods:
+      - name: users
+        auth: {policy: required}
+      - name: public
+        auth: {policy: no-need}
+```
+
+Generate and run:
+
+```bash
+# Set trusted hops (1 for single ingress)
+export XFF_NUM_TRUSTED_HOPS=1
+
+# Generate Envoy config
+go run . -api-conf=config.yaml -out-envoy-conf=envoy.yaml
+
+# Verify X-Real-IP is added to routes
+grep -A5 "x-real-ip" envoy.yaml
+```
+
+### Generated Envoy Config
+
+The generator produces:
+
+**HTTP Connection Manager settings:**
+```yaml
+use_remote_address: true
+xff_num_trusted_hops: 1  # from XFF_NUM_TRUSTED_HOPS env var
+```
+
+**Route-level header injection (HTTP routes only):**
+```yaml
+request_headers_to_add:
+  - header:
+      key: "x-real-ip"
+      value: "%DOWNSTREAM_REMOTE_ADDRESS_WITHOUT_PORT%"
+    append_action: OVERWRITE_IF_EXISTS_OR_ADD
+```
+
+### Reading Client IP in Backend Services
+
+After configuration, backend services receive the real client IP in the `X-Real-IP` header:
+
+**Go:**
+```go
+func handler(w http.ResponseWriter, r *http.Request) {
+    clientIP := r.Header.Get("X-Real-IP")
+    // fallback to X-Forwarded-For if needed
+    if clientIP == "" {
+        clientIP = r.Header.Get("X-Forwarded-For")
+    }
+    log.Printf("Request from: %s", clientIP)
+}
+```
+
+**Node.js:**
+```javascript
+app.get('/api/endpoint', (req, res) => {
+    const clientIP = req.headers['x-real-ip'] || req.headers['x-forwarded-for'];
+    console.log(`Request from: ${clientIP}`);
+});
+```
+
+**PHP:**
+```php
+$clientIP = $_SERVER['HTTP_X_REAL_IP'] ?? $_SERVER['HTTP_X_FORWARDED_FOR'] ?? $_SERVER['REMOTE_ADDR'];
+```
+
+### Troubleshooting
+
+**Problem:** Backend still sees proxy IP instead of client IP
+
+**Solutions:**
+
+1. **Check `XFF_NUM_TRUSTED_HOPS` value:**
+   - Count the number of proxies between the client and Envoy
+   - Set `XFF_NUM_TRUSTED_HOPS` to that number
+
+2. **Verify ingress forwards X-Forwarded-For:**
+   ```bash
+   # For nginx-ingress, check ConfigMap
+   kubectl get configmap -n ingress-nginx ingress-nginx-controller -o yaml | grep use-forwarded-headers
+   ```
+
+3. **Debug with access logs:**
+   ```bash
+   # Check Envoy logs for XFF header
+   kubectl logs <envoy-pod> | grep "x-forwarded-for"
+   ```
+
+4. **Test header chain:**
+   ```bash
+   curl -H "X-Forwarded-For: 1.2.3.4" http://your-ingress/api/debug
+   ```
+
 ## Other Features
 
 ### Health Checks
@@ -238,6 +410,7 @@ apis:
 | `AUTH_ADAPTER_HOST` | `127.0.0.1` | ext_authz service host |
 | `OPEN_TELEMETRY_HOST` | `127.0.0.1` | OpenTelemetry collector host |
 | `OPEN_TELEMETRY_PORT` | `4317` | OpenTelemetry collector port |
+| `XFF_NUM_TRUSTED_HOPS` | `1` | Number of trusted proxies for client IP extraction from X-Forwarded-For |
 
 ## Building
 
