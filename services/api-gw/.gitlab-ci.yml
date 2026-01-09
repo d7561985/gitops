@@ -20,7 +20,7 @@ variables:
   IMAGE_NAME: ${CI_REGISTRY_IMAGE}
   # Golden image version - update when api-gateway-image releases new version
   BASE_IMAGE: registry.gitlab.com/gitops-poc-dzha/shared/base/api-gateway-image
-  BASE_VERSION: "latest"  # TODO: Pin to specific version like v1.0.0
+  BASE_VERSION: "v1.0.0"  # Pinned to stable version
   RELEASE_TIMEOUT: "300"
 
 stages:
@@ -40,6 +40,8 @@ build:
     DOCKER_TLS_CERTDIR: "/certs"
   before_script:
     - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+    # Additional login for cross-project registry access using PAT
+    - echo "$CI_PUSH_TOKEN" | docker login -u oauth2 --password-stdin registry.gitlab.com
   script:
     - |
       # Determine image tag
