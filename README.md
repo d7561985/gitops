@@ -39,12 +39,15 @@ make stop-proxy        # Остановить все прокси
 ```
 GitLab (gitlab.com/${GITLAB_GROUP}/):
 │
-├── api-gateway-image/     ← Golden image (Envoy + config generator)
-├── api-gw/                ← Config repo (config.yaml + .cicd/)
-├── auth-adapter/          ← Репо сервиса (sidecar)
-├── web-grpc/              ← Репо сервиса
-├── web-http/              ← Репо сервиса
-├── health-demo/           ← Репо сервиса
+├── services/
+│   ├── api-gw/            ← Config repo (config.yaml + .cicd/)
+│   ├── web-grpc/          ← Репо сервиса
+│   ├── web-http/          ← Репо сервиса
+│   └── health-demo/       ← Репо сервиса
+│
+├── shared/base/           ← Базовые образы (golden images)
+│   ├── api-gateway-image/ ← Envoy + config generator
+│   └── auth-adapter/      ← gRPC ext_authz sidecar
 │
 └── gitops-config/         ← Этот репозиторий (инфраструктура + ArgoCD)
 ```
@@ -69,9 +72,9 @@ service-repo/
 
 | Сервис | Описание | Исходный код | Docker образ |
 |--------|----------|--------------|--------------|
-| api-gateway-image | Golden image: Envoy + config generator | services/api-gateway-image | GitLab Registry |
+| api-gateway-image | Golden image: Envoy + config generator | shared/base/api-gateway-image | GitLab Registry |
+| auth-adapter | gRPC ext_authz sidecar | shared/base/auth-adapter | GitLab Registry |
 | api-gw | Config repo: config.yaml + deployment | services/api-gw | GitLab Registry (micro-image) |
-| auth-adapter | gRPC ext_authz sidecar | services/auth-adapter | GitLab Registry |
 | health-demo | Простой health check сервис | Локальный | GitLab Registry |
 | web-grpc | gRPC backend (fake-service) | [nicholasjackson/fake-service](https://github.com/nicholasjackson/fake-service) | Docker Hub |
 | web-http | HTTP backend (fake-service) | [nicholasjackson/fake-service](https://github.com/nicholasjackson/fake-service) | Docker Hub |
@@ -324,7 +327,7 @@ poc-prod/         ← api-gw, auth-adapter, web-grpc, web-http, health-demo
 
    # Пример для api-gateway-image (golden image)
    git clone git@gitlab.com:${GITLAB_GROUP}/api-gateway-image.git
-   cp -r services/api-gateway-image/* api-gateway-image/
+   cp -r shared/base/api-gateway-image/* api-gateway-image/
    cd api-gateway-image && git add . && git commit -m "Initial" && git push
    ```
 

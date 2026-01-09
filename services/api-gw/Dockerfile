@@ -10,7 +10,7 @@
 # Build is fast (~5 seconds) because only config.yaml is added.
 # =============================================================================
 
-ARG BASE_IMAGE=registry.gitlab.com/gitops-poc-dzha/services/api-gateway-image
+ARG BASE_IMAGE=registry.gitlab.com/gitops-poc-dzha/shared/base/api-gateway-image
 ARG BASE_VERSION=latest
 
 FROM ${BASE_IMAGE}:${BASE_VERSION}

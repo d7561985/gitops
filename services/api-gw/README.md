@@ -6,7 +6,7 @@ Configuration repository for API Gateway deployment. Contains routes, clusters, 
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                      api-gateway-image                          │
+│               shared/base/api-gateway-image                     │
 │  (Golden Image - Envoy + Config Generator)                      │
 │  Versioned: v1.0.0, v1.1.0, etc.                               │
 │  Changes rarely                                                 │
@@ -15,7 +15,7 @@ Configuration repository for API Gateway deployment. Contains routes, clusters, 
                               │ FROM api-gateway-image:v1.0.0
                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                         api-gw (this repo)                      │
+│                    services/api-gw (this repo)                  │
 │  ├── config.yaml      ← Developers edit this!                   │
 │  ├── Dockerfile       ← Adds config.yaml to golden image        │
 │  └── .cicd/           ← Deployment configuration                │

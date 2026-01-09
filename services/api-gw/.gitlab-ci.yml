@@ -19,7 +19,7 @@ variables:
   SERVICE_NAME: "api-gw"
   IMAGE_NAME: ${CI_REGISTRY_IMAGE}
   # Golden image version - update when api-gateway-image releases new version
-  BASE_IMAGE: registry.gitlab.com/gitops-poc-dzha/services/api-gateway-image
+  BASE_IMAGE: registry.gitlab.com/gitops-poc-dzha/shared/base/api-gateway-image
   BASE_VERSION: "latest"  # TODO: Pin to specific version like v1.0.0
   RELEASE_TIMEOUT: "300"
 
