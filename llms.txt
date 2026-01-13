@@ -1,0 +1,514 @@
+# GitOps Platform POC
+
+> GitOps-платформа для Kubernetes с ArgoCD, Vault, Cilium Gateway API и автоматической генерацией gRPC кода. Платформа обеспечивает multi-tenancy (dev/staging/prod), pull-based деплой через ArgoCD, секреты через HashiCorp Vault + VSO, observability через Prometheus/Grafana/Hubble.
+
+## Ключевые концепции
+
+- **GitOps подход**: Единый источник истины в Git, ArgoCD синхронизирует состояние кластера
+- **k8app Helm chart (v3.8.0)**: Унифицированный chart для всех микросервисов
+- **Vault + VSO**: Автоматическая синхронизация секретов из Vault в Kubernetes
+- **Cilium Gateway API**: Современный ingress вместо deprecated Ingress
+- **Proto/gRPC генерация**: Автоматическая генерация для 5 языков (Go, Node.js, PHP, Python, Web)
+- **Multi-tenancy**: Поддержка dev/staging/prod на одном кластере
+- **Connect Protocol**: Современная альтернатива gRPC-Web для браузеров
+
+---
+
+## Главные документы входа
+
+### README.md (Главный)
+Полное руководство по проекту: архитектура, Quick Start, Vault secrets, Monitoring, Troubleshooting.
+- **Когда читать**: Первое знакомство с проектом, понимание всей архитектуры
+- **Ключевые секции**: Архитектура, Quick Start, Pull-based GitOps, Vault Secrets, Tech Stack
+- [README.md](README.md)
+
+### PLATFORM_REPORT.md / PLATFORM_REPORT_RU.md
+Executive Brief для инвесторов и C-Level: ROI, бизнес-ценность, KPI.
+- **Когда читать**: Для презентации платформы stakeholders, понимания бизнес-ценности
+- **Ключевые данные**: 10x ускорение деплоев, 99.5% успешность, 40% экономия
+- [PLATFORM_REPORT.md](PLATFORM_REPORT.md) (English)
+- [PLATFORM_REPORT_RU.md](PLATFORM_REPORT_RU.md) (Русский)
+
+---
+
+## Быстрый старт и первоначальная настройка
+
+### PREFLIGHT-CHECKLIST.md
+Полный чеклист развёртывания с нуля: GitLab токены, CloudFlare API, Vault setup, ArgoCD bootstrap.
+- **Когда читать**: При первом развёртывании платформы или восстановлении после сбоя
+- **Ключевые секции**: Этапы 1-7, Disaster Recovery, Preview Environments setup
+- [docs/PREFLIGHT-CHECKLIST.md](docs/PREFLIGHT-CHECKLIST.md)
+
+### capacity-planning.md
+Планирование ресурсов кластера и overhead платформы.
+- **Когда читать**: При выборе размера нод, планировании бюджета
+- **Ключевые данные**: Static overhead ~1.2 CPU/2Gi, per-node ~60m/400Mi
+- [docs/capacity-planning.md](docs/capacity-planning.md)
+
+### demo-scenario-v3.md
+Сценарий демонстрации платформы на 60 минут с пошаговыми инструкциями.
+- **Когда читать**: Для подготовки демо платформы команде или руководству
+- **Ключевые секции**: 11 частей демо, рабочие URL, WOW-эффекты
+- [demo-scenario-v3.md](demo-scenario-v3.md)
+
+---
+
+## Создание и настройка сервисов
+
+### new-service-guide.md
+Пошаговое руководство по созданию нового микросервиса.
+- **Когда читать**: При добавлении нового сервиса в платформу
+- **Ключевые секции**: Трёхуровневое наследование конфигов, Dockerfile шаблоны (distroless), GitLab CI с semantic versioning
+- **Важно**: Файлы .cicd/default.yaml, .cicd/dev.yaml, .gitlab-ci.yml
+- [docs/new-service-guide.md](docs/new-service-guide.md)
+
+### multi-tenancy-guide.md
+Архитектура multi-tenancy и configuration guidelines.
+- **Когда читать**: При настройке environments, добавлении нового brand/product
+- **Ключевые паттерны**: Namespace strategy ({prefix}-{env}), Vault paths ({prefix}/{service}/{env}/config)
+- [docs/multi-tenancy-guide.md](docs/multi-tenancy-guide.md)
+
+### shared/templates/service-repo/README.md
+Шаблон репозитория микросервиса с полной документацией.
+- **Когда читать**: При создании нового сервиса, настройке Dockerfile, secrets
+- **Ключевые темы**: Dockerfile шаблоны (Go, Python, Node.js, PHP, Angular), GitOps modes, Vault secrets, Private modules
+- [shared/templates/service-repo/README.md](shared/templates/service-repo/README.md)
+
+---
+
+## Proto/gRPC инфраструктура
+
+### proto-grpc-infrastructure.md
+Инфраструктура автоматической генерации gRPC кода.
+- **Когда читать**: При создании gRPC сервиса, настройке proto генерации
+- **Ключевые концепции**: Buf CLI, Zero-Config CI, генерация для Go/Node.js/PHP/Python/Web (Connect-ES)
+- [docs/proto-grpc-infrastructure.md](docs/proto-grpc-infrastructure.md)
+
+### api/ci/README.md
+Детальная документация Proto/gRPC CI/CD компонентов.
+- **Когда читать**: Для настройки CI генерации, понимания Connect-ES v2, CloudFlare Tunnel fix
+- **Ключевые секции**: Zero-Config usage, PHP namespace, Web Connect-ES v2, CloudFlare trailer fix
+- [api/ci/README.md](api/ci/README.md)
+
+### shared/templates/proto-service/README.md
+Шаблон proto сервиса (Zero-Config).
+- **Когда читать**: При создании нового gRPC API
+- **Ключевой факт**: Нужен только .gitlab-ci.yml (3 строки) + proto файлы
+- [shared/templates/proto-service/README.md](shared/templates/proto-service/README.md)
+
+---
+
+## Connect Protocol Migration
+
+### docs/connect-migration-plan.md
+План миграции на Connect Protocol для всех сервисов.
+- **Когда читать**: При планировании миграции с gRPC-Web на Connect
+- **Порядок миграции**: Payment (Node.js) → Wager (PHP) → Game Engine (Python)
+- [docs/connect-migration-plan.md](docs/connect-migration-plan.md)
+
+### docs/connect-migration-architecture.md
+Clean Architecture для мультипротокольных сервисов.
+- **Когда читать**: При реализации сервиса с поддержкой Connect + REST
+- **Ключевые паттерны**: Domain → Application → Infrastructure → Presentation layers
+- **Примеры кода**: Node.js, PHP/Symfony, Python
+- [docs/connect-migration-architecture.md](docs/connect-migration-architecture.md)
+
+### docs/rfc-grpc-web-cloudflare-trailers.md
+RFC о проблеме gRPC-Web через CloudFlare Tunnel.
+- **Когда читать**: При отладке gRPC-Web ошибок "[unknown] missing trailer"
+- **Root cause**: CloudFlare Tunnel QUIC не поддерживает HTTP trailers
+- **Решение**: Connect Protocol или custom fetch wrapper
+- [docs/rfc-grpc-web-cloudflare-trailers.md](docs/rfc-grpc-web-cloudflare-trailers.md)
+
+---
+
+## API Gateway
+
+### services/api-gateway/README.md
+Документация API Gateway Config Generator (Envoy).
+- **Когда читать**: При настройке routing, TLS upstream, rate limiting, health checks
+- **Ключевые features**: gRPC-Web, HTTP routing, TLS proxy, Client IP forwarding (X-Real-IP)
+- [services/api-gateway/README.md](services/api-gateway/README.md)
+
+### services/api-gw/README.md
+Config repository для API Gateway (config.yaml + deployment).
+- **Когда читать**: При изменении routes/clusters в API Gateway
+- **Архитектура**: Golden Image (api-gateway-image) + Micro Image (api-gw)
+- [services/api-gw/README.md](services/api-gw/README.md)
+
+### services/api-gateway/RELEASE_NOTES.md
+Release notes для API Gateway (TLS Proxy Fix).
+- **Когда читать**: При обновлении API Gateway, понимании изменений
+- [services/api-gateway/RELEASE_NOTES.md](services/api-gateway/RELEASE_NOTES.md)
+
+### TLS_PROXY_DEBUG.md
+Отладка TLS проксирования через API Gateway.
+- **Когда читать**: При проблемах с TLS proxy, HTTP redirects вместо проксирования
+- **Решения**: x-forwarded-proto headers, SNI configuration
+- [TLS_PROXY_DEBUG.md](TLS_PROXY_DEBUG.md)
+
+---
+
+## Routing и Ingress
+
+### gateway-api-plan.md
+Архитектура Gateway API + CloudFlare Tunnel.
+- **Когда читать**: При настройке routing, понимании архитектуры ingress
+- **Компоненты**: Cilium Gateway, HTTPRoute, cloudflared
+- [docs/gateway-api-plan.md](docs/gateway-api-plan.md)
+
+### domain-mirrors-guide.md
+Настройка зеркал доменов через GitOps.
+- **Когда читать**: При добавлении альтернативных доменов для сервисов
+- **Автоматически создаёт**: Gateway listener, HTTPRoute, DNS запись, Tunnel ingress rule
+- [docs/domain-mirrors-guide.md](docs/domain-mirrors-guide.md)
+
+### preview-environments-guide.md
+Preview environments для feature branches.
+- **Когда читать**: При настройке автоматических preview для MR
+- **Требования**: Ветка должна начинаться с JIRA тега (PROJ-123-description)
+- **URL формат**: {jira-tag}.{baseDomain}
+- [docs/preview-environments-guide.md](docs/preview-environments-guide.md)
+
+### service-groups-guide.md
+Universal external access для инфраструктурных сервисов.
+- **Когда читать**: При публикации ArgoCD/Grafana/Vault через домены
+- **Формат домена**: {subdomain}.{clusterName}.{baseDomain}
+- **Важно**: Требуется CloudFlare Advanced Certificate для multi-level wildcards
+- [docs/service-groups-guide.md](docs/service-groups-guide.md)
+
+---
+
+## CI/CD и релизы
+
+### gitlab-ci-release-tracking.md
+Отслеживание релизов в GitLab CI с ArgoCD.
+- **Когда читать**: При настройке visibility деплоя в pipeline
+- **Метод**: argocd app wait для ожидания sync + health
+- [docs/gitlab-ci-release-tracking.md](docs/gitlab-ci-release-tracking.md)
+
+---
+
+## ArgoCD и Platform Configuration
+
+### infra/poc/gitops-config/argocd/README.md
+Pull-Based GitOps с ArgoCD.
+- **Когда читать**: При настройке ArgoCD, понимании sync waves, rollback
+- **Ключевые темы**: Bootstrap, Modular charts, Auto-Sync, Manual Sync для prod
+- [infra/poc/gitops-config/argocd/README.md](infra/poc/gitops-config/argocd/README.md)
+
+### infra/poc/gitops-config/platform/README.md
+Platform Configuration (модульная конфигурация).
+- **Когда читать**: При изменении platform configuration, добавлении сервисов
+- **Файлы**: base.yaml, core.yaml, service-groups.yaml, preview.yaml, ingress.yaml
+- **Sync Waves**: -10 (Bootstrap) → -5 (Service Groups) → ... → 2 (Frontend)
+- [infra/poc/gitops-config/platform/README.md](infra/poc/gitops-config/platform/README.md)
+
+---
+
+## Архитектурный аудит (детальная документация)
+
+### audit/README.md
+Индекс документов аудита платформы.
+- [audit/README.md](audit/README.md)
+
+### audit/00-executive-summary.md
+Executive Summary платформы: статус, достижения, рекомендации.
+- **Когда читать**: Для быстрого понимания текущего состояния платформы
+- [audit/00-executive-summary.md](audit/00-executive-summary.md)
+
+### audit/01-platform-architecture.md
+Детальная архитектура: ArgoCD, Vault, Cilium, multi-environment.
+- **Когда читать**: Для глубокого понимания архитектурных решений
+- [audit/01-platform-architecture.md](audit/01-platform-architecture.md)
+
+### audit/02-gitops-principles.md
+Принципы GitOps и их реализация в платформе.
+- **Когда читать**: Для понимания GitOps workflow, push vs pull режимы
+- [audit/02-gitops-principles.md](audit/02-gitops-principles.md)
+
+### audit/03-developer-experience.md
+Developer Experience: onboarding, k8app chart, CI/CD.
+- **Когда читать**: Для понимания опыта разработчика при работе с платформой
+- [audit/03-developer-experience.md](audit/03-developer-experience.md)
+
+### audit/04-api-standards.md
+API стандарты: gRPC, REST, API Gateway.
+- **Когда читать**: При проектировании API, настройке API Gateway
+- [audit/04-api-standards.md](audit/04-api-standards.md)
+
+### audit/05-team-model.md
+Team Topology: Platform Team, Stream-aligned Teams, RACI.
+- **Когда читать**: При планировании командной структуры
+- [audit/05-team-model.md](audit/05-team-model.md)
+
+### audit/06-observability.md
+Observability: Prometheus, Grafana, Hubble, eBPF.
+- **Когда читать**: При настройке мониторинга, debugging network issues
+- **Ключевые команды**: hubble observe, kubectl logs, Grafana dashboards
+- [audit/06-observability.md](audit/06-observability.md)
+
+### audit/07-multi-tenancy.md
+Multi-Tenancy Architecture: namespaces, Vault isolation, network policies.
+- **Когда читать**: При добавлении нового tenant/environment
+- [audit/07-multi-tenancy.md](audit/07-multi-tenancy.md)
+
+### docs/monitoring-audit.md
+Отчет аудита мониторинга Prometheus targets.
+- **Когда читать**: При проверке метрик, настройке мониторинга сервисов
+- [docs/monitoring-audit.md](docs/monitoring-audit.md)
+
+---
+
+## Embodiment (план внедрения)
+
+### docs/embodiment/README.md
+Высокоуровневый план внедрения платформы.
+- **Когда читать**: При планировании migration на платформу
+- **Фазы**: Foundation, Platform Bootstrap, CI/CD Migration, k8app Integration, Proto/gRPC, Observability
+- [docs/embodiment/README.md](docs/embodiment/README.md)
+
+### docs/embodiment/cni-comparison-cilium-vs-calico.md
+Сравнительный анализ Cilium vs Calico CNI.
+- **Когда читать**: При выборе CNI или оценке альтернатив
+- **Вердикт**: Cilium выбран для eBPF, Hubble, Gateway API
+- [docs/embodiment/cni-comparison-cilium-vs-calico.md](docs/embodiment/cni-comparison-cilium-vs-calico.md)
+
+### docs/embodiment/access-management.md
+Управление доступами и RACI Matrix.
+- **Когда читать**: При настройке RBAC, определении ответственностей
+- [docs/embodiment/access-management.md](docs/embodiment/access-management.md)
+
+### docs/embodiment/frontend-grpc-protocols-2025.md
+Сравнение gRPC-Web, Connect-RPC, tRPC для frontend.
+- **Когда читать**: При выборе протокола для frontend-backend коммуникации
+- [docs/embodiment/frontend-grpc-protocols-2025.md](docs/embodiment/frontend-grpc-protocols-2025.md)
+
+---
+
+## Sentry Demo (Multi-Language Demo)
+
+### services/sentry-demo/CLAUDE.md
+Инструкции для AI агентов по работе с Sentry Demo проектом.
+- **Когда читать**: При работе с sentry-demo сервисами
+- **Ключевые правила**: Proto packages обязательны, .netrc для Docker auth, Connect Protocol
+- [services/sentry-demo/CLAUDE.md](services/sentry-demo/CLAUDE.md)
+
+### services/sentry-demo/docs/DOCKER_AUTH.md
+Docker Build Authentication для приватных GitLab packages.
+- **Когда читать**: При проблемах с Docker build, authentication errors
+- **Решение**: .netrc + BuildKit secrets
+- [services/sentry-demo/docs/DOCKER_AUTH.md](services/sentry-demo/docs/DOCKER_AUTH.md)
+
+### services/sentry-demo/frontend/README.md
+Sentry POC Frontend (Angular 20).
+- **Когда читать**: При работе с frontend, настройке Sentry source maps
+- **Ключевые темы**: Debug-IDs, Source map upload, Sentry Auth Token
+- [services/sentry-demo/frontend/README.md](services/sentry-demo/frontend/README.md)
+
+---
+
+## Shared Base Images
+
+### shared/base/README.md
+Документация Shared Base Images (Golden Images).
+- **Когда читать**: При понимании архитектуры базовых образов
+- **Образы**: api-gateway-image, auth-adapter
+- [shared/base/README.md](shared/base/README.md)
+
+### shared/base/api-gateway-image/README.md
+API Gateway Golden Image (Envoy + Go config generator).
+- **Когда читать**: При модификации golden image, понимании архитектуры
+- **Важно**: НЕ деплоится напрямую, используется как база для api-gw
+- [shared/base/api-gateway-image/README.md](shared/base/api-gateway-image/README.md)
+
+---
+
+## Migration Guides
+
+### docs/MIGRATION-MULTI-BRAND.md
+Руководство по миграции на мультибренд структуру репозиториев.
+- **Когда читать**: При реорганизации репозиториев GitLab
+- **Новая структура**: services/, api/, shared/, infra/{brand}/
+- [docs/MIGRATION-MULTI-BRAND.md](docs/MIGRATION-MULTI-BRAND.md)
+
+---
+
+## Tools
+
+### tools/loadtest/README.md
+Connect RPC Load Tester.
+- **Когда читать**: При нагрузочном тестировании Connect RPC endpoints
+- **Endpoints**: GameEngine/Calculate, BonusService/GetProgress
+- [tools/loadtest/README.md](tools/loadtest/README.md)
+
+---
+
+## Структура проекта
+
+### Ключевые директории
+
+```
+gitops/
+├── infra/poc/gitops-config/   # ArgoCD конфигурация, Helm charts
+│   ├── charts/
+│   │   ├── platform-core/     # Основной chart платформы
+│   │   ├── service-groups/    # Infrastructure access (ArgoCD, Grafana)
+│   │   ├── preview-environments/  # Feature branch previews
+│   │   └── ingress-cloudflare/    # CloudFlare Tunnel routing
+│   ├── platform/              # Values: base.yaml, core.yaml, preview.yaml
+│   └── argocd/                # App-of-Apps bootstrap
+│
+├── services/                  # Микросервисы (submodules)
+│   ├── api-gateway/           # Config generator (deprecated → api-gw)
+│   ├── api-gw/                # Config repo (config.yaml + .cicd/)
+│   └── sentry-demo/           # Multi-language demo (Angular, Python, Node.js, PHP)
+│
+├── shared/
+│   ├── base/                  # Golden images (api-gateway-image, auth-adapter)
+│   ├── infrastructure/        # Setup scripts (vault, argocd, cilium, monitoring)
+│   ├── templates/             # Шаблоны для новых сервисов
+│   │   ├── service-repo/      # Шаблон микросервиса
+│   │   └── proto-service/     # Шаблон proto сервиса
+│   └── scripts/               # Automation scripts
+│
+├── api/
+│   ├── ci/                    # Proto generation CI templates
+│   └── proto/                 # Proto definitions
+│
+├── tools/
+│   └── loadtest/              # Connect RPC load tester
+│
+├── docs/                      # Операционная документация
+├── audit/                     # Архитектурный аудит
+└── infrastructure/            # Legacy infrastructure (deprecated)
+```
+
+### Конфигурационные файлы
+
+| Файл | Назначение |
+|------|------------|
+| `infra/poc/gitops-config/platform/base.yaml` | Shared settings: global, dns, vault, environments |
+| `infra/poc/gitops-config/platform/core.yaml` | Services registry, namespaces |
+| `infra/poc/gitops-config/platform/preview.yaml` | Preview environments configuration |
+| `services/{name}/.cicd/default.yaml` | Base конфигурация сервиса |
+| `services/{name}/.cicd/{env}.yaml` | Environment-specific overrides |
+
+---
+
+## Частые задачи (Quick Reference)
+
+### Добавить новый сервис
+1. Добавить в `infra/poc/gitops-config/platform/core.yaml` секцию `services:`
+2. Создать `.cicd/` директорию с default.yaml и dev.yaml
+3. Создать `.gitlab-ci.yml` из шаблона
+4. Добавить секреты в Vault
+- **Документ**: [docs/new-service-guide.md](docs/new-service-guide.md)
+
+### Добавить новый environment
+1. Добавить в `environments:` в core.yaml с уникальным domain
+2. Создать `{env}.yaml` для каждого сервиса
+3. Sync platform-core
+- **Документ**: [audit/07-multi-tenancy.md](audit/07-multi-tenancy.md)
+
+### Добавить зеркало домена
+1. Получить Zone ID в CloudFlare
+2. Добавить в `mirrors:` секцию environment
+3. Git push → automatic DNS + routing
+- **Документ**: [docs/domain-mirrors-guide.md](docs/domain-mirrors-guide.md)
+
+### Настроить preview environments
+1. Создать GitLab Access Token
+2. Сохранить в Vault
+3. Включить в preview.yaml
+4. Создавать ветки с JIRA тегом (PROJ-123-...)
+- **Документ**: [docs/preview-environments-guide.md](docs/preview-environments-guide.md)
+
+### Создать gRPC сервис (Zero-Config)
+1. Создать репозиторий в `api/proto/`
+2. Добавить `.gitlab-ci.yml` (3 строки: include template)
+3. Написать .proto файлы в `proto/` директорию
+4. Push → автоматическая генерация для 5 языков
+- **Документ**: [docs/proto-grpc-infrastructure.md](docs/proto-grpc-infrastructure.md)
+
+### Debug network issues
+1. `hubble observe --namespace {ns}` - реальное время
+2. `hubble observe --verdict DROPPED` - заблокированные пакеты
+3. `kubectl describe ciliumnetworkpolicy` - проверить policies
+- **Документ**: [audit/06-observability.md](audit/06-observability.md)
+
+### Debug Docker auth issues
+1. Проверить CI_PUSH_TOKEN в GitLab CI/CD variables
+2. Использовать `.netrc` + BuildKit secrets
+3. Для PHP/Composer: `type: "git"` (не `vcs`)
+- **Документ**: [services/sentry-demo/docs/DOCKER_AUTH.md](services/sentry-demo/docs/DOCKER_AUTH.md)
+
+### Debug gRPC-Web through CloudFlare
+1. Проверить ошибку "[unknown] missing trailer"
+2. Причина: CloudFlare Tunnel не поддерживает HTTP trailers
+3. Решение: Connect Protocol или custom fetch wrapper
+- **Документ**: [docs/rfc-grpc-web-cloudflare-trailers.md](docs/rfc-grpc-web-cloudflare-trailers.md)
+
+---
+
+## Инфраструктурные компоненты
+
+| Компонент | Namespace | Назначение | Setup Script |
+|-----------|-----------|------------|--------------|
+| ArgoCD | argocd | GitOps CD | shared/infrastructure/argocd/ |
+| Vault + VSO | vault, vault-secrets-operator-system | Секреты | shared/infrastructure/vault/ |
+| Cilium | kube-system | CNI + Gateway API | shared/infrastructure/cilium/ |
+| Prometheus/Grafana | monitoring | Мониторинг | shared/infrastructure/monitoring/ |
+| cert-manager | cert-manager | TLS сертификаты | shared/infrastructure/cert-manager/ |
+| external-dns | external-dns | Автоматический DNS | shared/infrastructure/external-dns/ |
+| cloudflared | cloudflare | CloudFlare Tunnel | shared/infrastructure/cloudflare-tunnel/ |
+
+---
+
+## Важные команды
+
+```bash
+# ArgoCD
+make proxy-argocd              # UI на localhost:8081
+argocd app sync {app} --grpc-web
+argocd app get {app} --grpc-web
+
+# Vault
+make proxy-vault               # UI на localhost:8200
+kubectl exec -it vault-0 -n vault -- vault kv get secret/{path}
+
+# Monitoring
+make proxy-grafana             # UI на localhost:3000
+make proxy-prometheus          # UI на localhost:9090
+
+# Hubble
+make hubble-ui                 # Service map
+hubble observe --namespace {ns}
+
+# Всё сразу
+make proxy-all
+```
+
+---
+
+## Ссылки на шаблоны
+
+- **Шаблон микросервиса**: [shared/templates/service-repo/](shared/templates/service-repo/)
+- **Шаблон proto сервиса**: [shared/templates/proto-service/](shared/templates/proto-service/)
+- **Dockerfile шаблоны**: [shared/templates/service-repo/dockerfiles/](shared/templates/service-repo/dockerfiles/)
+- **Proto CI template**: [api/ci/templates/proto-gen/template.yml](api/ci/templates/proto-gen/template.yml)
+
+---
+
+## Tech Stack Summary
+
+| Layer | Technology | Version |
+|-------|-----------|---------|
+| Orchestration | Kubernetes | 1.28+ |
+| CNI | Cilium (eBPF) | 1.15+ |
+| GitOps | ArgoCD | 2.9+ |
+| Secrets | HashiCorp Vault + VSO | 1.15+ |
+| Monitoring | Prometheus + Grafana | kube-prometheus-stack 80.4.1 |
+| Ingress | Gateway API + CloudFlare Tunnel | v1.0 |
+| Helm Chart | k8app | v3.8.0 |
+| Proto/gRPC | Buf CLI + Connect-ES v2 | latest |
